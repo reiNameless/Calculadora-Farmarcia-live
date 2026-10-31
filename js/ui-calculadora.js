@@ -1,0 +1,479 @@
+(function (global) {
+    'use strict';
+
+    const AppFarmacia = global.AppFarmacia;
+    const UI = AppFarmacia.UI || (AppFarmacia.UI = {});
+    const { CONSTANTES, ESTRATEGIAS_CALCULO } = AppFarmacia.Configuracion;
+    const Dominio = AppFarmacia.Dominio;
+    const Almacenamiento = AppFarmacia.Almacenamiento;
+
+    const el = id => document.getElementById(id);
+    const iconoSvg = nombre => `<svg class="ico" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
+
+    let temporizadorDebounceCalculo = null;
+    let borradorPerfilesEdicion = null;
+
+    // --- CÁLCULO EN VIVO CON DEBOUNCE (REN-04) ---
+    function calcularEnVivo() {
+        const Estado = AppFarmacia.Estado;
+        const reglasActivas = Estado.reglasActivas;
+        const sesionActual = Estado.sesionActual;
+
+        const tipo = el('calcTipo').value;
+        const vCajas = Dominio.validarCantidadEnteraPositiva(el('calcCajasCompradas').value, 'cajas');
+        const vPrecio = Dominio.validarPrecioCompra(el('calcPrecioCaja').value);
+        const vUnidades = tipo === CONSTANTES.CATEGORIAS.ENTERO
+            ? { esValido: true, valor: 1 }
+            : Dominio.validarCantidadEnteraPositiva(el('calcUnidadesCaja').value, 'unidades');
+
+        const resumenActual = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
+        const factorItbis = 1 + (reglasActivas.porcentajeItbis / 100);
+
+        if (vPrecio.esValido && vCajas.esValido) {
+            const costoCaja = el('calcItbis').checked ? (vPrecio.valor * factorItbis) : vPrecio.valor;
+            const subtotalLinea = Dominio.redondearDecimalExacto(vCajas.valor * costoCaja, CONSTANTES.DECIMALES_MONEDA);
+            const acumuladoConLinea = Dominio.redondearDecimalExacto(resumenActual.sumaAcumulada + subtotalLinea, CONSTANTES.DECIMALES_MONEDA);
+            el('resSubtotalLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(subtotalLinea);
+            el('resAcumuladoConLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(acumuladoConLinea);
+        } else {
+            el('resSubtotalLinea').textContent = '$0.00';
+            el('resAcumuladoConLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(resumenActual.sumaAcumulada);
+        }
+
+        if (vCajas.esValido && vUnidades.esValido) {
+            el('resTotalUnidadesInventario').textContent = String(vCajas.valor * vUnidades.valor);
+        } else {
+            el('resTotalUnidadesInventario').textContent = '0';
+        }
+
+        if (!vPrecio.esValido || !vUnidades.esValido) {
+            el('resCostoUnitario').textContent = '0.00000000';
+            [1, 2, 3].forEach(n => {
+                el('resPrecio' + n).textContent = '0.00';
+                el('subPrecio' + n).textContent = 'Exacto: 0.00 | Redondeado: 0';
+            });
+            return;
+        }
+
+        const desglose = Dominio.calcularDesglosePrecios(
+            vPrecio.valor,
+            vUnidades.valor,
+            el('calcItbis').checked,
+            reglasActivas
+        );
+        const usarRedondeo = el('calcRedondeo').checked;
+
+        el('resCostoUnitario').textContent = desglose.costoUnitario;
+        [1, 2, 3].forEach(n => {
+            el('resPrecio' + n).textContent = usarRedondeo ? desglose['p' + n + 'Redondeado'] : desglose['p' + n + 'Exacto'];
+            el('subPrecio' + n).textContent = `Exacto: ${desglose['p' + n + 'Exacto']} (Bruto: ${desglose['p' + n + 'Bruto']}) | Redondeado: ${desglose['p' + n + 'Redondeado']}`;
+        });
+    }
+
+    function dispararCalculoDebounced() {
+        if (temporizadorDebounceCalculo) clearTimeout(temporizadorDebounceCalculo);
+        temporizadorDebounceCalculo = setTimeout(calcularEnVivo, CONSTANTES.DEBOUNCE_CALCULO_MS);
+    }
+
+    function actualizarVisibilidadCategoria() {
+        const tipo = el('calcTipo').value;
+        const contenedor = el('boxUnidadesPorCaja');
+        const inputUnidades = el('calcUnidadesCaja');
+        if (tipo === CONSTANTES.CATEGORIAS.ENTERO) {
+            contenedor.style.display = 'none';
+            inputUnidades.value = '1';
+        } else {
+            contenedor.style.display = 'block';
+            if (inputUnidades.value === '1') inputUnidades.value = '';
+        }
+        calcularEnVivo();
+    }
+
+    function procesarEscaneoCodigoBarras() {
+        const codigo = Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value);
+        if (!codigo) return;
+
+        const aprendido = Almacenamiento.buscarProductoPorCodigo(codigo);
+        if (aprendido) {
+            el('calcNombre').value = aprendido.nombre;
+            el('calcTipo').value = aprendido.tipo;
+            actualizarVisibilidadCategoria();
+            if (aprendido.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
+                el('calcUnidadesCaja').value = aprendido.unidadesPorCaja;
+            }
+            el('calcItbis').checked = Boolean(aprendido.aplicaItbis);
+            calcularEnVivo();
+            UI.Notificaciones.mostrarMensaje(`Código reconocido: "${aprendido.nombre}". Ingresa Cajas y Precio.`, 'success');
+        } else {
+            UI.Notificaciones.mostrarMensaje(`Código nuevo (${codigo}). Escribe el Nombre y datos para memorizarlo automáticamente.`, 'info');
+        }
+        el('calcCajasCompradas').focus();
+        el('calcCajasCompradas').select();
+    }
+
+    async function solicitarConfirmacionCajas(valorCrudo) {
+        const texto = String(valorCrudo ?? '').trim();
+        if (texto === '') {
+            const aceptaUnaCaja = await UI.Notificaciones.mostrarConfirmacion(
+                'No escribiste cuántas CAJAS compraste en la factura.\n\n¿Compraste 1 sola caja o frasco?',
+                'Confirmar Cantidad de Cajas'
+            );
+            if (aceptaUnaCaja) {
+                return { esValido: true, valor: 1 };
+            }
+            return { esValido: false, error: '' };
+        }
+        return Dominio.validarCantidadEnteraPositiva(texto, 'la cantidad de cajas en factura');
+    }
+
+    async function agregarProductoAFactura() {
+        const Estado = AppFarmacia.Estado;
+        const reglasActivas = Estado.reglasActivas;
+        const sesionActual = Estado.sesionActual;
+
+        const enfocarConError = (idInput, mensaje) => {
+            if (mensaje) UI.Notificaciones.mostrarMensaje(mensaje, 'error');
+            const input = el(idInput);
+            input.focus();
+            if (input.select) input.select();
+        };
+
+        const vCajas = await solicitarConfirmacionCajas(el('calcCajasCompradas').value);
+        if (!vCajas.esValido) return enfocarConError('calcCajasCompradas', vCajas.error);
+
+        const vPrecio = Dominio.validarPrecioCompra(el('calcPrecioCaja').value);
+        if (!vPrecio.esValido) return enfocarConError('calcPrecioCaja', vPrecio.error);
+
+        const tipo = el('calcTipo').value;
+        let vUnidades = { esValido: true, valor: 1 };
+        if (tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
+            vUnidades = Dominio.validarCantidadEnteraPositiva(el('calcUnidadesCaja').value, 'las unidades que trae la caja');
+            if (!vUnidades.esValido) return enfocarConError('calcUnidadesCaja', vUnidades.error);
+        }
+
+        const nuevaLinea = Dominio.crearLineaProductoInmutable({
+            codigoBarras: el('calcCodigoBarras').value,
+            nombre: el('calcNombre').value.trim() || `Producto #${sesionActual.productos.length + 1}`,
+            tipo,
+            precioCajaBase: vPrecio.valor,
+            unidadesPorCaja: vUnidades.valor,
+            cajasCompradas: vCajas.valor,
+            aplicaItbis: el('calcItbis').checked
+        }, reglasActivas);
+
+        const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea);
+        Estado.agregarProductoASesion(nuevaLinea);
+
+        ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas'].forEach(id => { el(id).value = ''; });
+        if (tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) el('calcUnidadesCaja').value = '';
+        calcularEnVivo();
+
+        if (aprendioCodigo) {
+            UI.Notificaciones.mostrarMensaje(`Producto agregado y código "${nuevaLinea.codigoBarras}" memorizado en el diccionario.`, 'success');
+            UI.Diccionario.renderizarDiccionarioUI();
+        }
+        el('calcCajasCompradas').focus();
+    }
+
+    function configurarAtajosTeclado() {
+        const seccionCalc = el('seccionCalculadora');
+
+        seccionCalc.addEventListener('keydown', e => {
+            const esCampoTexto = e.target.id === 'calcNombre' || e.target.id === 'calcCodigoBarras';
+            const presionaEspacio = (e.code === 'Space' || e.key === ' ') && (!esCampoTexto || e.ctrlKey);
+
+            if (presionaEspacio) {
+                e.preventDefault();
+                const selectTipo = el('calcTipo');
+                selectTipo.value = selectTipo.value === CONSTANTES.CATEGORIAS.DIVISIBLE ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
+                actualizarVisibilidadCategoria();
+                selectTipo.classList.add('flash');
+                setTimeout(() => selectTipo.classList.remove('flash'), 400);
+                return;
+            }
+
+            if (e.key !== 'Enter') return;
+
+            if (e.target.id === 'calcCodigoBarras') {
+                e.preventDefault();
+                procesarEscaneoCodigoBarras();
+                return;
+            }
+
+            if (e.target.id === 'calcNombre') {
+                e.preventDefault();
+                el('calcCajasCompradas').focus();
+                return;
+            }
+
+            const ordenFlujoNumerico = ['calcCajasCompradas', 'calcPrecioCaja'].concat(
+                el('calcTipo').value === CONSTANTES.CATEGORIAS.DIVISIBLE ? ['calcUnidadesCaja'] : []
+            );
+            const indiceActual = ordenFlujoNumerico.indexOf(e.target.id);
+            if (indiceActual === -1) return;
+
+            e.preventDefault();
+            if (indiceActual < ordenFlujoNumerico.length - 1) {
+                const siguienteInput = el(ordenFlujoNumerico[indiceActual + 1]);
+                siguienteInput.focus();
+                if (siguienteInput.select) siguienteInput.select();
+            } else {
+                agregarProductoAFactura();
+            }
+        });
+    }
+
+    // --- BÓVEDA DE FÓRMULAS ---
+    function establecerBloqueoReglas(bloquear) {
+        const fieldset = el('fieldsetReglas');
+        const badge = el('estadoCandadoReglas');
+        const boton = el('btnToggleCandadoReglas');
+
+        fieldset.disabled = bloquear;
+        if (bloquear) {
+            badge.className = 'lock-badge lock-closed';
+            badge.innerHTML = `${iconoSvg('lock')} Protegido contra cambios accidentales`;
+            boton.innerHTML = `${iconoSvg('unlock')} Desbloquear para Editar`;
+            boton.setAttribute('aria-label', 'Desbloquear configuración de fórmulas');
+        } else {
+            badge.className = 'lock-badge lock-open';
+            badge.innerHTML = `${iconoSvg('unlock')} Modo Edición Activo`;
+            boton.innerHTML = `${iconoSvg('lock')} Cancelar y Bloquear`;
+            boton.setAttribute('aria-label', 'Bloquear configuración de fórmulas');
+        }
+    }
+
+    function renderizarExplicacionDetalladaFormulas(reglasParaSimular) {
+        const cont = el('cajaExplicacionFormulas');
+        if (!cont) return;
+
+        const r = Dominio.sanitizarReglasNegocio(reglasParaSimular);
+        const pCascada = r.perfiles[ESTRATEGIAS_CALCULO.CASCADA_DESCUENTO];
+        const pDirecto = r.perfiles[ESTRATEGIAS_CALCULO.MARGEN_DIRECTO_COSTO];
+        const pFinanciero = r.perfiles[ESTRATEGIAS_CALCULO.MARGEN_BRUTO_FINANCIERO];
+
+        const simCascada = Dominio.calcularDesglosePrecios(100, 10, false, {
+            estrategia: ESTRATEGIAS_CALCULO.CASCADA_DESCUENTO,
+            porcentajeItbis: r.porcentajeItbis,
+            porcentajePrecio1: pCascada.p1,
+            porcentajePrecio2: pCascada.p2,
+            porcentajePrecio3: pCascada.p3
+        });
+        const simDirecto = Dominio.calcularDesglosePrecios(100, 10, false, {
+            estrategia: ESTRATEGIAS_CALCULO.MARGEN_DIRECTO_COSTO,
+            porcentajeItbis: r.porcentajeItbis,
+            porcentajePrecio1: pDirecto.p1,
+            porcentajePrecio2: pDirecto.p2,
+            porcentajePrecio3: pDirecto.p3
+        });
+        const simFinanciero = Dominio.calcularDesglosePrecios(100, 10, false, {
+            estrategia: ESTRATEGIAS_CALCULO.MARGEN_BRUTO_FINANCIERO,
+            porcentajeItbis: r.porcentajeItbis,
+            porcentajePrecio1: pFinanciero.p1,
+            porcentajePrecio2: pFinanciero.p2,
+            porcentajePrecio3: pFinanciero.p3
+        });
+
+        cont.innerHTML = `
+            <div>
+                <strong>Ejemplo práctico para entender las fórmulas:</strong>
+                Imagina que compras <b>1 caja a $100.00</b> y trae <b>10 unidades</b>.
+                Al dividir $100 &divide; 10, el <b>Costo Unitario es $10.00000000</b> (8 decimales para exactitud del inventario).
+                <i>Nota: Cada fórmula guarda sus propios porcentajes de manera independiente.</i>
+            </div>
+            <div class="formula-grid">
+                <div class="formula-card ${r.estrategia === ESTRATEGIAS_CALCULO.CASCADA_DESCUENTO ? 'activa' : ''}">
+                    <strong>1. Cascada (Estándar de la farmacia)</strong>
+                    <div style="font-size:0.8rem; margin-top:6px;">
+                        Sube el costo para sacar el Precio 1, y luego rebaja sobre el precio anterior:<br>
+                        • <b>Precio 1 (+${pCascada.p1}%):</b> $10 + ${pCascada.p1}% = <b>$${simCascada.p1Exacto}</b><br>
+                        • <b>Precio 2 (-${pCascada.p2}% a P1):</b> $${simCascada.p1Exacto} - ${pCascada.p2}% = <b>$${simCascada.p2Exacto}</b><br>
+                        • <b>Precio 3 (-${pCascada.p3}% a P2):</b> $${simCascada.p2Exacto} - ${pCascada.p3}% = <b>${simCascada.p3Bruto}</b><br>
+                        &rarr; Con 2 decimales: <b>$${simCascada.p3Exacto}</b> | Redondeado: <b>$${simCascada.p3Redondeado}</b>
+                    </div>
+                </div>
+                <div class="formula-card ${r.estrategia === ESTRATEGIAS_CALCULO.MARGEN_DIRECTO_COSTO ? 'activa' : ''}">
+                    <strong>2. Ganancia Directa sobre el Costo</strong>
+                    <div style="font-size:0.8rem; margin-top:6px;">
+                        Cada precio suma su propio porcentaje de ganancia directamente al Costo ($10.00):<br>
+                        • <b>Precio 1 (+${pDirecto.p1}%):</b> $10 + ${pDirecto.p1}% = <b>$${simDirecto.p1Exacto}</b><br>
+                        • <b>Precio 2 (+${pDirecto.p2}%):</b> $10 + ${pDirecto.p2}% = <b>$${simDirecto.p2Exacto}</b><br>
+                        • <b>Precio 3 (+${pDirecto.p3}%):</b> $10 + ${pDirecto.p3}% = <b>$${simDirecto.p3Exacto}</b>
+                    </div>
+                </div>
+                <div class="formula-card ${r.estrategia === ESTRATEGIAS_CALCULO.MARGEN_BRUTO_FINANCIERO ? 'activa' : ''}">
+                    <strong>3. Margen Contable sobre Precio Final</strong>
+                    <div style="font-size:0.8rem; margin-top:6px;">
+                        Divide el costo entre <code>(100% - ${pFinanciero.p1}%)</code> para ganar el ${pFinanciero.p1}% sobre el total cobrado, y rebaja en cascada:<br>
+                        • <b>Precio 1:</b> $10 &divide; ${(1 - pFinanciero.p1 / 100).toFixed(2)} = <b>$${simFinanciero.p1Exacto}</b><br>
+                        • <b>Precio 2 (-${pFinanciero.p2}% a P1):</b> <b>$${simFinanciero.p2Exacto}</b><br>
+                        • <b>Precio 3 (-${pFinanciero.p3}% a P2):</b> <b>$${simFinanciero.p3Exacto}</b>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // COD-12: Usa el parámetro sanitizado `r`
+    function actualizarEtiquetasReglasUI(reglasMostradas) {
+        const Estado = AppFarmacia.Estado;
+        const reglas = reglasMostradas || Estado.reglasActivas;
+        const r = Dominio.sanitizarReglasNegocio(reglas);
+
+        el('lblItbisToggle').textContent = `Sumar ${r.porcentajeItbis}% ITBIS al costo`;
+        el('lblTituloP1').textContent = `Precio 1 (+${r.porcentajePrecio1}%)`;
+
+        if (r.estrategia === ESTRATEGIAS_CALCULO.MARGEN_DIRECTO_COSTO) {
+            el('lblTituloP2').textContent = `Precio 2 (Costo +${r.porcentajePrecio2}%)`;
+            el('lblTituloP3').textContent = `Precio 3 (Costo +${r.porcentajePrecio3}%)`;
+            el('lblCfgP2').textContent = 'Porcentaje Precio 2 (+% sobre Costo)';
+            el('lblCfgP3').textContent = 'Porcentaje Precio 3 (+% sobre Costo)';
+        } else {
+            el('lblTituloP2').textContent = `Precio 2 (Precio 1 -${r.porcentajePrecio2}%)`;
+            el('lblTituloP3').textContent = `Precio 3 (Precio 2 -${r.porcentajePrecio3}%)`;
+            el('lblCfgP2').textContent = 'Descuento Precio 2 (-% sobre P1)';
+            el('lblCfgP3').textContent = 'Descuento Precio 3 (-% sobre P2)';
+        }
+
+        el('cfgEstrategia').value = r.estrategia;
+        el('cfgItbisPct').value = r.porcentajeItbis;
+        el('cfgP1Pct').value = r.porcentajePrecio1;
+        el('cfgP2Pct').value = r.porcentajePrecio2;
+        el('cfgP3Pct').value = r.porcentajePrecio3;
+
+        renderizarExplicacionDetalladaFormulas(r);
+    }
+
+    function inicializarEventosBovedaReglas() {
+        const Estado = AppFarmacia.Estado;
+        borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
+
+        el('btnToggleCandadoReglas').addEventListener('click', async () => {
+            const estaBloqueado = el('fieldsetReglas').disabled;
+            if (estaBloqueado) {
+                const desbloquear = await UI.Notificaciones.mostrarConfirmacion('¿Deseas desbloquear la configuración de fórmulas matemáticas para editarlas?', 'Desbloquear Fórmulas');
+                if (desbloquear) {
+                    borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
+                    establecerBloqueoReglas(false);
+                }
+            } else {
+                borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
+                actualizarEtiquetasReglasUI(Estado.reglasActivas);
+                establecerBloqueoReglas(true);
+            }
+        });
+
+        el('cfgEstrategia').addEventListener('change', () => {
+            const nuevaEstrategia = el('cfgEstrategia').value;
+            const perfilDeEsaFormula = borradorPerfilesEdicion[nuevaEstrategia] || { p1: 30, p2: 5, p3: 5 };
+            actualizarEtiquetasReglasUI({
+                estrategia: nuevaEstrategia,
+                porcentajeItbis: el('cfgItbisPct').value,
+                porcentajePrecio1: perfilDeEsaFormula.p1,
+                porcentajePrecio2: perfilDeEsaFormula.p2,
+                porcentajePrecio3: perfilDeEsaFormula.p3,
+                perfiles: borradorPerfilesEdicion
+            });
+        });
+
+        const previsualizarCambiosReglas = () => {
+            const estActual = el('cfgEstrategia').value;
+            borradorPerfilesEdicion[estActual] = {
+                p1: Number(el('cfgP1Pct').value) || 0,
+                p2: Number(el('cfgP2Pct').value) || 0,
+                p3: Number(el('cfgP3Pct').value) || 0
+            };
+            renderizarExplicacionDetalladaFormulas({
+                estrategia: estActual,
+                porcentajeItbis: el('cfgItbisPct').value,
+                porcentajePrecio1: el('cfgP1Pct').value,
+                porcentajePrecio2: el('cfgP2Pct').value,
+                porcentajePrecio3: el('cfgP3Pct').value,
+                perfiles: borradorPerfilesEdicion
+            });
+        };
+
+        ['cfgItbisPct', 'cfgP1Pct', 'cfgP2Pct', 'cfgP3Pct'].forEach(id => {
+            el(id).addEventListener('input', previsualizarCambiosReglas);
+        });
+
+        el('btnGuardarReglas').addEventListener('click', () => {
+            const estActual = el('cfgEstrategia').value;
+            borradorPerfilesEdicion[estActual] = {
+                p1: Number(el('cfgP1Pct').value) || 0,
+                p2: Number(el('cfgP2Pct').value) || 0,
+                p3: Number(el('cfgP3Pct').value) || 0
+            };
+
+            const resGuardado = Almacenamiento.guardarReglasNegocio({
+                estrategia: estActual,
+                porcentajeItbis: el('cfgItbisPct').value,
+                porcentajePrecio1: el('cfgP1Pct').value,
+                porcentajePrecio2: el('cfgP2Pct').value,
+                porcentajePrecio3: el('cfgP3Pct').value,
+                perfiles: borradorPerfilesEdicion
+            });
+
+            if (!resGuardado.exito) {
+                return UI.Notificaciones.mostrarMensaje(resGuardado.error || 'Error guardando las fórmulas en el almacenamiento.', 'error');
+            }
+
+            Estado.reglasActivas = resGuardado.reglas;
+            Estado.sesionActual.productos = Estado.sesionActual.productos.map(p => Dominio.crearLineaProductoInmutable(p, Estado.reglasActivas));
+            Estado.sincronizarYGuardarSesion();
+            establecerBloqueoReglas(true);
+            calcularEnVivo();
+            Estado.renderizarTodo();
+            UI.Notificaciones.mostrarMensaje('Fórmula actualizada y bloqueada exitosamente.', 'success');
+        });
+
+        el('btnRestaurarReglasDefecto').addEventListener('click', () => {
+            const resRestaurado = Almacenamiento.guardarReglasNegocio(AppFarmacia.Configuracion.REGLAS_NEGOCIO_POR_DEFECTO);
+            Estado.reglasActivas = resRestaurado.reglas;
+            borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
+            Estado.sesionActual.productos = Estado.sesionActual.productos.map(p => Dominio.crearLineaProductoInmutable(p, Estado.reglasActivas));
+            Estado.sincronizarYGuardarSesion();
+            establecerBloqueoReglas(true);
+            calcularEnVivo();
+            Estado.renderizarTodo();
+            UI.Notificaciones.mostrarMensaje('Se restauraron los perfiles originales de todas las fórmulas.', 'info');
+        });
+    }
+
+    function inicializarEventosCalculadora() {
+        el('calcTipo').addEventListener('change', actualizarVisibilidadCategoria);
+        ['calcCajasCompradas', 'calcPrecioCaja', 'calcUnidadesCaja'].forEach(id => {
+            el(id).addEventListener('input', dispararCalculoDebounced);
+        });
+        el('calcItbis').addEventListener('change', calcularEnVivo);
+        el('calcRedondeo').addEventListener('change', () => {
+            calcularEnVivo();
+            UI.Factura.renderizarTablaProductosActuales();
+        });
+        el('btnAgregarProducto').addEventListener('click', agregarProductoAFactura);
+
+        document.querySelectorAll('[data-copiar]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const texto = el(btn.dataset.copiar).textContent;
+                navigator.clipboard.writeText(texto).then(() => {
+                    const original = btn.innerHTML;
+                    btn.innerHTML = `${iconoSvg('check')} Copiado`;
+                    setTimeout(() => { btn.innerHTML = original; }, 1100);
+                });
+            });
+        });
+
+        configurarAtajosTeclado();
+        inicializarEventosBovedaReglas();
+    }
+
+    UI.Calculadora = Object.freeze({
+        calcularEnVivo,
+        dispararCalculoDebounced,
+        actualizarVisibilidadCategoria,
+        procesarEscaneoCodigoBarras,
+        establecerBloqueoReglas,
+        actualizarEtiquetasReglasUI,
+        inicializarEventosCalculadora
+    });
+})(window);

@@ -3,8 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com;">
     <title>Sistema de Cálculo e Inventario de Farmacia</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b57d0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Calc Farmacia">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
@@ -67,6 +75,7 @@
         <button class="nav-btn" data-ir="seccionReglasCalculo"><svg class="ico"><use href="#i-settings"/></svg> Fórmulas</button>
         <button class="nav-btn" data-ir="seccionEscanerIA"><svg class="ico"><use href="#i-scan"/></svg> Escáner IA</button>
         <button class="nav-btn" data-ir="seccionHistorial"><svg class="ico"><use href="#i-hist"/></svg> Historial</button>
+        <button type="button" class="nav-btn" id="btnInstalarPwa" style="display:none; background:#146c2e; color:#fff; border-color:#146c2e;"><svg class="ico"><use href="#i-down"/></svg> Instalar App</button>
     </nav>
 </header>
 
@@ -456,6 +465,11 @@
 <script defer src="js/dominio.js"></script>
 <script defer src="js/almacenamiento.js"></script>
 <script defer src="js/servicio-ia.js"></script>
+<script defer src="js/ui-notificaciones.js"></script>
+<script defer src="js/ui-calculadora.js"></script>
+<script defer src="js/ui-factura.js"></script>
+<script defer src="js/ui-diccionario.js"></script>
+<script defer src="js/ui-historial.js"></script>
 <script defer src="js/interfaz.js"></script>
 <script defer src="js/pruebas.js"></script>
 </body>

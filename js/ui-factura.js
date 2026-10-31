@@ -136,7 +136,7 @@
     async function alternarTipoEnTabla(producto) {
         const Estado = AppFarmacia.Estado;
         if (producto.tipo === CONSTANTES.CATEGORIAS.ENTERO) {
-            const respuesta = await UI.Notificaciones.mostrarPrompt('Cambiar a "Se divide". ¿Cuántas unidades (pastillas/ampollas) trae 1 caja?', '10', 'Unidades por Caja');
+            const respuesta = await UI.Notificaciones.mostrarPrompt('Cambiar a "Se divide". ¿Cuántas unidades (pastillas/ampollas) trae 1 caja?', '10', 'Unidades por Caja', 'entero');
             if (respuesta === null) return;
             const validacion = Dominio.validarCantidadEnteraPositiva(respuesta, 'las unidades por caja');
             if (!validacion.esValido) return UI.Notificaciones.mostrarMensaje(validacion.error, 'error');
@@ -178,12 +178,26 @@
         };
         const valorActual = mapaValores[campo];
         if (valorActual === undefined) return;
+
+        const esCampoNumerico = campo === 'cajasCompradas' || campo === 'unidadesPorCaja' || campo === 'precioCajaBase';
+        const esDecimal = campo === 'precioCajaBase';
+
         const input = document.createElement('input');
+        input.type = 'text';
+        if (esCampoNumerico) {
+            input.inputMode = esDecimal ? 'decimal' : 'numeric';
+        }
         input.value = valorActual;
-        input.style.cssText = 'width:100%;min-width:70px;padding:4px 6px;border:2px solid var(--primary);border-radius:4px;font:inherit';
+        input.style.cssText = 'width:100%;box-sizing:border-box;min-width:60px;padding:4px 6px;border:2px solid var(--primary);border-radius:4px;font:inherit;background:var(--card-bg, #fff);color:inherit;';
 
         td.innerHTML = '';
         td.appendChild(input);
+
+        let removerFiltro = null;
+        if (esCampoNumerico && typeof UI.configurarFiltroNumerico === 'function') {
+            removerFiltro = UI.configurarFiltroNumerico(input, esDecimal);
+        }
+
         input.focus();
         input.select();
 
@@ -191,18 +205,38 @@
         const cerrarEdicion = guardar => {
             if (finalizado) return;
             finalizado = true;
-            if (guardar && input.value.trim() !== String(valorActual)) {
-                aplicarCambioCampoIndividual(producto, campo, input.value);
-            } else {
+
+            if (typeof removerFiltro === 'function') {
+                removerFiltro();
+                removerFiltro = null;
+            }
+
+            const valorLimpio = input.value.trim();
+            let exito = false;
+
+            if (guardar && valorLimpio !== '' && valorLimpio !== String(valorActual)) {
+                exito = aplicarCambioCampoIndividual(producto, campo, valorLimpio);
+            }
+
+            // Si no se guardó con éxito o no hubo cambio o fue cancelado,
+            // restauramos la tabla para que la celda quede limpia y lista para volver a editarse sin trabarse
+            if (!exito) {
                 renderizarTablaProductosActuales();
             }
         };
 
         input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); cerrarEdicion(true); }
-            else if (e.key === 'Escape') cerrarEdicion(false);
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                cerrarEdicion(true);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cerrarEdicion(false);
+            }
         });
         input.addEventListener('blur', () => cerrarEdicion(true));
+        input.addEventListener('click', e => e.stopPropagation());
+        input.addEventListener('dblclick', e => e.stopPropagation());
     }
 
     function aplicarCambioCampoIndividual(producto, campo, nuevoTexto) {
@@ -210,45 +244,58 @@
         const datosClonados = { ...producto, manual: { ...(producto.manual || {}) } };
 
         if (campo === 'nombre') {
-            if (!nuevoTexto.trim()) return UI.Notificaciones.mostrarMensaje('El nombre no puede quedar vacío.', 'error');
+            if (!nuevoTexto.trim()) {
+                UI.Notificaciones.mostrarMensaje('El nombre no puede quedar vacío.', 'error');
+                return false;
+            }
             datosClonados.nombre = nuevoTexto.trim();
         } else if (campo === 'cajasCompradas') {
             const v = Dominio.validarCantidadEnteraPositiva(nuevoTexto, 'las cajas compradas');
-            if (!v.esValido) return UI.Notificaciones.mostrarMensaje(v.error, 'error');
+            if (!v.esValido) {
+                UI.Notificaciones.mostrarMensaje(v.error, 'error');
+                return false;
+            }
             datosClonados.cajasCompradas = v.valor;
         } else if (campo === 'unidadesPorCaja') {
             const v = Dominio.validarCantidadEnteraPositiva(nuevoTexto, 'las unidades por caja');
-            if (!v.esValido) return UI.Notificaciones.mostrarMensaje(v.error, 'error');
+            if (!v.esValido) {
+                UI.Notificaciones.mostrarMensaje(v.error, 'error');
+                return false;
+            }
             datosClonados.unidadesPorCaja = v.valor;
             datosClonados.tipo = v.valor > 1 ? CONSTANTES.CATEGORIAS.DIVISIBLE : datosClonados.tipo;
             datosClonados.manual = {};
         } else if (campo === 'precioCajaBase') {
             const v = Dominio.validarPrecioCompra(nuevoTexto);
-            if (!v.esValido) return UI.Notificaciones.mostrarMensaje(v.error, 'error');
+            if (!v.esValido) {
+                UI.Notificaciones.mostrarMensaje(v.error, 'error');
+                return false;
+            }
             datosClonados.precioCajaBase = v.valor;
             datosClonados.manual = {};
         }
 
         Estado.reemplazarProductoEnSesion(producto.idLinea, Dominio.crearLineaProductoInmutable(datosClonados, Estado.reglasActivas));
+        return true;
     }
 
     async function editarFilaCompletaConDialogo(producto) {
         const Estado = AppFarmacia.Estado;
         const nuevoNombre = await UI.Notificaciones.mostrarPrompt('Nombre del producto:', producto.nombre, 'Editar Producto');
         if (nuevoNombre === null) return;
-        const nuevasCajas = await UI.Notificaciones.mostrarPrompt('Cajas en factura:', producto.cajasCompradas, 'Cajas en Factura');
+        const nuevasCajas = await UI.Notificaciones.mostrarPrompt('Cajas en factura:', producto.cajasCompradas, 'Cajas en Factura', 'entero');
         if (nuevasCajas === null) return;
         const vCajas = Dominio.validarCantidadEnteraPositiva(nuevasCajas, 'cajas');
         if (!vCajas.esValido) return UI.Notificaciones.mostrarMensaje(vCajas.error, 'error');
 
-        const nuevoPrecio = await UI.Notificaciones.mostrarPrompt('Precio de compra de 1 caja:', producto.precioCajaBase, 'Precio de Compra');
+        const nuevoPrecio = await UI.Notificaciones.mostrarPrompt('Precio de compra de 1 caja:', producto.precioCajaBase, 'Precio de Compra', 'decimal');
         if (nuevoPrecio === null) return;
         const vPrecio = Dominio.validarPrecioCompra(nuevoPrecio);
         if (!vPrecio.esValido) return UI.Notificaciones.mostrarMensaje(vPrecio.error, 'error');
 
         let unidades = 1;
         if (producto.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
-            const nuevasUds = await UI.Notificaciones.mostrarPrompt('Unidades por caja:', producto.unidadesPorCaja, 'Unidades por Caja');
+            const nuevasUds = await UI.Notificaciones.mostrarPrompt('Unidades por caja:', producto.unidadesPorCaja, 'Unidades por Caja', 'entero');
             if (nuevasUds === null) return;
             const vUds = Dominio.validarCantidadEnteraPositiva(nuevasUds, 'unidades');
             if (!vUds.esValido) return UI.Notificaciones.mostrarMensaje(vUds.error, 'error');
@@ -311,6 +358,10 @@
         ['facProveedor', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento'].forEach(id => {
             el(id).addEventListener('input', actualizarCabeceraFacturaDesdeUI);
         });
+
+        if (typeof UI.configurarFiltroNumerico === 'function') {
+            UI.configurarFiltroNumerico(el('facTotalFisico'), true);
+        }
 
         el('tablaProductosActuales').addEventListener('click', async e => {
             const btnAccion = e.target.closest('[data-accion]');

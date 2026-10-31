@@ -445,6 +445,18 @@
         ['calcCajasCompradas', 'calcPrecioCaja', 'calcUnidadesCaja'].forEach(id => {
             el(id).addEventListener('input', dispararCalculoDebounced);
         });
+
+        // UX-08: Bloqueo físico de letras y símbolos en entradas numéricas
+        if (typeof UI.configurarFiltroNumerico === 'function') {
+            UI.configurarFiltroNumerico(el('calcCajasCompradas'), false);
+            UI.configurarFiltroNumerico(el('calcUnidadesCaja'), false);
+            UI.configurarFiltroNumerico(el('calcPrecioCaja'), true);
+            UI.configurarFiltroNumerico(el('cfgItbisPct'), true);
+            UI.configurarFiltroNumerico(el('cfgP1Pct'), true);
+            UI.configurarFiltroNumerico(el('cfgP2Pct'), true);
+            UI.configurarFiltroNumerico(el('cfgP3Pct'), true);
+        }
+
         el('calcItbis').addEventListener('change', calcularEnVivo);
         el('calcRedondeo').addEventListener('change', () => {
             calcularEnVivo();

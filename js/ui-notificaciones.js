@@ -67,7 +67,75 @@
         });
     }
 
-    function mostrarPrompt(mensaje, valorInicial = '', titulo = 'Ingresar Valor') {
+    // --- UX-08: Filtro estricto anti-letras para casillas y entradas numéricas ---
+    function configurarFiltroNumerico(input, esDecimal = false) {
+        if (!input) return null;
+
+        const onKeyDown = e => {
+            // Teclas de control y navegación siempre permitidas
+            const teclasPermitidas = [
+                'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+                'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+                'Home', 'End'
+            ];
+            if (teclasPermitidas.includes(e.key)) return;
+
+            // Atajos del sistema (Ctrl+C, Ctrl+V, Ctrl+A, Ctrl+X, Ctrl+Z, etc.)
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+            // Si es campo decimal, permitir punto o coma siempre que no exista ya uno
+            if (esDecimal && (e.key === '.' || e.key === ',')) {
+                const tieneSeparador = input.value.includes('.') || input.value.includes(',');
+                if (tieneSeparador) {
+                    let estaSeleccionado = false;
+                    try {
+                        if (typeof input.selectionStart === 'number' && typeof input.selectionEnd === 'number') {
+                            const sel = input.value.substring(input.selectionStart, input.selectionEnd);
+                            estaSeleccionado = sel.includes('.') || sel.includes(',');
+                        }
+                    } catch (_) {}
+                    if (!estaSeleccionado) {
+                        e.preventDefault();
+                        return;
+                    }
+                }
+                return;
+            }
+
+            // Bloquear cualquier carácter que no sea un dígito 0-9
+            // (bloquea letras 'e', 'E', 'a'..'z', signos '-', '+', espacios y símbolos)
+            if (!/^[0-9]$/.test(e.key)) {
+                e.preventDefault();
+            }
+        };
+
+        const onInput = () => {
+            let val = input.value;
+            if (esDecimal) {
+                val = val.replace(/,/g, '.');
+                val = val.replace(/[^0-9.]/g, '');
+                const partes = val.split('.');
+                if (partes.length > 2) {
+                    val = partes[0] + '.' + partes.slice(1).join('');
+                }
+            } else {
+                val = val.replace(/[^0-9]/g, '');
+            }
+            if (input.value !== val) {
+                input.value = val;
+            }
+        };
+
+        input.addEventListener('keydown', onKeyDown);
+        input.addEventListener('input', onInput);
+
+        return () => {
+            input.removeEventListener('keydown', onKeyDown);
+            input.removeEventListener('input', onInput);
+        };
+    }
+
+    function mostrarPrompt(mensaje, valorInicial = '', titulo = 'Ingresar Valor', tipoFiltro = null) {
         const dialog = el('modalPrompt');
         if (!dialog || typeof dialog.showModal !== 'function') {
             return Promise.resolve(window.prompt(mensaje, valorInicial));
@@ -77,10 +145,20 @@
             el('modalPromptMensaje').textContent = mensaje;
             const input = el('modalPromptInput');
             input.value = valorInicial;
+            input.inputMode = tipoFiltro === 'decimal' ? 'decimal' : (tipoFiltro === 'entero' ? 'numeric' : 'text');
+
+            let removerFiltro = null;
+            if (tipoFiltro === 'entero') {
+                removerFiltro = configurarFiltroNumerico(input, false);
+            } else if (tipoFiltro === 'decimal') {
+                removerFiltro = configurarFiltroNumerico(input, true);
+            }
+
             const form = el('formModalPrompt');
             const btnCancelar = el('modalPromptBtnCancelar');
 
             const limpiar = () => {
+                if (typeof removerFiltro === 'function') removerFiltro();
                 form.removeEventListener('submit', onSubmit);
                 btnCancelar.removeEventListener('click', onCancelar);
                 dialog.removeEventListener('close', onClose);
@@ -104,10 +182,13 @@
         });
     }
 
+    UI.configurarFiltroNumerico = configurarFiltroNumerico;
+
     UI.Notificaciones = Object.freeze({
         mostrarMensaje,
         mostrarConfirmacion,
         mostrarPrompt,
+        configurarFiltroNumerico,
         escaparHtml
     });
 })(window);

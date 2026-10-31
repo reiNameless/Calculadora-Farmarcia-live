@@ -102,7 +102,7 @@
     AppFarmacia.ejecutarSuitePruebas = ejecutarSuitePruebas;
 
     // CAL-01: Ejecutar solo si se solicita explícitamente en la URL (?test=true o ?debug=1) o en consola
-    if (typeof window !== 'undefined' && (window.location.search.includes('test=true') || window.location.search.includes('debug=1'))) {
+    if (typeof window !== 'undefined' && window.location?.search && (window.location.search.includes('test=true') || window.location.search.includes('debug=1'))) {
         window.addEventListener('DOMContentLoaded', ejecutarSuitePruebas);
     }
 })(window);

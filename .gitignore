@@ -1,0 +1,10 @@
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+
+# Logs y temporales
+*.log

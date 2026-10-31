@@ -175,7 +175,13 @@
     function calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbis, reglas = REGLAS_NEGOCIO_POR_DEFECTO) {
         const reglasSeguras = sanitizarReglasNegocio(reglas);
         const factorItbis = 1 + (reglasSeguras.porcentajeItbis / 100);
-        const costoCajaEfectivo = aplicaItbis ? (precioCajaBase * factorItbis) : precioCajaBase;
+        const montoItbisPorCaja = aplicaItbis
+            ? redondearDecimalExacto(precioCajaBase * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
+            : 0;
+        const costoCajaEfectivo = redondearDecimalExacto(
+            aplicaItbis ? (precioCajaBase + montoItbisPorCaja) : precioCajaBase,
+            CONSTANTES.DECIMALES_MONEDA
+        );
         const costoUnitarioReal = costoCajaEfectivo / unidadesPorCaja;
 
         const f1 = reglasSeguras.porcentajePrecio1 / 100;
@@ -187,6 +193,8 @@
 
         return Object.freeze({
             costoCajaEfectivo,
+            montoItbisPorCaja,
+            porcentajeItbis: reglasSeguras.porcentajeItbis,
             costoUnitarioReal,
             costoUnitario: formatearCostoFiscalOchoDecimales(costoUnitarioReal),
             p1Bruto: redondearDecimalExacto(p1Bruto, CONSTANTES.DECIMALES_AUDITORIA),
@@ -211,6 +219,7 @@
         const manual = { ...(datosEntrada.manual || {}) };
 
         const calculos = calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbis, reglas);
+        const montoItbisLinea = redondearDecimalExacto(cajasCompradas * calculos.montoItbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
 
         return Object.freeze({
             idLinea: datosEntrada.idLinea || generarIdUnico(),
@@ -221,6 +230,10 @@
             unidadesPorCaja,
             cajasCompradas,
             aplicaItbis,
+            montoItbisPorCaja: calculos.montoItbisPorCaja,
+            montoItbisLinea,
+            costoCajaEfectivo: calculos.costoCajaEfectivo,
+            porcentajeItbis: calculos.porcentajeItbis,
             manual: Object.freeze(manual),
             costoUnitario: calculos.costoUnitario,
             p1Exacto: manual.p1 ? datosEntrada.p1Exacto : calculos.p1Exacto,
@@ -235,8 +248,23 @@
     }
 
     function calcularResumenCuadreFactura(listaProductos, totalFisicoEsperado) {
+        const productos = listaProductos || [];
         const sumaAcumulada = redondearDecimalExacto(
-            (listaProductos || []).reduce((acumulado, prod) => acumulado + (Number(prod.subtotalFactura) || 0), 0),
+            productos.reduce((acumulado, prod) => acumulado + (Number(prod.subtotalFactura) || 0), 0),
+            CONSTANTES.DECIMALES_MONEDA
+        );
+        const totalItbisAcumulado = redondearDecimalExacto(
+            productos.reduce((acumulado, prod) => {
+                if (prod.montoItbisLinea !== undefined) return acumulado + Number(prod.montoItbisLinea);
+                if (prod.aplicaItbis && prod.precioCajaBase && prod.cajasCompradas) {
+                    return acumulado + (prod.precioCajaBase * 0.18 * prod.cajasCompradas);
+                }
+                return acumulado;
+            }, 0),
+            CONSTANTES.DECIMALES_MONEDA
+        );
+        const subtotalBaseAcumulado = redondearDecimalExacto(
+            sumaAcumulada - totalItbisAcumulado,
             CONSTANTES.DECIMALES_MONEDA
         );
         const totalFisico = Number(totalFisicoEsperado) || 0;
@@ -245,6 +273,8 @@
 
         return Object.freeze({
             sumaAcumulada,
+            totalItbisAcumulado,
+            subtotalBaseAcumulado,
             totalFisico,
             diferencia,
             cuadreExacto

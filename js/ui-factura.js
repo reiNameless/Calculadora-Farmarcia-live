@@ -67,22 +67,23 @@
         const resumen = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
         const badge = el('topCuadreBadge');
         const texto = el('topCuadreText');
+        const itbisTxt = resumen.totalItbisAcumulado > 0 ? ` (ITBIS: $${Dominio.formatearMonedaDosDecimales(resumen.totalItbisAcumulado)})` : '';
 
         if (resumen.totalFisico > 0) {
             if (resumen.cuadreExacto) {
                 badge.style.background = 'var(--success-bg)';
                 badge.style.color = 'var(--success)';
-                texto.textContent = `Cuadre Exacto: $${resumen.sumaAcumulada.toFixed(2)}`;
+                texto.textContent = `Cuadre Exacto: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
             } else {
                 badge.style.background = 'var(--warning-bg)';
                 badge.style.color = 'var(--warning)';
                 const signo = resumen.diferencia > 0 ? '+' : '';
-                texto.textContent = `Acumulado: $${resumen.sumaAcumulada.toFixed(2)} (Dif: $${signo}${resumen.diferencia.toFixed(2)})`;
+                texto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt} (Dif: $${signo}${Dominio.formatearMonedaDosDecimales(resumen.diferencia)})`;
             }
         } else {
             badge.style.background = '#f1f3f4';
             badge.style.color = '#333';
-            texto.textContent = `Acumulado: $${resumen.sumaAcumulada.toFixed(2)}`;
+            texto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
         }
     }
 
@@ -92,7 +93,7 @@
         const usarRedondeo = el('calcRedondeo').checked;
 
         if (!Estado.sesionActual.productos.length) {
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>`;
             return;
         }
 
@@ -108,9 +109,19 @@
         tbody.innerHTML = Estado.sesionActual.productos.map(p => {
             const attrId = `data-id="${escaparHtml(p.idLinea)}"`;
             const etiquetaCodigo = p.codigoBarras ? `<div class="fs-xs text-muted">${iconoSvg('barcode')} ${escaparHtml(p.codigoBarras)}</div>` : '';
+            const itbisPorCaja = p.montoItbisPorCaja !== undefined
+                ? p.montoItbisPorCaja
+                : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase * (Estado.reglasActivas.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA) : 0);
+            const itbisLinea = p.montoItbisLinea !== undefined
+                ? p.montoItbisLinea
+                : Dominio.redondearDecimalExacto(p.cajasCompradas * itbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
+            const costoCajaEfectivo = p.costoCajaEfectivo !== undefined
+                ? p.costoCajaEfectivo
+                : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase + itbisPorCaja, CONSTANTES.DECIMALES_MONEDA) : p.precioCajaBase);
+
             return `<tr>
                 <td class="celda-edit" ${attrId} data-campo="nombre"><strong>${escaparHtml(p.nombre)}</strong>${etiquetaCodigo}</td>
-                <td class="celda-edit" ${attrId} data-campo="tipo">
+                <td class="celda-edit" ${attrId} data-campo="tipo" title="Clic para alternar categoría (Se divide / Se vende entero)">
                     <span class="action-icon-btn" style="pointer-events:none">
                         ${iconoSvg(p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'grid' : 'drop')}
                         ${p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}
@@ -119,7 +130,19 @@
                 <td class="mono celda-edit" ${attrId} data-campo="cajasCompradas">${p.cajasCompradas}</td>
                 <td class="mono celda-edit" ${attrId} data-campo="unidadesPorCaja">${p.unidadesPorCaja}</td>
                 <td class="mono c-inv">${p.totalUnidadesInventario} uds</td>
-                <td class="mono celda-edit c-caja" ${attrId} data-campo="precioCajaBase">$${p.precioCajaBase.toFixed(2)}${p.aplicaItbis ? ' +ITBIS' : ''}</td>
+                <td class="mono celda-edit c-caja" ${attrId} data-campo="precioCajaBase" title="Clic para editar precio de compra base">
+                    $${p.precioCajaBase.toFixed(2)}
+                    ${p.aplicaItbis ? `<div class="fs-xs text-muted">C/ITBIS: $${costoCajaEfectivo.toFixed(2)}</div>` : ''}
+                </td>
+                <td class="celda-edit mono c-itbis" ${attrId} data-campo="itbis" title="Clic para activar o desactivar ITBIS">
+                    <span class="${p.aplicaItbis ? 'badge-itbis-on' : 'badge-itbis-off'}">
+                        ${iconoSvg(p.aplicaItbis ? 'check' : 'tag')}
+                        ${p.aplicaItbis ? `+$${itbisPorCaja.toFixed(2)}` : '$0.00'}
+                    </span>
+                    <div class="fs-xs ${p.aplicaItbis ? 'text-success' : 'text-muted'}" style="margin-top:2px;">
+                        ${p.aplicaItbis ? (p.cajasCompradas > 1 ? `Tot: $${itbisLinea.toFixed(2)}` : `${Estado.reglasActivas.porcentajeItbis}%`) : 'Exento'}
+                    </div>
+                </td>
                 <td class="mono c-sub"><strong>$${p.subtotalFactura.toFixed(2)}</strong></td>
                 <td class="mono c-costo">${p.costoUnitario}</td>
                 ${celdaPrecio(p, 1)}${celdaPrecio(p, 2)}${celdaPrecio(p, 3)}
@@ -131,6 +154,25 @@
                 </td>
             </tr>`;
         }).join('');
+    }
+
+    function alternarItbisEnTabla(producto) {
+        const Estado = AppFarmacia.Estado;
+        const nuevoEstado = !producto.aplicaItbis;
+        const actualizado = Dominio.crearLineaProductoInmutable({
+            ...producto,
+            aplicaItbis: nuevoEstado,
+            manual: {}
+        }, Estado.reglasActivas);
+
+        Estado.reemplazarProductoEnSesion(producto.idLinea, actualizado);
+        const detalleMonto = actualizado.montoItbisPorCaja > 0
+            ? ` (+$${actualizado.montoItbisPorCaja.toFixed(2)}/caja | Tot: $${actualizado.montoItbisLinea.toFixed(2)})`
+            : '';
+        UI.Notificaciones.mostrarMensaje(
+            `ITBIS ${nuevoEstado ? 'aplicado (+18%)' + detalleMonto : 'desactivado ($0.00 Exento)'} para "${actualizado.nombre}".`,
+            nuevoEstado ? 'success' : 'info'
+        );
     }
 
     async function alternarTipoEnTabla(producto) {
@@ -167,6 +209,10 @@
 
         if (campo === 'tipo') {
             alternarTipoEnTabla(producto);
+            return;
+        }
+        if (campo === 'itbis') {
+            alternarItbisEnTabla(producto);
             return;
         }
 
@@ -302,12 +348,18 @@
             unidades = vUds.valor;
         }
 
+        const deseaItbis = await UI.Notificaciones.mostrarConfirmacion(
+            `¿Este producto lleva ITBIS (+${Estado.reglasActivas.porcentajeItbis}%)?\n\nActualmente: ${producto.aplicaItbis ? 'SÍ lleva ITBIS' : 'NO lleva ITBIS (Exento)'}`,
+            'Impuesto ITBIS'
+        );
+
         Estado.reemplazarProductoEnSesion(producto.idLinea, Dominio.crearLineaProductoInmutable({
             ...producto,
             nombre: nuevoNombre.trim() || producto.nombre,
             cajasCompradas: vCajas.valor,
             precioCajaBase: vPrecio.valor,
             unidadesPorCaja: unidades,
+            aplicaItbis: deseaItbis,
             manual: {}
         }, Estado.reglasActivas));
     }

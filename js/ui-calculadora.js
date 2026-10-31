@@ -27,15 +27,38 @@
             : Dominio.validarCantidadEnteraPositiva(el('calcUnidadesCaja').value, 'unidades');
 
         const resumenActual = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
-        const factorItbis = 1 + (reglasActivas.porcentajeItbis / 100);
+        const aplicaItbis = el('calcItbis').checked;
+        const desglose = Dominio.calcularDesglosePrecios(
+            vPrecio.esValido ? vPrecio.valor : 0,
+            vUnidades.esValido ? vUnidades.valor : 1,
+            aplicaItbis,
+            reglasActivas
+        );
+
+        const lblItbis = el('lblItbisToggle');
+        if (lblItbis) {
+            if (vPrecio.esValido && vPrecio.valor > 0) {
+                const montoSim = Dominio.redondearDecimalExacto(vPrecio.valor * (reglasActivas.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA);
+                lblItbis.textContent = `Sumar ${reglasActivas.porcentajeItbis}% ITBIS al costo (+$${montoSim.toFixed(2)}/caja)`;
+            } else {
+                lblItbis.textContent = `Sumar ${reglasActivas.porcentajeItbis}% ITBIS al costo`;
+            }
+        }
 
         if (vPrecio.esValido && vCajas.esValido) {
-            const costoCaja = el('calcItbis').checked ? (vPrecio.valor * factorItbis) : vPrecio.valor;
-            const subtotalLinea = Dominio.redondearDecimalExacto(vCajas.valor * costoCaja, CONSTANTES.DECIMALES_MONEDA);
+            const itbisLinea = Dominio.redondearDecimalExacto(vCajas.valor * desglose.montoItbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
+            const subtotalLinea = Dominio.redondearDecimalExacto(vCajas.valor * desglose.costoCajaEfectivo, CONSTANTES.DECIMALES_MONEDA);
             const acumuladoConLinea = Dominio.redondearDecimalExacto(resumenActual.sumaAcumulada + subtotalLinea, CONSTANTES.DECIMALES_MONEDA);
+
+            if (el('resItbisLinea')) {
+                el('resItbisLinea').textContent = aplicaItbis
+                    ? `+$${Dominio.formatearMonedaDosDecimales(itbisLinea)}${vCajas.valor > 1 ? ` ($${desglose.montoItbisPorCaja.toFixed(2)}/caja)` : ''}`
+                    : '$0.00 (Exento)';
+            }
             el('resSubtotalLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(subtotalLinea);
             el('resAcumuladoConLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(acumuladoConLinea);
         } else {
+            if (el('resItbisLinea')) el('resItbisLinea').textContent = '$0.00';
             el('resSubtotalLinea').textContent = '$0.00';
             el('resAcumuladoConLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(resumenActual.sumaAcumulada);
         }
@@ -55,12 +78,6 @@
             return;
         }
 
-        const desglose = Dominio.calcularDesglosePrecios(
-            vPrecio.valor,
-            vUnidades.valor,
-            el('calcItbis').checked,
-            reglasActivas
-        );
         const usarRedondeo = el('calcRedondeo').checked;
 
         el('resCostoUnitario').textContent = desglose.costoUnitario;

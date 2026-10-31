@@ -83,6 +83,8 @@
                         <th>Cant. Cajas</th>
                         <th>Trae x Caja</th>
                         <th>Total Inv</th>
+                        <th>Costo Caja</th>
+                        <th>ITBIS</th>
                         <th>Subtotal</th>
                         <th>Costo Unitario (8 dec)</th>
                         <th>Precio 1 (Ex/Red)</th>
@@ -91,20 +93,32 @@
                     </tr>
                 </thead>
                 <tbody>
-                    ${factura.productos.map(p => `<tr>
-                        <td><strong>${escaparHtml(p.nombre)}</strong></td>
-                        <td>${p.cajasCompradas}</td>
-                        <td>${p.unidadesPorCaja}</td>
-                        <td><b>${p.totalUnidadesInventario}</b></td>
-                        <td>$${Number(p.subtotalFactura || 0).toFixed(2)}</td>
-                        <td>${p.costoUnitario}</td>
-                        <td>$${p.p1Exacto} / <b>$${p.p1Redondeado}</b></td>
-                        <td>$${p.p2Exacto} / <b>$${p.p2Redondeado}</b></td>
-                        <td>$${p.p3Exacto} / <b>$${p.p3Redondeado}</b></td>
-                    </tr>`).join('')}
+                    ${factura.productos.map(p => {
+                        const itbisPorCaja = p.montoItbisPorCaja !== undefined
+                            ? p.montoItbisPorCaja
+                            : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase * 0.18, 2) : 0);
+                        const itbisLinea = p.montoItbisLinea !== undefined
+                            ? p.montoItbisLinea
+                            : Dominio.redondearDecimalExacto(p.cajasCompradas * itbisPorCaja, 2);
+                        return `<tr>
+                            <td><strong>${escaparHtml(p.nombre)}</strong></td>
+                            <td>${p.cajasCompradas}</td>
+                            <td>${p.unidadesPorCaja}</td>
+                            <td><b>${p.totalUnidadesInventario}</b></td>
+                            <td>$${Number(p.precioCajaBase || 0).toFixed(2)}</td>
+                            <td>${p.aplicaItbis ? `+$${itbisLinea.toFixed(2)}` : '$0.00'}</td>
+                            <td>$${Number(p.subtotalFactura || 0).toFixed(2)}</td>
+                            <td>${p.costoUnitario}</td>
+                            <td>$${p.p1Exacto} / <b>$${p.p1Redondeado}</b></td>
+                            <td>$${p.p2Exacto} / <b>$${p.p2Redondeado}</b></td>
+                            <td>$${p.p3Exacto} / <b>$${p.p3Redondeado}</b></td>
+                        </tr>`;
+                    }).join('')}
                 </tbody>
             </table>
             <div class="print-totals">
+                <b>Total Base:</b> $${(resumen.subtotalBaseAcumulado || 0).toFixed(2)} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <b>Total ITBIS:</b> $${(resumen.totalItbisAcumulado || 0).toFixed(2)} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <b>Total Factura Físico:</b> $${Number(factura.totalFisico || 0).toFixed(2)} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <b>Total Calculado Acumulado:</b> $${resumen.sumaAcumulada.toFixed(2)}
                 ${resumen.totalFisico > 0 ? `<br><small style="color:${resumen.cuadreExacto ? 'green' : 'orange'};">${resumen.cuadreExacto ? '✔ Factura Cuadra Exactamente' : `Diferencia: $${resumen.diferencia.toFixed(2)}`}</small>` : ''}

@@ -50,8 +50,22 @@
         // Con ITBIS (18%)
         const casoCascadaItbis = Dominio.calcularDesglosePrecios(100, 10, true, REGLAS_NEGOCIO_POR_DEFECTO);
         afirmarIgualdad(casoCascadaItbis.costoCajaEfectivo, 118, 'Cascada + ITBIS: Costo caja con 18%');
+        afirmarIgualdad(casoCascadaItbis.montoItbisPorCaja, 18, 'Cascada + ITBIS: Monto ITBIS por caja');
         afirmarIgualdad(casoCascadaItbis.costoUnitario, '11.80000000', 'Cascada + ITBIS: Costo unitario');
         afirmarIgualdad(casoCascadaItbis.p1Exacto, '15.34', 'Cascada + ITBIS: Precio 1');
+
+        // Línea inmutable con ITBIS
+        const lineaItbis = Dominio.crearLineaProductoInmutable({
+            nombre: 'Amoxicilina 500mg',
+            tipo: 'DIVISIBLE',
+            cajasCompradas: 2,
+            unidadesPorCaja: 10,
+            precioCajaBase: 100,
+            aplicaItbis: true
+        }, REGLAS_NEGOCIO_POR_DEFECTO);
+        afirmarIgualdad(lineaItbis.montoItbisPorCaja, 18, 'Línea Inmutable: ITBIS por caja');
+        afirmarIgualdad(lineaItbis.montoItbisLinea, 36, 'Línea Inmutable: Total ITBIS línea 2 cajas');
+        afirmarIgualdad(lineaItbis.subtotalFactura, 236, 'Línea Inmutable: Subtotal línea con ITBIS');
 
         // 3. Estrategia 2: MARGEN_DIRECTO_COSTO
         const reglasMargenDirecto = {

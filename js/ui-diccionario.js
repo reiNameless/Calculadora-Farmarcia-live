@@ -29,7 +29,7 @@
                             <th>Código de Barras</th>
                             <th>Producto Memorizado</th>
                             <th>Categoría</th>
-                            <th>Unidades/Caja</th>
+                            <th>Trae x Caja</th>
                             <th>Último Costo Caja</th>
                             <th>Acción</th>
                         </tr>

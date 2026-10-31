@@ -80,8 +80,8 @@
                 <thead>
                     <tr>
                         <th>Producto</th>
-                        <th>Cajas</th>
-                        <th>Uds/Caja</th>
+                        <th>Cant. Cajas</th>
+                        <th>Trae x Caja</th>
                         <th>Total Inv</th>
                         <th>Subtotal</th>
                         <th>Costo Unitario (8 dec)</th>

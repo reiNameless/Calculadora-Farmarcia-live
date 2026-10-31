@@ -99,12 +99,9 @@
         const celdaPrecio = (p, n) => {
             const exacto = p['p' + n + 'Exacto'];
             const redondeado = p['p' + n + 'Redondeado'];
-            const esManual = p.manual && p.manual['p' + n];
-            const idEscapado = escaparHtml(p.idLinea);
-            return `<td class="mono celda-edit c-p${n}" data-id="${idEscapado}" data-campo="p${n}">
+            return `<td class="mono c-p${n}">
                 ${usarRedondeo ? redondeado : exacto}
                 <span class="fs-xs text-muted">(${usarRedondeo ? exacto : redondeado})</span>
-                ${esManual ? `<span title="Editado a mano">✎</span><button type="button" class="action-icon-btn" data-accion="restaurar" data-campo="p${n}" data-id="${idEscapado}" title="Restaurar cálculo" aria-label="Restaurar cálculo Precio ${n}">↺</button>` : ''}
             </td>`;
         };
 
@@ -177,12 +174,10 @@
             nombre: producto.nombre,
             cajasCompradas: producto.cajasCompradas,
             unidadesPorCaja: producto.unidadesPorCaja,
-            precioCajaBase: producto.precioCajaBase,
-            p1: producto.p1Exacto,
-            p2: producto.p2Exacto,
-            p3: producto.p3Exacto
+            precioCajaBase: producto.precioCajaBase
         };
         const valorActual = mapaValores[campo];
+        if (valorActual === undefined) return;
         const input = document.createElement('input');
         input.value = valorActual;
         input.style.cssText = 'width:100%;min-width:70px;padding:4px 6px;border:2px solid var(--primary);border-radius:4px;font:inherit';
@@ -232,12 +227,6 @@
             if (!v.esValido) return UI.Notificaciones.mostrarMensaje(v.error, 'error');
             datosClonados.precioCajaBase = v.valor;
             datosClonados.manual = {};
-        } else if (['p1', 'p2', 'p3'].includes(campo)) {
-            const v = Dominio.validarPrecioCompra(nuevoTexto);
-            if (!v.esValido) return UI.Notificaciones.mostrarMensaje(v.error, 'error');
-            datosClonados.manual[campo] = true;
-            datosClonados[campo + 'Exacto'] = Dominio.formatearMonedaDosDecimales(v.valor);
-            datosClonados[campo + 'Redondeado'] = String(Math.round(v.valor));
         }
 
         Estado.reemplazarProductoEnSesion(producto.idLinea, Dominio.crearLineaProductoInmutable(datosClonados, Estado.reglasActivas));
@@ -334,9 +323,6 @@
                     await editarFilaCompletaConDialogo(prod);
                 } else if (btnAccion.dataset.accion === 'eliminar') {
                     Estado.eliminarProductoDeSesion(prod.idLinea);
-                } else if (btnAccion.dataset.accion === 'restaurar') {
-                    const manual = { ...(prod.manual || {}), [btnAccion.dataset.campo]: false };
-                    Estado.reemplazarProductoEnSesion(prod.idLinea, Dominio.crearLineaProductoInmutable({ ...prod, manual }, Estado.reglasActivas));
                 }
                 return;
             }

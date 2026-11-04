@@ -1,42 +1,66 @@
-# Sistema de Cálculo e Inventario para Farmacia
+# Calculadora de Farmacia — Cockpit de Operaciones e Inventario
 
-Aplicación web local y ligera (cero dependencias externas) para recepción de mercancía, cálculo fiscal de costos unitarios a 8 decimales, determinación automática de precios de venta (P1, P2 y P3), memorización de códigos de barra y cuadre de facturas físicas.
+[![CI & Pruebas Automatizadas](https://github.com/reiNameless/Calculadora-Farmarcia/actions/workflows/ci.yml/badge.svg)](https://github.com/reiNameless/Calculadora-Farmarcia/actions/workflows/ci.yml)
+[![PWA Ready](https://img.shields.io/badge/PWA-100%25_Offline-146c2e?style=flat&logo=pwa)](https://github.com/reiNameless/Calculadora-Farmarcia)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](./LICENSE)
+
+Aplicación web progresiva (PWA) de alto rendimiento y cero dependencias para recepción ágil de mercancía en farmacias, cálculo fiscal exacto de costos a 8 decimales, determinación automática de precios de venta (P1, P2 y P3), cuadre de facturas y memorización local de códigos de barras.
+
+Diseñada con enfoque **Local-First (100% funcional sin conexión a internet)** y optimizada para operar tanto en computadoras de mostrador con pistolas lectoras de códigos de barras como en dispositivos móviles (tablets y smartphones).
 
 ---
 
 ## 🚀 Características Principales
 
-- **📱 Aplicación Web Progresiva (PWA):**
-  - **Instalable con 1 clic:** En Android, iOS o PC (Chrome/Edge) puedes instalar la aplicación directamente en la pantalla de inicio con su propio ícono.
-  - **100% Funcional sin Internet (Offline):** El *Service Worker* integrado almacena en caché todos los recursos. La calculadora y el diccionario funcionan sin interrupciones incluso si se cae el Wi-Fi en la farmacia.
-- **Exactitud Fiscal y Redondeo Monetario:**
-  - Costo Unitario calculado a **8 decimales** para mantener la precisión matemática del inventario contable.
-  - Precios de venta expresados en **formato exacto (2 decimales)** y **redondeado al entero más cercano** para mostrador.
-- **3 Fórmulas / Estrategias de Cálculo Independientes:**
-  1. **Cascada de Descuento (Estándar de Farmacia):** Sube el margen a partir del costo para P1 (+30%), y aplica descuentos escalonados a partir del precio anterior para P2 (-5%) y P3 (-5%).
-  2. **Margen Directo sobre el Costo:** Cada precio calcula su porcentaje de ganancia directamente sobre el costo base.
-  3. **Margen Bruto Financiero:** Divide el costo entre `(1 - Margen)` para fijar el porcentaje sobre el precio cobrado al cliente.
-- **Diccionario Permanente de Códigos de Barra:**
-  - Reconoce y memoriza automáticamente los productos escaneados con pistola lectora o ingresados manualmente.
-  - No sobrescribe nombres personalizados con valores genéricos.
-- **Borrador Automático e Historial de 7 Días:**
-  - Persistencia continua en `localStorage` con caché en memoria optimizado.
-  - Alerta de proximidad de expiración antes del purgado automático de los 7 días.
-  - Exportación e importación de respaldos en formato JSON seguro.
-- **Escáner Inteligente con IA (Opcional):**
-  - Lectura de fotos de facturas físicas mediante la API de Google Gemini (los datos se procesan con clave de sesión protegida en `sessionStorage`).
+### 1. Cálculo Fiscal y Precios de Venta
+* **Costo Fiscal a 8 Decimales:** División de alta precisión para coincidir con los requerimientos de los sistemas contables y ERP farmacéuticos.
+* **Precios de Mostrador (P1, P2 y P3):** Presentación dual de precios en valor exacto (con 2 decimales) y valor redondeado al entero más cercano.
+* **Regla Especial de Leche (Ganancia 10%):** Opción de cálculo para leches y fórmulas infantiles fijando el margen P1 en un 10% directo (`costo × 1.10`).
+* **Descuentos Flexibles en Factura:** Permite aplicar descuentos de proveedores por monto global de la línea ($) o por porcentaje unitario (%). Los precios de venta se calculan sobre la base real de compra mientras que el costo fiscal absorbe el descuento.
+
+### 2. Reconocimiento y Validación de Códigos de Barras
+* **Algoritmo Oficial GS1 Checksum (Modulo 10):** Valida la integridad matemática de códigos estándar:
+  * **EAN-13** (13 dígitos: estándar para la gran mayoría de medicamentos).
+  * **UPC-A** (12 dígitos: medicamentos y suplementos importados de EE.UU./Canadá).
+  * **EAN-8** (8 dígitos: envases pequeños, colirios, ampollas).
+  * **ITF-14** (14 dígitos: cajas maestras).
+* **Autocompletado Selectivo e Inteligente:** Al escanear o tipear un código memorizado, autocompleta inmediatamente el **Nombre**, el **Último Costo**, la tasa de **ITBIS** y la marca de **Leche**, dejando intactas la categoría y unidades para agilizar el ingreso de cajas.
+* **Filtro Numérico Estricto:** Bloqueo físico de caracteres alfabéticos y teclado numérico automático en dispositivos móviles.
+
+### 3. Facturación y Cuadre de Mercancía
+* **Cuadre Exacto con Semáforo Visual:** Monitoreo en tiempo real de la diferencia entre el total calculado y el total físico de la factura en papel.
+* **Vencimiento Automático (+30 días):** Al establecer la fecha de emisión de la factura, la fecha de vencimiento se calcula automáticamente a 30 días calendario por defecto.
+* **Edición Inline en Tabla:** Modificación rápida de cantidades, precios o ITBIS directamente en la tabla de productos registrados.
+
+### 4. Bóveda Protegida y Respaldo
+* **Bóveda de Fórmulas:** Candado de protección contra modificaciones accidentales en los porcentajes de margen y fórmulas matemáticas (Cascada, Margen Directo y Margen Financiero).
+* **Historial de 7 Días:** Almacenamiento local temporal con advertencia de retención y opción de reapertura de facturas.
+* **Exportación / Importación JSON:** Respaldos portátiles para editar nombres o catálogos en cualquier editor de texto u hoja de cálculo y restaurarlos sin perder información.
+
+### 5. Escáner Inteligente con IA (Opcional)
+* Integración con la API de Google Gemini para transcripción automática de facturas a partir de fotografías. La clave de API se resguarda en `sessionStorage` (memoria volátil) para máxima seguridad.
+
+### 6. Interfaz Moderna Ultra-Dark
+* Modo Oscuro Clínico de alto contraste diseñado para reducir la fatiga visual durante jornadas prolongadas de digitación.
 
 ---
 
-## 📂 Arquitectura Modular de Archivos (Fase 8 - ARQ-01)
+## 📂 Arquitectura Modular
 
 ```
 Calculadora-Farmacia/
 │
 ├── index.html              # Estructura semántica, accesibilidad y modales HTML5
 ├── manifest.json           # Manifiesto PWA para instalación en Android/iOS/PC
-├── sw.js                   # Service Worker para funcionamiento 100% offline
+├── sw.js                   # Service Worker para funcionamiento 100% offline (Caché v10)
+├── robots.txt              # Configuración para motores de búsqueda
+├── LICENSE                 # Licencia propietaria (All Rights Reserved)
+├── SECURITY.md             # Política de seguridad y privacidad
 ├── README.md               # Documentación general y técnica
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml          # Integración Continua (validación de sintaxis, pruebas y paridad de IDs)
 │
 ├── icons/
 │   ├── icon.svg            # Ícono vectorial escalable
@@ -44,34 +68,41 @@ Calculadora-Farmacia/
 │   └── icon-512.png        # Ícono PWA alta resolución (512x512)
 │
 ├── css/
-│   └── estilos.css         # Diseño responsivo, accesibilidad, animaciones e impresión
+│   └── estilos.css         # Paleta Ultra-Dark, diseño responsivo y estilos de impresión
 │
 └── js/
     ├── configuracion.js    # Constantes globales, claves de almacenamiento y perfiles
-    ├── dominio.js          # Lógica pura de cálculo (Strategy Pattern), validaciones y redondeos
-    ├── almacenamiento.js   # Manejo de persistencia, caché en memoria y respaldos JSON
-    ├── servicio-ia.js      # Integración con Google Gemini API
+    ├── dominio.js          # Lógica pura de cálculo (Strategy Pattern), algoritmo GS1 y fechas
+    ├── almacenamiento.js   # Persistencia en localStorage, caché en memoria y respaldos JSON
+    ├── servicio-ia.js      # Conexión con Google Gemini API
     │
-    ├── ui-notificaciones.js# Manejador de alertas animadas y modales accesibles (<dialog>)
-    ├── ui-calculadora.js   # Cockpit de cálculo en vivo, atajos de teclado y bóveda de fórmulas
-    ├── ui-factura.js       # Cabecera de factura, tabla de productos registrados y edición inline
-    ├── ui-diccionario.js   # Vista del diccionario de códigos de barra, exportación e importación
-    ├── ui-historial.js     # Historial de 7 días, alertas de retención, reabrir e impresión
-    ├── interfaz.js         # Orquestador del estado central, PWA y flujo general
+    ├── ui-notificaciones.js# Alertas toast accesibles y diálogos modales
+    ├── ui-calculadora.js   # Cockpit de cálculo en vivo, atajos de teclado y escáner GS1
+    ├── ui-factura.js       # Cabecera de factura, tabla reactiva y cuadre en tiempo real
+    ├── ui-diccionario.js   # Gestión de diccionario de códigos, exportación e importación
+    ├── ui-historial.js     # Historial de 7 días, alertas de retención e impresión
+    ├── interfaz.js         # Orquestador del estado central y registro PWA
     └── pruebas.js          # Suite de pruebas unitarias automatizadas
 ```
 
 ---
 
-## 🧪 Ejecución de Pruebas Automatizadas
+## 🧪 Pruebas Automatizadas
 
-Para correr la suite de pruebas unitarias en el navegador, simplemente abre `index.html` con el parámetro `?test=true`:
+La aplicación cuenta con una suite completa de pruebas unitarias para validación de precios, estrategias de cascada, algoritmo GS1 Modulo 10, leche, descuentos y sumas de fechas.
 
+Para ejecutar las pruebas en el navegador:
 ```
-https://reinameless.github.io/Calculadora-Farmarcia/?test=true
+https://reinameless.github.io/Calculadora-Farmarcia-live/?test=true
 ```
 
-O desde la consola de desarrollador del navegador (F12):
+O abriendo la consola de desarrollador (F12):
 ```javascript
 AppFarmacia.ejecutarSuitePruebas();
 ```
+
+---
+
+## 📄 Licencia
+
+Este proyecto se encuentra bajo una **Licencia Propietaria (Todos los Derechos Reservados)**. Consulta el archivo [LICENSE](./LICENSE) para conocer los términos de uso y autoría.

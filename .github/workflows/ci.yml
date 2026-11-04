@@ -1,0 +1,82 @@
+name: CI & Pruebas Automatizadas
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 1. Verificación de Sintaxis JavaScript
+        run: |
+          node -c sw.js
+          node -c js/configuracion.js
+          node -c js/dominio.js
+          node -c js/almacenamiento.js
+          node -c js/servicio-ia.js
+          node -c js/ui-notificaciones.js
+          node -c js/ui-calculadora.js
+          node -c js/ui-factura.js
+          node -c js/ui-diccionario.js
+          node -c js/ui-historial.js
+          node -c js/interfaz.js
+          node -c js/pruebas.js
+
+      - name: 2. Auditoría de Paridad de IDs y Estructura
+        run: |
+          node -e "
+          const fs = require('fs');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const idRegex = /id=[\"']([a-zA-Z0-9_-]+)[\"']/g;
+          const ids = new Set();
+          let m;
+          while ((m = idRegex.exec(html)) !== null) { ids.add(m[1]); }
+          console.log('Total IDs registrados en index.html:', ids.size);
+          const obligatorios = [
+            'calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas',
+            'calcTipo', 'calcUnidadesCaja', 'calcEsLeche', 'calcDescuento',
+            'btnItbis0', 'btnItbis18', 'btnItbis16', 'btnDescMonto', 'btnDescPorc',
+            'facProveedor', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento',
+            'resCostoUnitario', 'resPrecio1', 'resPrecio2', 'resPrecio3', 'tablaProductosActuales'
+          ];
+          for (const req of obligatorios) {
+            if (!ids.has(req)) {
+              console.error('ID crítico faltante:', req);
+              process.exit(1);
+            }
+          }
+          console.log('Paridad de IDs críticos verificada al 100%');
+          "
+
+      - name: 3. Ejecución de la Suite de Pruebas Unitarias y GS1
+        run: |
+          node -e "
+          const fs = require('fs');
+          const vm = require('vm');
+          const sandbox = {
+            window: {},
+            console: console,
+            Intl: Intl,
+            setTimeout: setTimeout,
+            clearTimeout: clearTimeout
+          };
+          sandbox.window = sandbox;
+          const scripts = ['js/configuracion.js', 'js/dominio.js', 'js/pruebas.js'];
+          for (const s of scripts) {
+            vm.runInNewContext(fs.readFileSync(s, 'utf8'), sandbox);
+          }
+          sandbox.AppFarmacia.ejecutarSuitePruebas();
+          console.log('Todas las pruebas de dominio superadas');
+          "

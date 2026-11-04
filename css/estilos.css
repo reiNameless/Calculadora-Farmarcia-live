@@ -534,6 +534,16 @@
             color: var(--color-exito);
             border-color: var(--color-exito-borde);
         }
+        .cuadre-alerta {
+            background: var(--color-alerta-fondo);
+            color: var(--color-alerta);
+            border-color: var(--color-alerta);
+        }
+        .cuadre-neutro {
+            background: var(--color-superficie-resaltada);
+            color: var(--color-texto-secundario);
+            border-color: var(--color-borde);
+        }
 
         /* TABLA MAESTRA CON LÍNEAS VERTICALES DE SEPARACIÓN Y CERO SCROLL HORIZONTAL */
         .tabla-card {

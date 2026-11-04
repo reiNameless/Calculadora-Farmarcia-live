@@ -69,21 +69,40 @@
         const texto = el('topCuadreText');
         const itbisTxt = resumen.totalItbisAcumulado > 0 ? ` (ITBIS: $${Dominio.formatearMonedaDosDecimales(resumen.totalItbisAcumulado)})` : '';
 
+        const facBadge = el('facCuadreBadge');
+        const facTexto = el('facCuadreText');
+        const facIco = el('facCuadreIco');
+
         if (resumen.totalFisico > 0) {
             if (resumen.cuadreExacto) {
-                badge.style.background = 'var(--success-bg)';
-                badge.style.color = 'var(--success)';
-                texto.textContent = `Cuadre Exacto: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+                if (badge) {
+                    badge.style.background = 'var(--color-exito-fondo)';
+                    badge.style.color = 'var(--color-exito)';
+                }
+                if (texto) texto.textContent = `Cuadre Exacto: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+                if (facBadge) facBadge.className = 'badge-cuadre cuadre-exito';
+                if (facTexto) facTexto.textContent = `Cuadre Exacto: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+                if (facIco) facIco.innerHTML = '<use href="#i-check"/>';
             } else {
-                badge.style.background = 'var(--warning-bg)';
-                badge.style.color = 'var(--warning)';
                 const signo = resumen.diferencia > 0 ? '+' : '';
-                texto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt} (Dif: $${signo}${Dominio.formatearMonedaDosDecimales(resumen.diferencia)})`;
+                if (badge) {
+                    badge.style.background = 'var(--color-alerta-fondo)';
+                    badge.style.color = 'var(--color-alerta)';
+                }
+                if (texto) texto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt} (Dif: ${signo}$${Dominio.formatearMonedaDosDecimales(resumen.diferencia)})`;
+                if (facBadge) facBadge.className = 'badge-cuadre cuadre-alerta';
+                if (facTexto) facTexto.textContent = `Diferencia: ${signo}$${Dominio.formatearMonedaDosDecimales(resumen.diferencia)} | Acum: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+                if (facIco) facIco.innerHTML = '<use href="#i-warn"/>';
             }
         } else {
-            badge.style.background = '#f1f3f4';
-            badge.style.color = '#333';
-            texto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+            if (badge) {
+                badge.style.background = 'var(--color-superficie-resaltada)';
+                badge.style.color = 'var(--color-texto-secundario)';
+            }
+            if (texto) texto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+            if (facBadge) facBadge.className = 'badge-cuadre cuadre-neutro';
+            if (facTexto) facTexto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
+            if (facIco) facIco.innerHTML = '<use href="#i-wallet"/>';
         }
     }
 

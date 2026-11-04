@@ -139,23 +139,23 @@
                     <div class="form-grid">
                         <div class="campo">
                             <label class="campo-label"><svg class="ico ico-sm"><use href="#i-barcode"/></svg> Código de Barras</label>
-                            <input type="text" class="input-control input-mono" id="calcCodigoBarras" placeholder="Escanear..." value="750123456789">
+                            <input type="text" class="input-control input-mono" id="calcCodigoBarras" placeholder="Escanear...">
                         </div>
                         <div class="campo">
                             <label class="campo-label">Nombre del Producto</label>
-                            <input type="text" class="input-control" id="calcNombre" placeholder="Ej. Amoxicilina 500mg" value="Amoxicilina 500mg (Caja 10)">
+                            <input type="text" class="input-control" id="calcNombre" placeholder="Ej. Amoxicilina 500mg">
                         </div>
                         <div class="campo">
                             <label class="campo-label">1. Cant. Cajas</label>
-                            <input type="number" id="calcCajasCompradas" class="input-control input-mono" value="2" min="1">
+                            <input type="number" id="calcCajasCompradas" class="input-control input-mono" placeholder="1" min="1">
                         </div>
                         <div class="campo">
                             <label class="campo-label">2. Costo Caja Base ($)</label>
-                            <input type="number" id="calcPrecioCaja" class="input-control input-mono" value="100.00" step="0.01">
+                            <input type="number" id="calcPrecioCaja" class="input-control input-mono" placeholder="0.00" step="0.01">
                         </div>
                         <div class="campo" id="boxUnidadesPorCaja">
                             <label class="campo-label">3. Trae x Caja (Uds)</label>
-                            <input type="number" id="calcUnidadesCaja" class="input-control input-mono" value="10" min="1">
+                            <input type="number" id="calcUnidadesCaja" class="input-control input-mono" placeholder="1" min="1">
                         </div>
                         <div class="campo">
                             <label class="campo-label">Impuesto Fiscal ITBIS</label>
@@ -168,6 +168,27 @@
                             <!-- Compatibilidad con scripts del DOM -->
                             <input type="checkbox" id="calcItbis" style="display:none;">
                             <span id="lblItbisToggle" style="display:none;">Sumar 18% ITBIS al costo</span>
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label" style="display:flex;justify-content:space-between;align-items:center;">
+                                <span><svg class="ico ico-sm"><use href="#i-pct"/></svg> Descuento en Factura</span>
+                                <span style="font-size:10px;color:var(--color-texto-desactivado);" id="lblDescModoTexto">Total línea ($)</span>
+                            </label>
+                            <div style="display:flex;gap:4px;">
+                                <input type="number" id="calcDescuento" class="input-control input-mono" placeholder="0.00" min="0" step="0.01" style="flex:1;">
+                                <div class="selector-itbis-rapido" style="margin:0;width:auto;display:inline-flex;">
+                                    <button type="button" class="btn-itbis-opcion activo" id="btnDescMonto" style="min-width:32px;padding:0 8px;" title="Descuento en monto total de la línea ($)">$</button>
+                                    <button type="button" class="btn-itbis-opcion" id="btnDescPorc" style="min-width:32px;padding:0 8px;" title="Descuento en porcentaje por caja (%)">%</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="campo" style="justify-content:flex-end;">
+                            <label class="campo-label">Categoría Especial</label>
+                            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:var(--peso-seminegrita);user-select:none;padding:7px 10px;border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);border:1px solid var(--color-borde);height:36px;box-sizing:border-box;">
+                                <input type="checkbox" id="calcEsLeche" style="width:16px;height:16px;accent-color:var(--color-primario);cursor:pointer;">
+                                <svg class="ico ico-sm"><use href="#i-drop"/></svg>
+                                <span>Es Leche (Ganancia 10%)</span>
+                            </label>
                         </div>
                     </div>
 
@@ -203,7 +224,7 @@
                             <div style="font-size:10px;color:var(--color-texto-desactivado);">Para cuadro Costo del sistema</div>
                         </div>
                         <div style="display:flex;align-items:center;gap:6px;">
-                            <span class="numero-costo" id="resCostoUnitario">11.80000000</span>
+                            <span class="numero-costo" id="resCostoUnitario">0.00000000</span>
                             <button class="copy-chip" id="btnCopyCosto" data-copiar="resCostoUnitario" title="Copiar costo unitario">
                                 <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
                             </button>
@@ -214,24 +235,24 @@
                     <div class="precios-grid">
                         <div class="ficha-precio p1">
                             <div class="ficha-precio-titulo" id="lblTituloP1" style="color:var(--col-p1-color);">Precio 1 (+30%)</div>
-                            <div class="ficha-precio-cifra" id="resPrecio1">$15.34</div>
-                            <div class="ficha-precio-sub" id="subPrecio1">Red: <b id="resP1Red">$15</b></div>
+                            <div class="ficha-precio-cifra" id="resPrecio1">$0.00</div>
+                            <div class="ficha-precio-sub" id="subPrecio1">Red: <b id="resP1Red">$0</b></div>
                             <button class="copy-chip" data-copiar="resPrecio1" style="margin-top:4px;" title="Copiar Precio 1">
                                 <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
                             </button>
                         </div>
                         <div class="ficha-precio p2">
                             <div class="ficha-precio-titulo" id="lblTituloP2" style="color:var(--col-p2-color);">Precio 2 (-5%)</div>
-                            <div class="ficha-precio-cifra" id="resPrecio2">$14.57</div>
-                            <div class="ficha-precio-sub" id="subPrecio2">Red: <b id="resP2Red">$15</b></div>
+                            <div class="ficha-precio-cifra" id="resPrecio2">$0.00</div>
+                            <div class="ficha-precio-sub" id="subPrecio2">Red: <b id="resP2Red">$0</b></div>
                             <button class="copy-chip" data-copiar="resPrecio2" style="margin-top:4px;" title="Copiar Precio 2">
                                 <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
                             </button>
                         </div>
                         <div class="ficha-precio p3">
                             <div class="ficha-precio-titulo" id="lblTituloP3" style="color:var(--col-p3-color);">Precio 3 (-5%)</div>
-                            <div class="ficha-precio-cifra" id="resPrecio3">$13.84</div>
-                            <div class="ficha-precio-sub" id="subPrecio3">Red: <b id="resP3Red">$14</b></div>
+                            <div class="ficha-precio-cifra" id="resPrecio3">$0.00</div>
+                            <div class="ficha-precio-sub" id="subPrecio3">Red: <b id="resP3Red">$0</b></div>
                             <button class="copy-chip" data-copiar="resPrecio3" style="margin-top:4px;" title="Copiar Precio 3">
                                 <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
                             </button>
@@ -240,10 +261,10 @@
 
                     <!-- Resumen Numérico Completo -->
                     <div class="resumen-bar">
-                        <span><svg class="ico ico-sm"><use href="#i-box"/></svg> Inv: <b id="resTotalUnidadesInventario">20</b> uds</span>
-                        <span><svg class="ico ico-sm"><use href="#i-tag"/></svg> ITBIS: <b id="resItbisLinea" style="color:var(--color-exito);">+$36.00 (18%)</b></span>
-                        <span><svg class="ico ico-sm"><use href="#i-wallet"/></svg> Sub: <b id="resSubtotalLinea" style="color:var(--color-accion);">$236.00</b></span>
-                        <span>Total: <b id="resAcumuladoConLinea" style="color:var(--color-texto-principal);">$236.00</b></span>
+                        <span><svg class="ico ico-sm"><use href="#i-box"/></svg> Inv: <b id="resTotalUnidadesInventario">0</b> uds</span>
+                        <span><svg class="ico ico-sm"><use href="#i-tag"/></svg> ITBIS: <b id="resItbisLinea" style="color:var(--color-exito);">$0.00 (Exento)</b></span>
+                        <span><svg class="ico ico-sm"><use href="#i-wallet"/></svg> Sub: <b id="resSubtotalLinea" style="color:var(--color-accion);">$0.00</b></span>
+                        <span>Total: <b id="resAcumuladoConLinea" style="color:var(--color-texto-principal);">$0.00</b></span>
                     </div>
                 </div>
 
@@ -292,23 +313,23 @@
                 <div class="factura-campos-grid">
                     <div class="campo">
                         <label class="campo-label">Proveedor / Lab. *</label>
-                        <input type="text" class="input-control" id="facProveedor" value="Laboratorios Rowe" placeholder="Ej. Rowe / Ethical">
+                        <input type="text" class="input-control" id="facProveedor" placeholder="Ej. Rowe / Ethical">
                     </div>
                     <div class="campo">
                         <label class="campo-label">Factura # *</label>
-                        <input type="text" class="input-control" id="facNumero" value="FAC-00892" placeholder="Ej. 004582">
+                        <input type="text" class="input-control" id="facNumero" placeholder="Ej. 004582">
                     </div>
                     <div class="campo">
                         <label class="campo-label">Total en Papel ($) *</label>
-                        <input type="number" class="input-control input-mono" id="facTotalFisico" value="236.00" placeholder="Ej. 236.00" step="0.01">
+                        <input type="number" class="input-control input-mono" id="facTotalFisico" placeholder="Ej. 236.00" step="0.01">
                     </div>
                     <div class="campo">
                         <label class="campo-label">Fecha Emisión *</label>
-                        <input type="date" class="input-control" id="facFechaEmision" value="2026-10-31">
+                        <input type="date" class="input-control" id="facFechaEmision">
                     </div>
                     <div class="campo">
                         <label class="campo-label">Fecha Vencimiento (Opc.)</label>
-                        <input type="date" class="input-control" id="facFechaVencimiento" value="2026-11-30">
+                        <input type="date" class="input-control" id="facFechaVencimiento">
                     </div>
                 </div>
             </div>

@@ -172,31 +172,71 @@
         }
     });
 
-    function calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbis, reglas = REGLAS_NEGOCIO_POR_DEFECTO) {
+    function calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbis, reglas = REGLAS_NEGOCIO_POR_DEFECTO, opciones = {}) {
         const reglasSeguras = sanitizarReglasNegocio(reglas);
-        const factorItbis = 1 + (reglasSeguras.porcentajeItbis / 100);
+        const unidades = Math.max(1, Number(unidadesPorCaja) || 1);
+        const cajas = Math.max(1, Number(opciones.cajasCompradas) || 1);
+        const esLeche = Boolean(opciones.esLeche);
+        const descuentoValor = Math.max(0, Number(opciones.descuentoValor) || 0);
+        const tipoDescuento = opciones.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto';
+
+        // 1. Descuento aplicado al costo de compra
+        let descuentoPorCaja = 0;
+        let descuentoTotalLinea = 0;
+        if (descuentoValor > 0) {
+            if (tipoDescuento === 'porcentaje') {
+                descuentoPorCaja = redondearDecimalExacto(precioCajaBase * (descuentoValor / 100), CONSTANTES.DECIMALES_MONEDA);
+                descuentoTotalLinea = redondearDecimalExacto(descuentoPorCaja * cajas, CONSTANTES.DECIMALES_MONEDA);
+            } else {
+                descuentoTotalLinea = redondearDecimalExacto(descuentoValor, CONSTANTES.DECIMALES_MONEDA);
+                descuentoPorCaja = cajas > 0 ? (descuentoValor / cajas) : 0;
+            }
+        }
+
+        // 2. Costo Efectivo de Compra (Costo Fiscal real con descuento y su ITBIS)
+        const precioCajaNeto = Math.max(0, precioCajaBase - descuentoPorCaja);
         const montoItbisPorCaja = aplicaItbis
-            ? redondearDecimalExacto(precioCajaBase * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
+            ? redondearDecimalExacto(precioCajaNeto * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
             : 0;
         const costoCajaEfectivo = redondearDecimalExacto(
-            aplicaItbis ? (precioCajaBase + montoItbisPorCaja) : precioCajaBase,
+            aplicaItbis ? (precioCajaNeto + montoItbisPorCaja) : precioCajaNeto,
             CONSTANTES.DECIMALES_MONEDA
         );
-        const costoUnitarioReal = costoCajaEfectivo / unidadesPorCaja;
+        const costoUnitarioReal = costoCajaEfectivo / unidades;
 
-        const f1 = reglasSeguras.porcentajePrecio1 / 100;
+        // 3. Precios de Venta (P1, P2, P3): calculados sobre precio base SIN descuento (regla farmacia)
+        const montoItbisBasePorCaja = aplicaItbis
+            ? redondearDecimalExacto(precioCajaBase * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
+            : 0;
+        const costoCajaVentaBase = redondearDecimalExacto(
+            aplicaItbis ? (precioCajaBase + montoItbisBasePorCaja) : precioCajaBase,
+            CONSTANTES.DECIMALES_MONEDA
+        );
+        const costoUnitarioVentaReal = costoCajaVentaBase / unidades;
+
+        // Margen P1: Leche usa 10% (costo * 1.10), otros productos usan porcentajePrecio1 activo (ej: +30%)
+        const f1 = esLeche ? 0.10 : (reglasSeguras.porcentajePrecio1 / 100);
         const f2 = reglasSeguras.porcentajePrecio2 / 100;
         const f3 = reglasSeguras.porcentajePrecio3 / 100;
 
         const calculador = ESTRATEGIAS_DISPATCH[reglasSeguras.estrategia] || ESTRATEGIAS_DISPATCH[ESTRATEGIAS_CALCULO.CASCADA_DESCUENTO];
-        const { p1Bruto, p2Bruto, p3Bruto } = calculador(costoUnitarioReal, f1, f2, f3);
+        const { p1Bruto, p2Bruto, p3Bruto } = calculador(costoUnitarioVentaReal, f1, f2, f3);
 
         return Object.freeze({
+            precioCajaBase,
+            precioCajaNeto: redondearDecimalExacto(precioCajaNeto, CONSTANTES.DECIMALES_MONEDA),
+            descuentoValor,
+            tipoDescuento,
+            descuentoPorCaja: redondearDecimalExacto(descuentoPorCaja, CONSTANTES.DECIMALES_MONEDA),
+            descuentoTotalLinea: redondearDecimalExacto(descuentoTotalLinea, CONSTANTES.DECIMALES_MONEDA),
+            esLeche,
             costoCajaEfectivo,
             montoItbisPorCaja,
             porcentajeItbis: reglasSeguras.porcentajeItbis,
             costoUnitarioReal,
             costoUnitario: formatearCostoFiscalOchoDecimales(costoUnitarioReal),
+            costoUnitarioVentaReal,
+            costoUnitarioVenta: formatearCostoFiscalOchoDecimales(costoUnitarioVentaReal),
             p1Bruto: redondearDecimalExacto(p1Bruto, CONSTANTES.DECIMALES_AUDITORIA),
             p2Bruto: redondearDecimalExacto(p2Bruto, CONSTANTES.DECIMALES_AUDITORIA),
             p3Bruto: redondearDecimalExacto(p3Bruto, CONSTANTES.DECIMALES_AUDITORIA),
@@ -216,9 +256,17 @@
         const cajasCompradas = Number(datosEntrada.cajasCompradas);
         const precioCajaBase = Number(datosEntrada.precioCajaBase);
         const aplicaItbis = Boolean(datosEntrada.aplicaItbis);
+        const esLeche = Boolean(datosEntrada.esLeche);
+        const descuentoValor = Number(datosEntrada.descuentoValor) || 0;
+        const tipoDescuento = datosEntrada.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto';
         const manual = { ...(datosEntrada.manual || {}) };
 
-        const calculos = calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbis, reglas);
+        const calculos = calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbis, reglas, {
+            cajasCompradas,
+            esLeche,
+            descuentoValor,
+            tipoDescuento
+        });
         const montoItbisLinea = redondearDecimalExacto(cajasCompradas * calculos.montoItbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
 
         return Object.freeze({
@@ -227,6 +275,11 @@
             nombre: String(datosEntrada.nombre || 'Producto').trim(),
             tipo,
             precioCajaBase,
+            descuentoValor,
+            tipoDescuento,
+            descuentoTotalLinea: calculos.descuentoTotalLinea,
+            descuentoPorCaja: calculos.descuentoPorCaja,
+            esLeche,
             unidadesPorCaja,
             cajasCompradas,
             aplicaItbis,
@@ -236,6 +289,7 @@
             porcentajeItbis: calculos.porcentajeItbis,
             manual: Object.freeze(manual),
             costoUnitario: calculos.costoUnitario,
+            costoUnitarioVenta: calculos.costoUnitarioVenta,
             p1Exacto: manual.p1 ? datosEntrada.p1Exacto : calculos.p1Exacto,
             p2Exacto: manual.p2 ? datosEntrada.p2Exacto : calculos.p2Exacto,
             p3Exacto: manual.p3 ? datosEntrada.p3Exacto : calculos.p3Exacto,

@@ -104,6 +104,7 @@
             unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Number(lineaProducto.unidadesPorCaja) || 1,
             ultimoPrecioCaja: Number(lineaProducto.precioCajaBase) || 0,
             aplicaItbis: Boolean(lineaProducto.aplicaItbis),
+            esLeche: Boolean(lineaProducto.esLeche),
             actualizadoEn: new Date().toISOString()
         };
         guardarDiccionarioCodigos(diccionario);

@@ -108,6 +108,53 @@
         afirmarIgualdad(cuadre.sumaAcumulada, 150.75, 'Cuadre: Suma acumulada exacta');
         afirmarIgualdad(cuadre.cuadreExacto, true, 'Cuadre: Coincide con total físico');
 
+        // 7. Cálculo especial de LECHE: Margen 10% (Costo * 1.10)
+        const casoLeche = Dominio.calcularDesglosePrecios(1000, 1, false, REGLAS_NEGOCIO_POR_DEFECTO, { esLeche: true });
+        afirmarIgualdad(casoLeche.costoUnitario, '1000.00000000', 'Leche: Costo fiscal unitario base');
+        afirmarIgualdad(casoLeche.p1Exacto, '1,100.00', 'Leche: P1 = Costo * 1.10 (10% ganancia)');
+        afirmarIgualdad(casoLeche.p1Redondeado, '1100', 'Leche: P1 Redondeado = 1100');
+
+        // 8. Caso real de usuario: 2 latas de leche a $1000 c/u con $90 de descuento total
+        const casoLecheConDescuento = Dominio.calcularDesglosePrecios(1000, 1, false, REGLAS_NEGOCIO_POR_DEFECTO, {
+            cajasCompradas: 2,
+            esLeche: true,
+            descuentoValor: 90,
+            tipoDescuento: 'monto'
+        });
+        // Descuento por unidad = 90 / 2 = 45 -> Costo compra efectivo = 955
+        afirmarIgualdad(casoLecheConDescuento.costoCajaEfectivo, 955, 'Leche + Desc: Costo caja efectivo con descuento ($1000 - $45)');
+        afirmarIgualdad(casoLecheConDescuento.costoUnitario, '955.00000000', 'Leche + Desc: Costo fiscal unitario para el sistema de farmacia');
+        // Venta se calcula sobre base $1000 sin descuento * 1.10 = $1100
+        afirmarIgualdad(casoLecheConDescuento.costoUnitarioVenta, '1000.00000000', 'Leche + Desc: Base para venta sin descuento');
+        afirmarIgualdad(casoLecheConDescuento.p1Exacto, '1,100.00', 'Leche + Desc: P1 mantiene cálculo sobre base ($1100.00)');
+
+        // 9. Descuento en modalidad Porcentaje (%)
+        const casoDescPorcentaje = Dominio.calcularDesglosePrecios(200, 10, false, REGLAS_NEGOCIO_POR_DEFECTO, {
+            cajasCompradas: 1,
+            descuentoValor: 10, // 10%
+            tipoDescuento: 'porcentaje'
+        });
+        // 10% de 200 = 20 de descuento -> Caja efectiva = 180 -> Unitario compra = 18
+        afirmarIgualdad(casoDescPorcentaje.costoCajaEfectivo, 180, 'Desc %: Costo caja con 10% de descuento ($180)');
+        afirmarIgualdad(casoDescPorcentaje.costoUnitario, '18.00000000', 'Desc %: Costo unitario compra fiscal');
+        afirmarIgualdad(casoDescPorcentaje.p1Exacto, '26.00', 'Desc %: P1 calculado sobre base $20 * 1.30 = $26.00');
+
+        // 10. Línea Inmutable con Leche y Descuento
+        const lineaLeche = Dominio.crearLineaProductoInmutable({
+            nombre: 'Leche Nan Pro 1 800g',
+            tipo: 'ENTERO',
+            cajasCompradas: 2,
+            unidadesPorCaja: 1,
+            precioCajaBase: 1000,
+            aplicaItbis: false,
+            esLeche: true,
+            descuentoValor: 90,
+            tipoDescuento: 'monto'
+        }, REGLAS_NEGOCIO_POR_DEFECTO);
+        afirmarIgualdad(lineaLeche.subtotalFactura, 1910, 'Línea Leche: Subtotal factura exacto 2 x 955 = 1910');
+        afirmarIgualdad(lineaLeche.costoUnitario, '955.00000000', 'Línea Leche: Costo unitario compra 955');
+        afirmarIgualdad(lineaLeche.p1Exacto, '1,100.00', 'Línea Leche: P1 venta 1100.00');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

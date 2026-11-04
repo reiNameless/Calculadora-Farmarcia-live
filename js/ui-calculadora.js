@@ -13,6 +13,19 @@
     let temporizadorDebounceCalculo = null;
     let borradorPerfilesEdicion = null;
     let tasaItbisSeleccionada = 0;
+    let tipoDescuentoSeleccionado = 'monto'; // 'monto' ($) o 'porcentaje' (%)
+
+    function fijarItbis(tasa) {
+        tasaItbisSeleccionada = tasa;
+        if (el('calcItbis')) el('calcItbis').checked = tasa > 0;
+        const btn0 = el('btnItbis0');
+        const btn18 = el('btnItbis18');
+        const btn16 = el('btnItbis16');
+        if (btn0) btn0.classList.toggle('activo', tasa === 0);
+        if (btn18) btn18.classList.toggle('activo', tasa === 18);
+        if (btn16) btn16.classList.toggle('activo', tasa === 16);
+        calcularEnVivo();
+    }
 
     // --- CÁLCULO EN VIVO CON DEBOUNCE (REN-04) ---
     function animarNumero(id) {
@@ -35,6 +48,10 @@
             ? { esValido: true, valor: 1 }
             : Dominio.validarCantidadEnteraPositiva(el('calcUnidadesCaja').value, 'unidades');
 
+        const esLeche = Boolean(el('calcEsLeche') && el('calcEsLeche').checked);
+        const valDescRaw = el('calcDescuento') ? el('calcDescuento').value : '0';
+        const descuentoValor = Math.max(0, parseFloat(valDescRaw) || 0);
+
         const resumenActual = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
         const aplicaItbis = tasaItbisSeleccionada > 0;
         const reglasEfectivas = {
@@ -45,13 +62,26 @@
             vPrecio.esValido ? vPrecio.valor : 0,
             vUnidades.esValido ? vUnidades.valor : 1,
             aplicaItbis,
-            reglasEfectivas
+            reglasEfectivas,
+            {
+                cajasCompradas: vCajas.esValido ? vCajas.valor : 1,
+                esLeche,
+                descuentoValor,
+                tipoDescuento: tipoDescuentoSeleccionado
+            }
         );
+
+        if (el('lblTituloP1')) {
+            el('lblTituloP1').textContent = esLeche ? 'Precio 1 (+10% Leche)' : `Precio 1 (+${reglasActivas.porcentajePrecio1}%)`;
+        }
+        if (el('lblDescModoTexto')) {
+            el('lblDescModoTexto').textContent = tipoDescuentoSeleccionado === 'porcentaje' ? '% por caja' : 'Total línea ($)';
+        }
 
         const lblItbis = el('lblItbisToggle');
         if (lblItbis) {
             if (vPrecio.esValido && vPrecio.valor > 0) {
-                const montoSim = Dominio.redondearDecimalExacto(vPrecio.valor * (reglasActivas.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA);
+                const montoSim = Dominio.redondearDecimalExacto(desglose.precioCajaNeto * (reglasActivas.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA);
                 lblItbis.textContent = `Sumar ${reglasActivas.porcentajeItbis}% ITBIS al costo (+$${montoSim.toFixed(2)}/caja)`;
             } else {
                 lblItbis.textContent = `Sumar ${reglasActivas.porcentajeItbis}% ITBIS al costo`;
@@ -71,7 +101,7 @@
             el('resSubtotalLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(subtotalLinea);
             el('resAcumuladoConLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(acumuladoConLinea);
         } else {
-            if (el('resItbisLinea')) el('resItbisLinea').textContent = '$0.00';
+            if (el('resItbisLinea')) el('resItbisLinea').textContent = '$0.00 (Exento)';
             el('resSubtotalLinea').textContent = '$0.00';
             el('resAcumuladoConLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(resumenActual.sumaAcumulada);
         }
@@ -85,9 +115,12 @@
         if (!vPrecio.esValido || !vUnidades.esValido) {
             el('resCostoUnitario').textContent = '0.00000000';
             [1, 2, 3].forEach(n => {
-                el('resPrecio' + n).textContent = '0.00';
+                el('resPrecio' + n).textContent = '$0.00';
                 el('subPrecio' + n).textContent = 'Exacto: 0.00 | Redondeado: 0';
             });
+            if (el('resP1Red')) el('resP1Red').textContent = '$0';
+            if (el('resP2Red')) el('resP2Red').textContent = '$0';
+            if (el('resP3Red')) el('resP3Red').textContent = '$0';
             return;
         }
 
@@ -99,7 +132,7 @@
         if (el('resP3Red')) el('resP3Red').textContent = '$' + desglose.p3Redondeado;
         ['resCostoUnitario', 'resPrecio1', 'resPrecio2', 'resPrecio3', 'resSubtotalLinea', 'resAcumuladoConLinea', 'resTotalUnidadesInventario'].forEach(animarNumero);
         [1, 2, 3].forEach(n => {
-            el('resPrecio' + n).textContent = usarRedondeo ? desglose['p' + n + 'Redondeado'] : desglose['p' + n + 'Exacto'];
+            el('resPrecio' + n).textContent = usarRedondeo ? '$' + desglose['p' + n + 'Redondeado'] : '$' + desglose['p' + n + 'Exacto'];
             el('subPrecio' + n).textContent = `Exacto: ${desglose['p' + n + 'Exacto']} (Bruto: ${desglose['p' + n + 'Bruto']}) | Redondeado: ${desglose['p' + n + 'Redondeado']}`;
         });
     }
@@ -156,8 +189,10 @@
             if (aprendido.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
                 el('calcUnidadesCaja').value = aprendido.unidadesPorCaja;
             }
-            el('calcItbis').checked = Boolean(aprendido.aplicaItbis);
-            calcularEnVivo();
+            if (el('calcEsLeche')) {
+                el('calcEsLeche').checked = Boolean(aprendido.esLeche);
+            }
+            fijarItbis(aprendido.aplicaItbis ? 18 : 0);
             UI.Notificaciones.mostrarMensaje(`Código reconocido: "${aprendido.nombre}". Ingresa Cajas y Precio.`, 'success');
         } else {
             UI.Notificaciones.mostrarMensaje(`Código nuevo (${codigo}). Escribe el Nombre y datos para memorizarlo automáticamente.`, 'info');
@@ -211,6 +246,10 @@
             ...reglasActivas,
             porcentajeItbis: aplicaItbis ? tasaItbisSeleccionada : reglasActivas.porcentajeItbis
         };
+        const esLeche = Boolean(el('calcEsLeche') && el('calcEsLeche').checked);
+        const valDescRaw = el('calcDescuento') ? el('calcDescuento').value : '0';
+        const descuentoValor = Math.max(0, parseFloat(valDescRaw) || 0);
+
         const nuevaLinea = Dominio.crearLineaProductoInmutable({
             codigoBarras: el('calcCodigoBarras').value,
             nombre: el('calcNombre').value.trim() || `Producto #${sesionActual.productos.length + 1}`,
@@ -218,18 +257,28 @@
             precioCajaBase: vPrecio.valor,
             unidadesPorCaja: vUnidades.valor,
             cajasCompradas: vCajas.valor,
-            aplicaItbis
+            aplicaItbis,
+            esLeche,
+            descuentoValor,
+            tipoDescuento: tipoDescuentoSeleccionado
         }, reglasEfectivas);
 
         const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea);
         Estado.agregarProductoASesion(nuevaLinea);
 
-        ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas'].forEach(id => { el(id).value = ''; });
-        if (tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) el('calcUnidadesCaja').value = '';
+        ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas', 'calcDescuento'].forEach(id => {
+            if (el(id)) el(id).value = '';
+        });
+        if (tipo === CONSTANTES.CATEGORIAS.DIVISIBLE && el('calcUnidadesCaja')) el('calcUnidadesCaja').value = '';
+        if (el('calcEsLeche')) el('calcEsLeche').checked = false;
         calcularEnVivo();
 
         if (aprendioCodigo) {
-            UI.Notificaciones.mostrarMensaje(`Producto agregado y código "${nuevaLinea.codigoBarras}" memorizado en el diccionario.`, 'success');
+            // NOTA: Alerta de guardado en diccionario preparada pero desactivada a solicitud del usuario.
+            const ACTIVAR_ALERTA_DICCIONARIO = false;
+            if (ACTIVAR_ALERTA_DICCIONARIO) {
+                UI.Notificaciones.mostrarMensaje(`Producto agregado y código "${nuevaLinea.codigoBarras}" memorizado en el diccionario.`, 'success');
+            }
             UI.Diccionario.renderizarDiccionarioUI();
         }
         el('calcCajasCompradas').focus();
@@ -263,6 +312,12 @@
             if (e.target.id === 'calcNombre') {
                 e.preventDefault();
                 el('calcCajasCompradas').focus();
+                return;
+            }
+
+            if (e.target.id === 'calcDescuento') {
+                e.preventDefault();
+                agregarProductoAFactura();
                 return;
             }
 
@@ -537,17 +592,37 @@
         const btnItbis0 = el('btnItbis0');
         const btnItbis18 = el('btnItbis18');
         const btnItbis16 = el('btnItbis16');
-        function fijarItbis(tasa) {
-            tasaItbisSeleccionada = tasa;
-            el('calcItbis').checked = tasa > 0;
-            if (btnItbis0) btnItbis0.classList.toggle('activo', tasa === 0);
-            if (btnItbis18) btnItbis18.classList.toggle('activo', tasa === 18);
-            if (btnItbis16) btnItbis16.classList.toggle('activo', tasa === 16);
-            calcularEnVivo();
-        }
         if (btnItbis0) btnItbis0.addEventListener('click', () => fijarItbis(0));
         if (btnItbis18) btnItbis18.addEventListener('click', () => fijarItbis(18));
         if (btnItbis16) btnItbis16.addEventListener('click', () => fijarItbis(16));
+
+        // Selector y eventos de Descuento ($ vs %)
+        const btnDescMonto = el('btnDescMonto');
+        const btnDescPorc = el('btnDescPorc');
+        function fijarTipoDescuento(tipo) {
+            tipoDescuentoSeleccionado = tipo;
+            if (btnDescMonto) btnDescMonto.classList.toggle('activo', tipo === 'monto');
+            if (btnDescPorc) btnDescPorc.classList.toggle('activo', tipo === 'porcentaje');
+            calcularEnVivo();
+        }
+        if (btnDescMonto) btnDescMonto.addEventListener('click', () => fijarTipoDescuento('monto'));
+        if (btnDescPorc) btnDescPorc.addEventListener('click', () => fijarTipoDescuento('porcentaje'));
+
+        const inputDescuento = el('calcDescuento');
+        if (inputDescuento) {
+            inputDescuento.addEventListener('input', dispararCalculoDebounced);
+            if (typeof UI.configurarFiltroNumerico === 'function') {
+                UI.configurarFiltroNumerico(inputDescuento, true);
+            }
+        }
+
+        // Checkbox Es Leche
+        const chkEsLeche = el('calcEsLeche');
+        if (chkEsLeche) {
+            chkEsLeche.addEventListener('change', () => {
+                calcularEnVivo();
+            });
+        }
 
         el('calcItbis').addEventListener('change', () => {
             fijarItbis(el('calcItbis').checked ? 18 : 0);

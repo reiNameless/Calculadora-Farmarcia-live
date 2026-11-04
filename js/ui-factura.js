@@ -109,6 +109,10 @@
         tbody.innerHTML = Estado.sesionActual.productos.map(p => {
             const attrId = `data-id="${escaparHtml(p.idLinea)}"`;
             const etiquetaCodigo = p.codigoBarras ? `<div class="fs-xs text-muted">${iconoSvg('barcode')} ${escaparHtml(p.codigoBarras)}</div>` : '';
+            const badgeLeche = p.esLeche ? `<span style="display:inline-block;padding:1px 5px;font-size:9px;background:var(--color-superficie-resaltada);border:1px solid var(--color-primario);color:var(--color-primario);border-radius:3px;margin-left:4px;font-weight:var(--peso-seminegrita);">Leche 10%</span>` : '';
+            const textoDescuento = (p.descuentoTotalLinea && p.descuentoTotalLinea > 0)
+                ? `<div class="fs-xs" style="color:var(--color-exito);font-weight:var(--peso-seminegrita);">Desc: -$${p.descuentoPorCaja.toFixed(2)}${p.tipoDescuento === 'porcentaje' ? ` (${p.descuentoValor}%)` : ''}</div>`
+                : '';
             const itbisPorCaja = p.montoItbisPorCaja !== undefined
                 ? p.montoItbisPorCaja
                 : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase * (Estado.reglasActivas.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA) : 0);
@@ -120,7 +124,7 @@
                 : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase + itbisPorCaja, CONSTANTES.DECIMALES_MONEDA) : p.precioCajaBase);
 
             return `<tr>
-                <td class="celda-edit" ${attrId} data-campo="nombre"><strong>${escaparHtml(p.nombre)}</strong>${etiquetaCodigo}</td>
+                <td class="celda-edit" ${attrId} data-campo="nombre"><strong>${escaparHtml(p.nombre)}</strong>${badgeLeche}${etiquetaCodigo}</td>
                 <td class="celda-edit" ${attrId} data-campo="tipo" title="Clic para alternar categoría (Se divide / Se vende entero)">
                     <span class="action-icon-btn" style="pointer-events:none">
                         ${iconoSvg(p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'grid' : 'drop')}
@@ -132,6 +136,7 @@
                 <td class="mono c-inv">${p.totalUnidadesInventario} uds</td>
                 <td class="mono celda-edit c-caja" ${attrId} data-campo="precioCajaBase" title="Clic para editar precio de compra base">
                     $${p.precioCajaBase.toFixed(2)}
+                    ${textoDescuento}
                     ${p.aplicaItbis ? `<div class="fs-xs text-muted">C/ITBIS: $${costoCajaEfectivo.toFixed(2)}</div>` : ''}
                 </td>
                 <td class="celda-edit mono c-itbis" ${attrId} data-campo="itbis" title="Clic para activar o desactivar ITBIS">

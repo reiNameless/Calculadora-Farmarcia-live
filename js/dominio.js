@@ -39,6 +39,22 @@
         return `${anio}-${mes}-${dia}`;
     }
 
+    function sumarDiasAFechaISO(fechaIso, dias = 30) {
+        if (!fechaIso || typeof fechaIso !== 'string' || !fechaIso.includes('-')) {
+            return obtenerFechaLocalISO();
+        }
+        const partes = fechaIso.split('-').map(Number);
+        if (partes.length !== 3 || partes.some(isNaN)) {
+            return obtenerFechaLocalISO();
+        }
+        const fecha = new Date(partes[0], partes[1] - 1, partes[2]);
+        fecha.setDate(fecha.getDate() + Number(dias));
+        const anio = fecha.getFullYear();
+        const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+        const dia = String(fecha.getDate()).padStart(2, '0');
+        return `${anio}-${mes}-${dia}`;
+    }
+
     function redondearDecimalExacto(numero, cantidadDecimales) {
         const valorNumerico = Number(numero);
         if (!Number.isFinite(valorNumerico)) return 0;
@@ -343,6 +359,7 @@
         clonarObjetoSeguro,
         generarIdUnico,
         obtenerFechaLocalISO,
+        sumarDiasAFechaISO,
         redondearDecimalExacto,
         formatearMonedaDosDecimales,
         formatearCostoFiscalOchoDecimales,

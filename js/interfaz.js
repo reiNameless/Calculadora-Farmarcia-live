@@ -66,6 +66,9 @@
     }
 
     function renderizarTodo() {
+        if (!sesionActual.fechaVencimiento && sesionActual.fechaEmision) {
+            sesionActual.fechaVencimiento = Dominio.sumarDiasAFechaISO(sesionActual.fechaEmision, 30);
+        }
         el('facProveedor').value = sesionActual.proveedor;
         el('facNumero').value = sesionActual.numeroFactura;
         el('facFechaEmision').value = sesionActual.fechaEmision;

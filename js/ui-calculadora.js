@@ -27,6 +27,15 @@
         calcularEnVivo();
     }
 
+    function fijarTipoDescuento(tipo) {
+        tipoDescuentoSeleccionado = tipo === 'porcentaje' ? 'porcentaje' : 'monto';
+        const btnDescMonto = el('btnDescMonto');
+        const btnDescPorc = el('btnDescPorc');
+        if (btnDescMonto) btnDescMonto.classList.toggle('activo', tipoDescuentoSeleccionado === 'monto');
+        if (btnDescPorc) btnDescPorc.classList.toggle('activo', tipoDescuentoSeleccionado === 'porcentaje');
+        calcularEnVivo();
+    }
+
     // --- CÁLCULO EN VIVO CON DEBOUNCE (REN-04) ---
     function animarNumero(id) {
         const elemento = el(id);
@@ -177,28 +186,50 @@
         calcularEnVivo();
     }
 
-    function procesarEscaneoCodigoBarras() {
+    function procesarEscaneoCodigoBarras(mostrarNotificacion = true) {
         const codigo = Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value);
         if (!codigo) return;
 
         const aprendido = Almacenamiento.buscarProductoPorCodigo(codigo);
         if (aprendido) {
-            el('calcNombre').value = aprendido.nombre;
-            el('calcTipo').value = aprendido.tipo;
+            el('calcNombre').value = (aprendido.nombre && !aprendido.nombre.startsWith('Producto sin nombre')) ? aprendido.nombre : '';
+            el('calcTipo').value = aprendido.tipo || CONSTANTES.CATEGORIAS.DIVISIBLE;
             actualizarVisibilidadCategoria();
-            if (aprendido.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
+            if (aprendido.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE && aprendido.unidadesPorCaja) {
                 el('calcUnidadesCaja').value = aprendido.unidadesPorCaja;
             }
             if (el('calcEsLeche')) {
                 el('calcEsLeche').checked = Boolean(aprendido.esLeche);
             }
-            fijarItbis(aprendido.aplicaItbis ? 18 : 0);
-            UI.Notificaciones.mostrarMensaje(`Código reconocido: "${aprendido.nombre}". Ingresa Cajas y Precio.`, 'success');
+            const tasa = aprendido.tasaItbis !== undefined
+                ? Number(aprendido.tasaItbis)
+                : (aprendido.aplicaItbis ? 18 : 0);
+            fijarItbis(tasa);
+
+            if (aprendido.descuentoValor !== undefined && Number(aprendido.descuentoValor) > 0) {
+                if (el('calcDescuento')) el('calcDescuento').value = aprendido.descuentoValor;
+                if (aprendido.tipoDescuento) fijarTipoDescuento(aprendido.tipoDescuento);
+            }
+
+            if (mostrarNotificacion) {
+                const nombreMostrar = (aprendido.nombre && !aprendido.nombre.startsWith('Producto #') && aprendido.nombre !== 'Producto sin nombre')
+                    ? `"${aprendido.nombre}"`
+                    : `código ${codigo}`;
+                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}). Ingresa Cajas y Precio.`, 'success');
+            }
+            calcularEnVivo();
+            el('calcCajasCompradas').focus();
+            el('calcCajasCompradas').select();
         } else {
-            UI.Notificaciones.mostrarMensaje(`Código nuevo (${codigo}). Escribe el Nombre y datos para memorizarlo automáticamente.`, 'info');
+            if (mostrarNotificacion) {
+                UI.Notificaciones.mostrarMensaje(`Código nuevo (${codigo}). Ingresa los datos; se memorizará automáticamente al agregar a la factura.`, 'info');
+            }
+            if (!el('calcNombre').value) {
+                el('calcNombre').focus();
+            } else {
+                el('calcCajasCompradas').focus();
+            }
         }
-        el('calcCajasCompradas').focus();
-        el('calcCajasCompradas').select();
     }
 
     async function solicitarConfirmacionCajas(valorCrudo) {
@@ -258,6 +289,7 @@
             unidadesPorCaja: vUnidades.valor,
             cajasCompradas: vCajas.valor,
             aplicaItbis,
+            tasaItbis: tasaItbisSeleccionada,
             esLeche,
             descuentoValor,
             tipoDescuento: tipoDescuentoSeleccionado
@@ -266,11 +298,22 @@
         const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea);
         Estado.agregarProductoASesion(nuevaLinea);
 
-        ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas', 'calcDescuento'].forEach(id => {
+        // Reset completo de todos los campos de entrada al default solicitado
+        ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas', 'calcDescuento', 'calcUnidadesCaja'].forEach(id => {
             if (el(id)) el(id).value = '';
         });
-        if (tipo === CONSTANTES.CATEGORIAS.DIVISIBLE && el('calcUnidadesCaja')) el('calcUnidadesCaja').value = '';
         if (el('calcEsLeche')) el('calcEsLeche').checked = false;
+
+        // Reset de ITBIS al default (Exento / 0%)
+        fijarItbis(0);
+
+        // Reset de Descuento al default (Monto / $)
+        fijarTipoDescuento('monto');
+
+        // Reset de Categoría al default (Divisible)
+        el('calcTipo').value = CONSTANTES.CATEGORIAS.DIVISIBLE;
+        actualizarVisibilidadCategoria();
+
         calcularEnVivo();
 
         if (aprendioCodigo) {
@@ -281,7 +324,9 @@
             }
             UI.Diccionario.renderizarDiccionarioUI();
         }
-        el('calcCajasCompradas').focus();
+
+        // Posicionar cursor listo para el siguiente código o producto
+        el('calcCodigoBarras').focus();
     }
 
     function configurarAtajosTeclado() {
@@ -563,6 +608,7 @@
 
         // UX-08: Bloqueo físico de letras y símbolos en entradas numéricas
         if (typeof UI.configurarFiltroNumerico === 'function') {
+            UI.configurarFiltroNumerico(el('calcCodigoBarras'), false);
             UI.configurarFiltroNumerico(el('calcCajasCompradas'), false);
             UI.configurarFiltroNumerico(el('calcUnidadesCaja'), false);
             UI.configurarFiltroNumerico(el('calcPrecioCaja'), true);
@@ -570,6 +616,30 @@
             UI.configurarFiltroNumerico(el('cfgP1Pct'), true);
             UI.configurarFiltroNumerico(el('cfgP2Pct'), true);
             UI.configurarFiltroNumerico(el('cfgP3Pct'), true);
+        }
+
+        // Validación estricta y autocompletado reactivo en Código de Barras
+        const inputCodigo = el('calcCodigoBarras');
+        if (inputCodigo) {
+            inputCodigo.setAttribute('inputmode', 'numeric');
+            inputCodigo.setAttribute('pattern', '[0-9]*');
+            inputCodigo.addEventListener('input', e => {
+                // Solo números
+                const soloDigitos = e.target.value.replace(/\D/g, '');
+                if (e.target.value !== soloDigitos) {
+                    e.target.value = soloDigitos;
+                }
+                // Si el código ya existe en el diccionario al escribirlo o pegarlo, autocompletar de inmediato
+                if (soloDigitos.length >= 8) {
+                    const encontrado = Almacenamiento.buscarProductoPorCodigo(soloDigitos);
+                    if (encontrado) {
+                        procesarEscaneoCodigoBarras(false);
+                    }
+                }
+            });
+            inputCodigo.addEventListener('change', () => {
+                procesarEscaneoCodigoBarras(true);
+            });
         }
 
         // Botones de categoría visuales
@@ -599,12 +669,6 @@
         // Selector y eventos de Descuento ($ vs %)
         const btnDescMonto = el('btnDescMonto');
         const btnDescPorc = el('btnDescPorc');
-        function fijarTipoDescuento(tipo) {
-            tipoDescuentoSeleccionado = tipo;
-            if (btnDescMonto) btnDescMonto.classList.toggle('activo', tipo === 'monto');
-            if (btnDescPorc) btnDescPorc.classList.toggle('activo', tipo === 'porcentaje');
-            calcularEnVivo();
-        }
         if (btnDescMonto) btnDescMonto.addEventListener('click', () => fijarTipoDescuento('monto'));
         if (btnDescPorc) btnDescPorc.addEventListener('click', () => fijarTipoDescuento('porcentaje'));
 

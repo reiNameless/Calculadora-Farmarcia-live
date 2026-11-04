@@ -80,31 +80,38 @@
     function aprenderProductoEnDiccionario(lineaProducto) {
         const codigo = Dominio.normalizarCodigoBarras(lineaProducto.codigoBarras);
         const nombreCandidato = String(lineaProducto.nombre || '').trim();
-        // COD-05: Regex corregida sin la barra en $ (fin de cadena)
-        const esNombreGenerico = /^Producto #\d+$/i.test(nombreCandidato) || nombreCandidato === 'Producto IA' || nombreCandidato === 'Producto';
+        // COD-05: Regex para identificar nombres temporales genéricos
+        const esNombreGenerico = !nombreCandidato || /^Producto #\d+$/i.test(nombreCandidato) || nombreCandidato === 'Producto IA' || nombreCandidato === 'Producto';
         if (!codigo) return false;
 
         const diccionario = obtenerDiccionarioCodigos();
         const existente = diccionario[codigo];
 
-        // DAT-03: No sobrescribir nombres buenos previos si el nuevo es genérico
+        // DAT-03: No sobrescribir nombres previos personalizados si el nuevo es genérico
         let nombreFinal = nombreCandidato;
         if (esNombreGenerico && existente && existente.nombre && !/^Producto #\d+$/i.test(existente.nombre)) {
             nombreFinal = existente.nombre;
-        } else if (esNombreGenerico && (!existente || !existente.nombre)) {
-            return false;
+        } else if (!nombreFinal) {
+            nombreFinal = 'Producto sin nombre';
         }
 
         const tipo = lineaProducto.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
+        const tasaItbis = (lineaProducto.tasaItbis !== undefined && Number.isFinite(Number(lineaProducto.tasaItbis)))
+            ? Number(lineaProducto.tasaItbis)
+            : (lineaProducto.aplicaItbis ? 18 : 0);
 
         diccionario[codigo] = {
+            ...(existente || {}),
             codigoBarras: codigo,
             nombre: nombreFinal,
             tipo,
             unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Number(lineaProducto.unidadesPorCaja) || 1,
             ultimoPrecioCaja: Number(lineaProducto.precioCajaBase) || 0,
-            aplicaItbis: Boolean(lineaProducto.aplicaItbis),
+            aplicaItbis: tasaItbis > 0,
+            tasaItbis,
             esLeche: Boolean(lineaProducto.esLeche),
+            descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+            tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
             actualizadoEn: new Date().toISOString()
         };
         guardarDiccionarioCodigos(diccionario);
@@ -139,12 +146,13 @@
     }
 
     function crearSesionVacia() {
+        const fechaEmision = Dominio.obtenerFechaLocalISO();
         return {
             id: null,
             proveedor: '',
             numeroFactura: '',
-            fechaEmision: Dominio.obtenerFechaLocalISO(),
-            fechaVencimiento: '',
+            fechaEmision,
+            fechaVencimiento: Dominio.sumarDiasAFechaISO(fechaEmision, 30),
             totalFisico: 0,
             productos: []
         };
@@ -153,10 +161,13 @@
     function cargarBorradorActivo() {
         const borrador = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, null);
         if (!borrador || typeof borrador !== 'object') return crearSesionVacia();
+        const fechaEmision = borrador.fechaEmision || Dominio.obtenerFechaLocalISO();
+        const fechaVencimiento = borrador.fechaVencimiento || Dominio.sumarDiasAFechaISO(fechaEmision, 30);
         return {
             ...crearSesionVacia(),
             ...borrador,
-            fechaEmision: borrador.fechaEmision || Dominio.obtenerFechaLocalISO(),
+            fechaEmision,
+            fechaVencimiento,
             productos: Array.isArray(borrador.productos) ? borrador.productos : []
         };
     }

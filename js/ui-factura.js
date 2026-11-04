@@ -44,6 +44,9 @@
         Estado.sesionActual.proveedor = el('facProveedor').value.trim();
         Estado.sesionActual.numeroFactura = el('facNumero').value.trim();
         Estado.sesionActual.fechaEmision = el('facFechaEmision').value;
+        if (!el('facFechaVencimiento').value && el('facFechaEmision').value) {
+            el('facFechaVencimiento').value = Dominio.sumarDiasAFechaISO(el('facFechaEmision').value, 30);
+        }
         Estado.sesionActual.fechaVencimiento = el('facFechaVencimiento').value;
         Estado.sesionActual.totalFisico = parseFloat(el('facTotalFisico').value) || 0;
 
@@ -434,6 +437,19 @@
         ['facProveedor', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento'].forEach(id => {
             el(id).addEventListener('input', actualizarCabeceraFacturaDesdeUI);
         });
+
+        const inputEmision = el('facFechaEmision');
+        if (inputEmision) {
+            inputEmision.addEventListener('change', () => {
+                if (inputEmision.value) {
+                    const nuevaVencimiento = Dominio.sumarDiasAFechaISO(inputEmision.value, 30);
+                    const inputVenc = el('facFechaVencimiento');
+                    if (inputVenc) inputVenc.value = nuevaVencimiento;
+                    Estado.sesionActual.fechaVencimiento = nuevaVencimiento;
+                    Estado.sincronizarYGuardarSesion();
+                }
+            });
+        }
 
         if (typeof UI.configurarFiltroNumerico === 'function') {
             UI.configurarFiltroNumerico(el('facTotalFisico'), true);

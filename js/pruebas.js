@@ -167,6 +167,15 @@
         afirmarIgualdad(casoLeche3Latas.subtotalFactura, 560, 'Leche 3 Latas: Subtotal compra exacto 560.00');
         afirmarIgualdad(casoLeche3Latas.p1Exacto, '220.00', 'Leche 3 Latas: P1 venta calculado sobre base 200 * 1.10 = 220.00');
 
+        // 12. Sumar 30 días a fecha de emisión para fecha de vencimiento por defecto
+        afirmarIgualdad(Dominio.sumarDiasAFechaISO('2026-11-04', 30), '2026-12-04', 'Fecha: Suma 30 días en el mismo mes/siguiente');
+        afirmarIgualdad(Dominio.sumarDiasAFechaISO('2026-12-15', 30), '2027-01-14', 'Fecha: Suma 30 días cruzando fin de año');
+        afirmarIgualdad(Dominio.sumarDiasAFechaISO('2026-01-15', 30), '2026-02-14', 'Fecha: Suma 30 días en enero');
+
+        // 13. Normalización y limpieza de código de barras
+        afirmarIgualdad(Dominio.normalizarCodigoBarras(' 746 123 456 '), '746123456', 'Código: Remueve espacios');
+        afirmarIgualdad(Dominio.normalizarCodigoBarras(''), '', 'Código: Vacío devuelve cadena vacía');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

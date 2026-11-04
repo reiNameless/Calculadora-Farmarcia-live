@@ -209,8 +209,114 @@
                 }
             });
 
-            // UX-02: Navegación Superior con marca visual activa
-            el('barraNavegacion').addEventListener('click', e => {
+            // --- REDISEÑO 2026: BÓVEDA, AJUSTES Y MODO ULTRA-DARK ---
+
+            // 1. Drawer Bóveda (Historial 7 días + Fórmulas Protegidas)
+            const drawerBoveda = el('drawerBoveda');
+            const drawerBackdrop = el('drawerBackdrop');
+            const btnAbrirBoveda = el('btnAbrirBoveda');
+            const btnCerrarBoveda = el('btnCerrarBoveda');
+
+            function abrirBoveda(tabInicial) {
+                if (tabInicial) activarTabBoveda(tabInicial);
+                if (drawerBoveda) drawerBoveda.classList.add('abierto');
+                if (drawerBackdrop) drawerBackdrop.classList.add('abierto');
+            }
+
+            function cerrarBoveda() {
+                if (drawerBoveda) drawerBoveda.classList.remove('abierto');
+                if (drawerBackdrop) drawerBackdrop.classList.remove('abierto');
+            }
+
+            function activarTabBoveda(idSeccion) {
+                document.querySelectorAll('[data-boveda-tab]').forEach(btn => {
+                    btn.classList.toggle('activo', btn.getAttribute('data-boveda-tab') === idSeccion);
+                });
+                document.querySelectorAll('#drawerBoveda .boveda-panel').forEach(panel => {
+                    panel.classList.toggle('activo', panel.id === idSeccion);
+                });
+            }
+
+            if (btnAbrirBoveda) btnAbrirBoveda.addEventListener('click', () => abrirBoveda('seccionHistorial'));
+            if (btnCerrarBoveda) btnCerrarBoveda.addEventListener('click', cerrarBoveda);
+            if (drawerBackdrop) drawerBackdrop.addEventListener('click', cerrarBoveda);
+
+            document.querySelectorAll('[data-boveda-tab]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = btn.getAttribute('data-boveda-tab');
+                    if (target) activarTabBoveda(target);
+                });
+            });
+
+            // 2. Modal Ajustes (API Google Gemini + Diccionario y Archivos)
+            const modalAjustes = el('modalAjustes');
+            const btnAjustesModal = el('btnAjustesModal');
+            const btnCerrarAjustes = el('btnCerrarAjustes');
+            const btnFotoFacturaIA = el('btnFotoFacturaIA');
+
+            function abrirAjustes(tabInicial) {
+                if (modalAjustes) {
+                    if (tabInicial) activarTabAjustes(tabInicial);
+                    modalAjustes.showModal();
+                }
+            }
+
+            function cerrarAjustes() {
+                if (modalAjustes) modalAjustes.close();
+            }
+
+            function activarTabAjustes(idSeccion) {
+                document.querySelectorAll('[data-ajustes-tab]').forEach(btn => {
+                    btn.classList.toggle('activo', btn.getAttribute('data-ajustes-tab') === idSeccion);
+                });
+                document.querySelectorAll('#modalAjustes .ajustes-panel').forEach(panel => {
+                    panel.classList.toggle('activo', panel.id === idSeccion);
+                });
+            }
+
+            if (btnAjustesModal) btnAjustesModal.addEventListener('click', () => abrirAjustes('seccionEscanerIA'));
+            if (btnCerrarAjustes) btnCerrarAjustes.addEventListener('click', cerrarAjustes);
+            if (btnFotoFacturaIA) btnFotoFacturaIA.addEventListener('click', () => abrirAjustes('seccionEscanerIA'));
+
+            document.querySelectorAll('[data-ajustes-tab]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = btn.getAttribute('data-ajustes-tab');
+                    if (target) activarTabAjustes(target);
+                });
+            });
+
+            // Tecla Escape para cerrar drawer
+            window.addEventListener('keydown', e => {
+                if (e.key === 'Escape' && drawerBoveda && drawerBoveda.classList.contains('abierto')) {
+                    cerrarBoveda();
+                }
+            });
+
+            // 3. Alternador Modo Ultra-Dark con persistencia
+            const btnTema = el('btnToggleTema');
+            const svgTema = el('svgIconoTema');
+            const txtTema = el('txtLabelTema');
+
+            function aplicarTema(tema) {
+                document.documentElement.setAttribute('data-tema', tema);
+                const esOscuro = tema === 'oscuro';
+                if (svgTema) svgTema.innerHTML = `<use href="#${esOscuro ? 'i-sun' : 'i-moon'}"/>`;
+                if (txtTema) txtTema.textContent = esOscuro ? 'Modo Claro Clínico' : 'Modo Ultra-Dark';
+                localStorage.setItem('farmacia_tema', tema);
+            }
+
+            const temaGuardado = localStorage.getItem('farmacia_tema') || 'claro';
+            aplicarTema(temaGuardado);
+
+            if (btnTema) {
+                btnTema.addEventListener('click', () => {
+                    const actual = document.documentElement.getAttribute('data-tema') || 'claro';
+                    aplicarTema(actual === 'oscuro' ? 'claro' : 'oscuro');
+                });
+            }
+
+            // UX-02: Navegación Superior de respaldo
+            if (el('barraNavegacion')) el('barraNavegacion').addEventListener('click', e => {
                 const btn = e.target.closest('[data-ir]');
                 if (!btn) return;
 

@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-tema="claro">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com;">
-    <title>Sistema de Cálculo e Inventario de Farmacia</title>
+    <title>Calculadora de Farmacia</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0b57d0">
+    <meta name="theme-color" content="#0052CC">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Calc Farmacia">
@@ -16,466 +16,680 @@
     <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <defs>
-        <symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8"/></symbol>
-        <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
-        <symbol id="i-scan" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></symbol>
-        <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
-        <symbol id="i-hist" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
-        <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/></symbol>
-        <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
-        <symbol id="i-pct" viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
-        <symbol id="i-sync" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
-        <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></symbol>
-        <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
-        <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
-        <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
-        <symbol id="i-checkc" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></symbol>
-        <symbol id="i-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></symbol>
-        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
-        <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></symbol>
-        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
-        <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
-        <symbol id="i-up" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
-        <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
-        <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></symbol>
-        <symbol id="i-barcode" viewBox="0 0 24 24"><path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14"/></symbol>
-        <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
-        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
-        <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
-    </defs>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+        <defs>
+            <symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><line x1="8" y1="6" x2="16" y2="6" stroke="currentColor" stroke-width="2"/><line x1="16" y1="14" x2="16" y2="18" stroke="currentColor" stroke-width="2"/><circle cx="8" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="11" r="1" fill="currentColor"/><circle cx="16" cy="11" r="1" fill="currentColor"/><circle cx="8" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="15" r="1" fill="currentColor"/><circle cx="8" cy="19" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></symbol>
+            <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" fill="none"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-scan" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-hist" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-pct" viewBox="0 0 24 24"><path d="M19 5 5 19" stroke="currentColor" stroke-width="2"/><circle cx="6.5" cy="6.5" r="2.5" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="17.5" cy="17.5" r="2.5" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-sync" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/><line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" stroke-width="2"/><line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" fill="none"/><rect x="6" y="14" width="12" height="8" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-checkc" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" fill="none"/><path d="M22 4 12 14.01l-3-3" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" fill="none"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-up" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/><rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/><rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/><rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-barcode" viewBox="0 0 24 24"><path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+            <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" stroke="currentColor" stroke-width="2" fill="none"/><line x1="7" y1="7" x2="7.01" y2="7" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M7 11V7a5 5 0 0 1 9.9-1" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+            <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2" fill="none"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/></symbol>
+            <symbol id="i-menu" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+            <symbol id="i-close" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+        </defs>
+    </svg>
+<div class="contenedor">
 
-<header class="top-navbar">
-    <div class="status-summary">
-        <span class="badge-info" id="topInvoiceBadge">
-            <svg class="ico"><use href="#i-doc"/></svg>
-            <span id="topInvoiceText">Factura: Sin asignar</span>
-        </span>
-        <span class="badge-info">
-            <svg class="ico"><use href="#i-box"/></svg>
-            <span id="topItemsCount">0 productos</span>
-        </span>
-        <span class="badge-info" title="Productos aprendidos en el diccionario de códigos de barra">
-            <svg class="ico"><use href="#i-barcode"/></svg>
-            <span id="topDiccionarioCount">0 códigos</span>
-        </span>
-        <span class="badge-status" id="topCuadreBadge">
-            <svg class="ico"><use href="#i-wallet"/></svg>
-            <span id="topCuadreText">Acumulado: $0.00</span>
-        </span>
-    </div>
+        <!-- CABECERA MINIMALISTA (EL NOMBRE SOLO ESTÁ EN LA PESTAÑA DEL NAVEGADOR) -->
+        <header class="barra-superior">
+            <div class="header-izquierda" style="flex-wrap:wrap;gap:6px;align-items:center;">
+                <!-- BOTÓN HAMBURGUESA / BÓVEDA (ACCESO A DICCIONARIO, FÓRMULAS, IA, HISTORIAL) -->
+                <button class="btn-header" id="btnAbrirBoveda" title="Abrir Bóveda del Sistema">
+                    <svg class="ico"><use href="#i-menu"/></svg>
+                    <span>Bóveda</span>
+                </button>
+                <div class="indicador-pwa">
+                    <span class="punto-verde"></span>
+                    <span>LOCAL OFFLINE</span>
+                </div>
+                <span class="badge-header" id="topInvoiceBadge">
+                    <svg class="ico ico-sm"><use href="#i-doc"/></svg>
+                    <span id="topInvoiceText">Factura: FAC-00892</span>
+                </span>
+                <span class="badge-header" id="topItemsCount">
+                    <svg class="ico ico-sm"><use href="#i-box"/></svg>
+                    <span>2 productos</span>
+                </span>
+                <span class="badge-header" id="topDiccionarioCount" title="Productos aprendidos en el diccionario">
+                    <svg class="ico ico-sm"><use href="#i-barcode"/></svg>
+                    <span>14 códigos</span>
+                </span>
+                <span class="badge-header badge-cuadre-top" id="topCuadreBadge">
+                    <svg class="ico ico-sm"><use href="#i-wallet"/></svg>
+                    <span id="topCuadreText">Acumulado: $236.00</span>
+                </span>
+            </div>
+            <div style="display:flex;gap:var(--espacio-2);align-items:center;">
+                <!-- BOTÓN PARA CAMBIAR AL MODO ULTRA-DARK CON ICONO SVG -->
+                <button class="btn-header" id="btnToggleTema">
+                    <svg class="ico" id="svgIconoTema"><use href="#i-moon"/></svg>
+                    <span id="txtLabelTema">Modo Ultra-Dark</span>
+                </button>
+                <button class="btn-header" id="btnAjustesModal" title="Configurar fórmulas y API Key">
+                    <svg class="ico"><use href="#i-settings"/></svg>
+                    <span>Ajustes</span>
+                </button>
+            </div>
+        </header>
 
-    <nav class="nav-buttons" id="barraNavegacion">
-        <button class="nav-btn active" data-ir="seccionCalculadora"><svg class="ico"><use href="#i-calc"/></svg> Calculadora</button>
-        <button class="nav-btn" data-ir="seccionDatosFactura"><svg class="ico"><use href="#i-doc"/></svg> Factura</button>
-        <button class="nav-btn" data-ir="seccionProductosRegistrados"><svg class="ico"><use href="#i-list"/></svg> Productos</button>
-        <button class="nav-btn" data-ir="seccionDiccionario"><svg class="ico"><use href="#i-barcode"/></svg> Diccionario</button>
-        <button class="nav-btn" data-ir="seccionReglasCalculo"><svg class="ico"><use href="#i-settings"/></svg> Fórmulas</button>
-        <button class="nav-btn" data-ir="seccionEscanerIA"><svg class="ico"><use href="#i-scan"/></svg> Escáner IA</button>
-        <button class="nav-btn" data-ir="seccionHistorial"><svg class="ico"><use href="#i-hist"/></svg> Historial</button>
-        <button type="button" class="nav-btn" id="btnInstalarPwa" style="display:none; background:#146c2e; color:#fff; border-color:#146c2e;"><svg class="ico"><use href="#i-down"/></svg> Instalar App</button>
-    </nav>
-</header>
+        <div id="notificacionGlobal" class="alert-banner" role="alert" aria-live="polite" style="display:none;margin-bottom:var(--espacio-2);"></div>
 
-<main class="main-wrapper">
-    <div id="notificacionGlobal" class="alert-banner" role="alert" aria-live="polite"></div>
-
-    <!-- 1. CABINA DE CÁLCULO COMPACTA (RESULTADOS Y SUMA A LA VISTA SIN SCROLL) -->
-    <section id="seccionCalculadora" class="calc-cockpit">
-        <div class="section-header-compact">
-            <h2>
-                <svg class="ico"><use href="#i-calc"/></svg>
-                Calculadora de Costos y Precios de Venta
-            </h2>
-            <span class="shortcut-hint">
-                <b>Espacio</b> cambia categoría | <b>Enter</b>: Cajas &rarr; Precio &rarr; Unidades (no pasa por Nombre)
-            </span>
-        </div>
-
-        <div class="cockpit-grid">
-            <!-- Columna Izquierda: Entradas -->
-            <div>
-                <div class="input-grid-3">
-                    <div class="field-box">
-                        <label><svg class="ico"><use href="#i-barcode"/></svg> Código de Barras (Escáner)</label>
-                        <input type="text" id="calcCodigoBarras" placeholder="Escanear código aquí..." autocomplete="off">
+        <!-- NIVEL 1: PRIMER PANTALLAZO (Calculadora + Precios en Vivo sin scroll) -->
+        <section class="grid-operativo" id="seccionCalculadora">
+            
+            <!-- Columna Izquierda: Entrada Rápida -->
+            <div class="tarjeta">
+                <div>
+                    <div class="tarjeta-header">
+                        <span class="tarjeta-titulo">
+                            <svg class="ico"><use href="#i-calc"/></svg>
+                            <span>Entrada de Mercancía</span>
+                        </span>
+                        <label class="dropzone-foto" title="Arrastra o toca para abrir la cámara">
+                            <svg class="ico"><use href="#i-camera"/></svg>
+                            <span>Foto Factura (IA)</span>
+                            <input type="file" id="iaImagenInputDirecto" style="display:none" accept="image/*">
+                        </label>
                     </div>
-                    <div class="field-box">
-                        <label>Categoría de Venta</label>
-                        <select id="calcTipo">
-                            <option value="divisible">Se divide (Pastillas / Blíster / Ampollas)</option>
+
+                    <!-- SELECTOR VISIBLE: ENTERO VS DIVIDIDO CON ICONOS SVG DEL SISTEMA -->
+                    <div class="campo" style="margin-bottom:var(--espacio-2);">
+                        <label class="campo-label">Forma de Venta (Categoría)</label>
+                        <div class="selector-tipo-caja">
+                            <button type="button" class="btn-tipo-opcion activo" id="btnTipoDivisible">
+                                <svg class="ico"><use href="#i-grid"/></svg>
+                                <span>Se divide (Pastillas)</span>
+                            </button>
+                            <button type="button" class="btn-tipo-opcion" id="btnTipoEntero">
+                                <svg class="ico"><use href="#i-drop"/></svg>
+                                <span>Se vende entero</span>
+                            </button>
+                        </div>
+                        <!-- Compatibilidad con scripts del DOM -->
+                        <select id="calcTipo" style="display:none;">
+                            <option value="divisible" selected>Se divide (Pastillas / Blíster / Ampollas)</option>
                             <option value="entero">Se vende entero (Jarabe / Crema / Gotas)</option>
                         </select>
                     </div>
-                    <div class="field-box">
-                        <label>Nombre del Producto (Opcional)</label>
-                        <input type="text" id="calcNombre" placeholder="Ej. Ibuprofeno 800mg" autocomplete="off">
+
+                    <div class="form-grid">
+                        <div class="campo">
+                            <label class="campo-label"><svg class="ico ico-sm"><use href="#i-barcode"/></svg> Código de Barras</label>
+                            <input type="text" class="input-control input-mono" id="calcCodigoBarras" placeholder="Escanear..." value="750123456789">
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label">Nombre del Producto</label>
+                            <input type="text" class="input-control" id="calcNombre" placeholder="Ej. Amoxicilina 500mg" value="Amoxicilina 500mg (Caja 10)">
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label">1. Cant. Cajas</label>
+                            <input type="number" id="calcCajasCompradas" class="input-control input-mono" value="2" min="1">
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label">2. Costo Caja Base ($)</label>
+                            <input type="number" id="calcPrecioCaja" class="input-control input-mono" value="100.00" step="0.01">
+                        </div>
+                        <div class="campo" id="boxUnidadesPorCaja">
+                            <label class="campo-label">3. Trae x Caja (Uds)</label>
+                            <input type="number" id="calcUnidadesCaja" class="input-control input-mono" value="10" min="1">
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label">Impuesto Fiscal ITBIS</label>
+                            <!-- ORDEN SOLICITADO: EXENTO PRIMERO, LUEGO 18, LUEGO 16 -->
+                            <div class="selector-itbis-rapido">
+                                <button type="button" class="btn-itbis-opcion activo" id="btnItbis0" data-pct="0">Exento</button>
+                                <button type="button" class="btn-itbis-opcion" id="btnItbis18" data-pct="18">18%</button>
+                                <button type="button" class="btn-itbis-opcion" id="btnItbis16" data-pct="16">16%</button>
+                            </div>
+                            <!-- Compatibilidad con scripts del DOM -->
+                            <input type="checkbox" id="calcItbis" style="display:none;">
+                            <span id="lblItbisToggle" style="display:none;">Sumar 18% ITBIS al costo</span>
+                        </div>
+                    </div>
+
+                    <!-- ELEMENTOS ADICIONALES DEL CÓDIGO: REDONDEO Y ATAJOS DE TECLADO -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--espacio-2);flex-wrap:wrap;gap:4px;">
+                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:var(--peso-seminegrita);">
+                            <input type="checkbox" id="calcRedondeo" style="width:16px;height:16px;accent-color:var(--color-alerta);">
+                            <svg class="ico ico-sm"><use href="#i-sync"/></svg>
+                            <span>Redondear Precios de Venta</span>
+                        </label>
+                        <span style="font-size:10px;color:var(--color-texto-secundario);">
+                            <b>Espacio</b>: Categoría | <b>Enter</b>: Cajas &rarr; Precio
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Salida de Precios en Vivo con Botones de Copiar (Código Real) -->
+            <div class="tarjeta">
+                <div>
+                    <div class="tarjeta-header">
+                        <span class="tarjeta-titulo">
+                            <svg class="ico"><use href="#i-tag"/></svg>
+                            <span>Precios en Vivo</span>
+                        </span>
+                        <span style="font-size:11px;font-weight:var(--peso-negrita);color:var(--color-exito);">CÁLCULO ACTIVO</span>
+                    </div>
+
+                    <!-- Costo Unitario Fiscal (8 decimales) + Botón Copiar -->
+                    <div class="costo-unitario-caja">
+                        <div>
+                            <div style="font-size:11px;color:var(--color-texto-secundario);font-weight:var(--peso-negrita);text-transform:uppercase;">COSTO POR UNIDAD (8 DEC)</div>
+                            <div style="font-size:10px;color:var(--color-texto-desactivado);">Para cuadro Costo del sistema</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span class="numero-costo" id="resCostoUnitario">11.80000000</span>
+                            <button class="copy-chip" id="btnCopyCosto" data-copiar="resCostoUnitario" title="Copiar costo unitario">
+                                <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Fichas P1, P2 y P3 + Botones Copiar -->
+                    <div class="precios-grid">
+                        <div class="ficha-precio p1">
+                            <div class="ficha-precio-titulo" id="lblTituloP1" style="color:var(--col-p1-color);">Precio 1 (+30%)</div>
+                            <div class="ficha-precio-cifra" id="resPrecio1">$15.34</div>
+                            <div class="ficha-precio-sub" id="subPrecio1">Red: <b id="resP1Red">$15</b></div>
+                            <button class="copy-chip" data-copiar="resPrecio1" style="margin-top:4px;" title="Copiar Precio 1">
+                                <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
+                            </button>
+                        </div>
+                        <div class="ficha-precio p2">
+                            <div class="ficha-precio-titulo" id="lblTituloP2" style="color:var(--col-p2-color);">Precio 2 (-5%)</div>
+                            <div class="ficha-precio-cifra" id="resPrecio2">$14.57</div>
+                            <div class="ficha-precio-sub" id="subPrecio2">Red: <b id="resP2Red">$15</b></div>
+                            <button class="copy-chip" data-copiar="resPrecio2" style="margin-top:4px;" title="Copiar Precio 2">
+                                <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
+                            </button>
+                        </div>
+                        <div class="ficha-precio p3">
+                            <div class="ficha-precio-titulo" id="lblTituloP3" style="color:var(--col-p3-color);">Precio 3 (-5%)</div>
+                            <div class="ficha-precio-cifra" id="resPrecio3">$13.84</div>
+                            <div class="ficha-precio-sub" id="subPrecio3">Red: <b id="resP3Red">$14</b></div>
+                            <button class="copy-chip" data-copiar="resPrecio3" style="margin-top:4px;" title="Copiar Precio 3">
+                                <svg class="ico ico-sm"><use href="#i-copy"/></svg> Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Resumen Numérico Completo -->
+                    <div class="resumen-bar">
+                        <span><svg class="ico ico-sm"><use href="#i-box"/></svg> Inv: <b id="resTotalUnidadesInventario">20</b> uds</span>
+                        <span><svg class="ico ico-sm"><use href="#i-tag"/></svg> ITBIS: <b id="resItbisLinea" style="color:var(--color-exito);">+$36.00 (18%)</b></span>
+                        <span><svg class="ico ico-sm"><use href="#i-wallet"/></svg> Sub: <b id="resSubtotalLinea" style="color:var(--color-accion);">$236.00</b></span>
+                        <span>Total: <b id="resAcumuladoConLinea" style="color:var(--color-texto-principal);">$236.00</b></span>
                     </div>
                 </div>
 
-                <div class="input-grid-3">
-                    <div class="field-box">
-                        <label title="Cuántas cajas o frascos aparecen en la factura">1. Cajas en Factura (Cantidad)</label>
-                        <input type="number" id="calcCajasCompradas" placeholder="Ej. 1" min="1" step="1" autofocus>
-                    </div>
-                    <div class="field-box">
-                        <label>2. Precio Compra (1 Caja/Frasco)</label>
-                        <input type="number" id="calcPrecioCaja" placeholder="Ej. 100.00" min="0" step="0.01">
-                    </div>
-                    <div class="field-box" id="boxUnidadesPorCaja">
-                        <label>3. Unidades que trae la Caja</label>
-                        <input type="number" id="calcUnidadesCaja" placeholder="Ej. 10" min="1" step="1">
-                    </div>
-                </div>
-
-                <div class="toggles-row">
-                    <label class="toggle-pill">
-                        <input type="checkbox" id="calcItbis">
-                        <svg class="ico"><use href="#i-pct"/></svg> <span id="lblItbisToggle">Sumar 18% ITBIS al costo</span>
-                    </label>
-                    <label class="toggle-pill pill-warning">
-                        <input type="checkbox" id="calcRedondeo">
-                        <svg class="ico"><use href="#i-sync"/></svg> Redondear Precios de Venta (Sin decimales)
-                    </label>
-                </div>
-
-                <button class="btn-primary-add" id="btnAgregarProducto">
+                <button class="btn-primario" id="btnAgregarProducto">
                     <svg class="ico"><use href="#i-plus"/></svg>
-                    Agregar Producto a la Factura en Curso (Enter)
+                    <span>Agregar a la Factura (Enter)</span>
                 </button>
             </div>
 
-            <!-- Columna Derecha: Resultados y Suma en Vivo (Sin hacer scroll) -->
-            <div class="live-results-panel">
-                <div class="result-row">
-                    <div>
-                        <span class="result-title">Costo Unitario (8 decimales)</span>
-                        <span class="result-sub">Para el cuadro Costo del sistema</span>
+        </section>
+
+        <!-- NIVEL 2: FACTURA EN CURSO Y PRODUCTOS REGISTRADOS -->
+        <section style="display:flex;flex-direction:column;gap:var(--espacio-2);">
+            
+            <div class="tarjeta-factura" id="seccionDatosFactura">
+                <div class="factura-top-bar">
+                    <div class="tarjeta-titulo" style="font-size:var(--texto-base);">
+                        <svg class="ico"><use href="#i-doc"/></svg>
+                        <span>Factura en Curso</span>
                     </div>
-                    <div class="result-val-group">
-                        <span class="result-number" id="resCostoUnitario">0.00000000</span>
-                        <button class="copy-chip" data-copiar="resCostoUnitario">
-                            <svg class="ico"><use href="#i-copy"/></svg> Copiar
+
+                    <div class="badge-cuadre cuadre-exito">
+                        <svg class="ico"><use href="#i-check"/></svg>
+                        <span>Cuadre Exacto: $236.00 (ITBIS: $36.00)</span>
+                    </div>
+
+                    <div class="factura-acciones">
+                        <button class="btn-icono" id="btnImprimirActual" title="Imprimir Cuadre">
+                            <svg class="ico ico-sm"><use href="#i-print"/></svg>
+                            <span>Imprimir Cuadre</span>
+                        </button>
+                        <button class="btn-icono text-danger" id="btnDescartar" title="Descartar factura">
+                            <svg class="ico ico-sm"><use href="#i-trash"/></svg>
+                            <span id="txtDescartar">Descartar</span>
+                        </button>
+                        <button class="btn-primario" id="btnFinalizarFactura" style="height:34px;padding:0 12px;background:var(--color-exito);font-size:var(--texto-xs);">
+                            <svg class="ico ico-sm"><use href="#i-checkc"/></svg>
+                            <span id="txtFinalizar">Finalizar Factura</span>
                         </button>
                     </div>
                 </div>
 
-                <div class="result-row">
-                    <div>
-                        <span class="result-title" id="lblTituloP1">Precio 1 (+30%)</span>
-                        <span class="result-sub" id="subPrecio1">Exacto: 0.00 | Redondeado: 0</span>
-                    </div>
-                    <div class="result-val-group">
-                        <span class="result-number" id="resPrecio1">0.00</span>
-                        <button class="copy-chip" data-copiar="resPrecio1">
-                            <svg class="ico"><use href="#i-copy"/></svg> Copiar
-                        </button>
-                    </div>
-                </div>
+                <div id="alertaFacturaDuplicada" class="alert-banner alert-warning" style="display:none;margin-top:4px;"></div>
 
-                <div class="result-row">
-                    <div>
-                        <span class="result-title" id="lblTituloP2">Precio 2 (Precio 1 -5%)</span>
-                        <span class="result-sub" id="subPrecio2">Exacto: 0.00 | Redondeado: 0</span>
+                <!-- TODOS LOS CAMPOS DE LA FACTURA: PROVEEDOR, NÚMERO, TOTAL PAPEL, FECHA EMISIÓN, FECHA VENCIMIENTO -->
+                <div class="factura-campos-grid">
+                    <div class="campo">
+                        <label class="campo-label">Proveedor / Lab. *</label>
+                        <input type="text" class="input-control" id="facProveedor" value="Laboratorios Rowe" placeholder="Ej. Rowe / Ethical">
                     </div>
-                    <div class="result-val-group">
-                        <span class="result-number" id="resPrecio2">0.00</span>
-                        <button class="copy-chip" data-copiar="resPrecio2">
-                            <svg class="ico"><use href="#i-copy"/></svg> Copiar
-                        </button>
+                    <div class="campo">
+                        <label class="campo-label">Factura # *</label>
+                        <input type="text" class="input-control" id="facNumero" value="FAC-00892" placeholder="Ej. 004582">
                     </div>
-                </div>
-
-                <div class="result-row">
-                    <div>
-                        <span class="result-title" id="lblTituloP3">Precio 3 (Precio 2 -5%)</span>
-                        <span class="result-sub" id="subPrecio3">Exacto: 0.00 | Redondeado: 0</span>
+                    <div class="campo">
+                        <label class="campo-label">Total en Papel ($) *</label>
+                        <input type="number" class="input-control input-mono" id="facTotalFisico" value="236.00" placeholder="Ej. 236.00" step="0.01">
                     </div>
-                    <div class="result-val-group">
-                        <span class="result-number" id="resPrecio3">0.00</span>
-                        <button class="copy-chip" data-copiar="resPrecio3">
-                            <svg class="ico"><use href="#i-copy"/></svg> Copiar
-                        </button>
+                    <div class="campo">
+                        <label class="campo-label">Fecha Emisión *</label>
+                        <input type="date" class="input-control" id="facFechaEmision" value="2026-10-31">
+                    </div>
+                    <div class="campo">
+                        <label class="campo-label">Fecha Vencimiento (Opc.)</label>
+                        <input type="date" class="input-control" id="facFechaVencimiento" value="2026-11-30">
                     </div>
                 </div>
+            </div>
 
-                <!-- Resumen inmediato de Inventario, Subtotal de Línea y Suma de Factura sin hacer scroll -->
-                <div class="inventory-summary-bar">
-                    <span>
-                        <svg class="ico"><use href="#i-box"/></svg>
-                        Inventario: <strong id="resTotalUnidadesInventario">0</strong> uds
-                    </span>
-                    <span>
-                        <svg class="ico"><use href="#i-tag"/></svg>
-                        ITBIS: <strong id="resItbisLinea">$0.00</strong>
-                    </span>
-                    <span>
-                        <svg class="ico"><use href="#i-wallet"/></svg>
-                        Subtotal: <strong id="resSubtotalLinea">$0.00</strong>
-                    </span>
-                    <span>
-                        Total Factura: <strong id="resAcumuladoConLinea">$0.00</strong>
-                    </span>
+            <!-- TABLA MAESTRA CON LÍNEAS VERTICALES DE SEPARACIÓN, COLORES DE COLUMNA Y CERO SCROLL HORIZONTAL -->
+            <div class="tabla-card" id="seccionProductosRegistrados">
+                <div id="avisoEdicion" style="display:none;padding:6px 10px;background:var(--color-superficie-resaltada);border-bottom:1px solid var(--color-borde);font-size:11px;">
+                    <svg class="ico ico-sm"><use href="#i-edit"/></svg> Estás editando una factura guardada. Los cambios se actualizan en el historial.
+                </div>
+                <div class="tabla-contenedor">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Producto / Código</th>
+                                <th style="text-align:center;">Tipo</th>
+                                <th style="text-align:right;">Cajas</th>
+                                <th style="text-align:right;">Trae</th>
+                                <th class="c-inv" style="text-align:right;">Total Inv</th>
+                                <th class="c-caja" style="text-align:right;">Costo Caja</th>
+                                <th class="c-itbis" style="text-align:center;">ITBIS (Clic)</th>
+                                <th class="c-sub" style="text-align:right;">Subtotal</th>
+                                <th class="c-costo" style="text-align:right;">Costo Unit. (8 dec)</th>
+                                <th class="c-p1" style="text-align:right;">Precio 1</th>
+                                <th class="c-p2" style="text-align:right;">Precio 2</th>
+                                <th class="c-p3" style="text-align:right;">Precio 3</th>
+                                <th style="text-align:center;">Acc</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaProductosActuales">
+                            <tr>
+                                <td class="celda-edit">
+                                    <strong>Amoxicilina 500mg</strong>
+                                    <div style="font-size:10px;color:var(--color-texto-secundario);font-family:var(--fuente-mono);">
+                                        <svg class="ico ico-sm" style="vertical-align:-2px;"><use href="#i-barcode"/></svg> 750123456789
+                                    </div>
+                                </td>
+                                <td style="text-align:center;">
+                                    <button class="btn-icono" id="btnTablaTipo" style="padding:2px 5px;font-size:9px;" title="Clic para alternar categoría">
+                                        <svg class="ico ico-sm"><use href="#i-grid"/></svg>
+                                        <span>Divide</span>
+                                    </button>
+                                </td>
+                                <td class="celda-edit td-mono">2</td>
+                                <td class="celda-edit td-mono">10</td>
+                                <td class="c-inv td-mono">20 uds</td>
+                                <td class="c-caja celda-edit td-mono">
+                                    $100.00
+                                    <div style="font-size:9px;opacity:0.85;">C/I: $118.00</div>
+                                </td>
+                                <td class="c-itbis" style="text-align:center;">
+                                    <button class="badge-itbis itbis-on" id="btnToggleItbisDemo" style="padding:2px 8px;font-size:10px;" title="Clic para alternar Exento / 18% / 16%">
+                                        <span>+18%</span>
+                                        <span style="font-size:9px;">($36)</span>
+                                    </button>
+                                </td>
+                                <td class="c-sub td-mono">$236.00</td>
+                                <td class="c-costo td-mono">11.80000000</td>
+                                <td class="c-p1 td-mono">
+                                    $15.34
+                                    <div style="font-size:9px;opacity:0.85;">($15)</div>
+                                </td>
+                                <td class="c-p2 td-mono">
+                                    $14.57
+                                    <div style="font-size:9px;opacity:0.85;">($15)</div>
+                                </td>
+                                <td class="c-p3 td-mono">
+                                    $13.84
+                                    <div style="font-size:9px;opacity:0.85;">($14)</div>
+                                </td>
+                                <td style="text-align:center;">
+                                    <div style="display:flex;gap:2px;justify-content:center;">
+                                        <button class="btn-icono" style="padding:3px;" title="Editar"><svg class="ico ico-sm"><use href="#i-edit"/></svg></button>
+                                        <button class="btn-icono text-danger" style="padding:3px;" title="Eliminar"><svg class="ico ico-sm"><use href="#i-trash"/></svg></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <!-- Fila 2 de demostración de cuadrícula vertical y colores -->
+                            <tr>
+                                <td class="celda-edit">
+                                    <strong>Ibuprofeno 800mg</strong>
+                                    <div style="font-size:10px;color:var(--color-texto-secundario);font-family:var(--fuente-mono);">
+                                        <svg class="ico ico-sm" style="vertical-align:-2px;"><use href="#i-barcode"/></svg> 750987654321
+                                    </div>
+                                </td>
+                                <td style="text-align:center;">
+                                    <button class="btn-icono" style="padding:2px 5px;font-size:9px;" title="Clic para alternar categoría">
+                                        <svg class="ico ico-sm"><use href="#i-grid"/></svg>
+                                        <span>Divide</span>
+                                    </button>
+                                </td>
+                                <td class="celda-edit td-mono">5</td>
+                                <td class="celda-edit td-mono">20</td>
+                                <td class="c-inv td-mono">100 uds</td>
+                                <td class="c-caja celda-edit td-mono">
+                                    $250.00
+                                    <div style="font-size:9px;opacity:0.85;">C/I: $290.00</div>
+                                </td>
+                                <td class="c-itbis" style="text-align:center;">
+                                    <button class="badge-itbis" style="padding:2px 8px;font-size:10px;background:#eef7ee;color:#0f5223;border-color:#28A745;" title="Clic para alternar Exento / 18% / 16%">
+                                        <span>+16%</span>
+                                        <span style="font-size:9px;">($200)</span>
+                                    </button>
+                                </td>
+                                <td class="c-sub td-mono">$1,450.00</td>
+                                <td class="c-costo td-mono">14.50000000</td>
+                                <td class="c-p1 td-mono">
+                                    $18.85
+                                    <div style="font-size:9px;opacity:0.85;">($19)</div>
+                                </td>
+                                <td class="c-p2 td-mono">
+                                    $17.91
+                                    <div style="font-size:9px;opacity:0.85;">($18)</div>
+                                </td>
+                                <td class="c-p3 td-mono">
+                                    $17.01
+                                    <div style="font-size:9px;opacity:0.85;">($17)</div>
+                                </td>
+                                <td style="text-align:center;">
+                                    <div style="display:flex;gap:2px;justify-content:center;">
+                                        <button class="btn-icono" style="padding:3px;" title="Editar"><svg class="ico ico-sm"><use href="#i-edit"/></svg></button>
+                                        <button class="btn-icono text-danger" style="padding:3px;" title="Eliminar"><svg class="ico ico-sm"><use href="#i-trash"/></svg></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-        </div>
-    </section>
 
-    <!-- 2. DATOS DE LA FACTURA -->
-    <section id="seccionDatosFactura" class="card-section">
-        <div class="card-title">
-            <div class="card-title-left">
-                <svg class="ico"><use href="#i-doc"/></svg>
-                <span>Datos de Identificación de la Factura</span>
-            </div>
-        </div>
+        </section>
 
-        <div id="alertaFacturaDuplicada" class="alert-banner alert-warning"></div>
-
-        <div class="input-grid-3">
-            <div class="field-box">
-                <label>Proveedor / Laboratorio *</label>
-                <input type="text" id="facProveedor" placeholder="Ej. Rowe / Ethical / Sued">
-            </div>
-            <div class="field-box">
-                <label>Número de Factura *</label>
-                <input type="text" id="facNumero" placeholder="Ej. 004582">
-            </div>
-            <div class="field-box">
-                <label>Total en Factura Física (Para cuadrar)</label>
-                <input type="number" id="facTotalFisico" placeholder="Ej. 12500.00" min="0" step="0.01">
-            </div>
-        </div>
-
-        <div class="input-grid-2">
-            <div class="field-box">
-                <label>Fecha de Emisión de la Factura (Obligatoria) *</label>
-                <input type="date" id="facFechaEmision">
-            </div>
-            <div class="field-box">
-                <label>Fecha de Vencimiento de la Factura (Opcional)</label>
-                <input type="date" id="facFechaVencimiento">
-            </div>
-        </div>
-    </section>
-
-    <!-- 3. PRODUCTOS REGISTRADOS EN LA FACTURA ACTUAL -->
-    <section id="seccionProductosRegistrados" class="card-section">
-        <div class="card-title">
-            <div class="card-title-left">
-                <svg class="ico"><use href="#i-list"/></svg>
-                <span>Productos Registrados en la Factura en Curso</span>
-            </div>
-            <div class="actions-group">
-                <button class="action-icon-btn" id="btnImprimirActual">
-                    <svg class="ico"><use href="#i-print"/></svg> Imprimir Cuadre
-                </button>
-                <button class="action-icon-btn text-danger" id="btnDescartar">
-                    <svg class="ico"><use href="#i-trash"/></svg> <span id="txtDescartar">Descartar factura</span>
-                </button>
-                <button class="btn-finish-invoice" id="btnFinalizarFactura">
-                    <svg class="ico"><use href="#i-checkc"/></svg> <span id="txtFinalizar">Finalizar y Guardar</span>
-                </button>
-            </div>
-        </div>
-
-        <div id="avisoEdicion"><svg class="ico"><use href="#i-edit"/></svg> Estás editando una factura guardada. Los cambios se actualizan en el historial.</div>
-        <div class="helper-text">Clic en cualquier celda subrayada para editar su valor individualmente (Enter guarda, Esc cancela).</div>
-        <div class="table-responsive">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Producto / Código</th>
-                        <th>Categoría (Clic cambia)</th>
-                        <th>Cant. Cajas</th>
-                        <th>Trae x Caja</th>
-                        <th class="c-inv">Total Inv.</th>
-                        <th class="c-caja">Costo Caja</th>
-                        <th class="c-itbis">ITBIS (Clic cambia)</th>
-                        <th class="c-sub">Subtotal</th>
-                        <th class="c-costo">Costo Unitario (8 dec)</th>
-                        <th class="c-p1">Precio 1</th>
-                        <th class="c-p2">Precio 2</th>
-                        <th class="c-p3">Precio 3</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="tablaProductosActuales"></tbody>
-            </table>
-        </div>
-    </section>
-
-    <!-- 4. DICCIONARIO DE CÓDIGOS DE BARRA -->
-    <section id="seccionDiccionario" class="card-section">
-        <div class="card-title">
-            <div class="card-title-left">
-                <svg class="ico"><use href="#i-barcode"/></svg>
-                <span>Diccionario Aprendido de Códigos de Barra (Memoria Permanente)</span>
-            </div>
-            <div class="actions-group">
-                <button class="action-icon-btn" id="btnDescargarDiccionario">
-                    <svg class="ico"><use href="#i-down"/></svg> Descargar Diccionario (.json)
-                </button>
-                <label class="action-icon-btn" style="cursor:pointer">
-                    <svg class="ico"><use href="#i-up"/></svg> Cargar Diccionario (.json)
-                    <input type="file" id="inputRestaurarDiccionario" accept=".json,application/json" style="display:none">
-                </label>
-            </div>
-        </div>
-        <div class="helper-text">
-            Cada vez que escaneas un código de barras y agregas el producto con su nombre, el sistema lo memoriza aquí permanentemente (no se borra a los 7 días).
-        </div>
-        <div id="contenedorDiccionario"></div>
-    </section>
-
-    <!-- 5. CONFIGURACIÓN Y EXPLICACIÓN DE FÓRMULAS (PROTEGIDA CON CANDADO) -->
-    <section id="seccionReglasCalculo" class="card-section">
-        <div class="card-title">
-            <div class="card-title-left">
-                <svg class="ico"><use href="#i-settings"/></svg>
-                <span>Fórmula Matemática y Porcentajes de la Farmacia</span>
-            </div>
-            <div class="actions-group">
-                <span id="estadoCandadoReglas" class="lock-badge lock-closed">
-                    <svg class="ico"><use href="#i-lock"/></svg> Protegido contra cambios accidentales
-                </span>
-                <button class="action-icon-btn" id="btnToggleCandadoReglas">
-                    <svg class="ico"><use href="#i-unlock"/></svg> Desbloquear para Editar
-                </button>
-            </div>
-        </div>
-
-        <!-- Explicación pedagógica paso a paso de las fórmulas -->
-        <div id="cajaExplicacionFormulas" class="formula-explanation-box"></div>
-
-        <!-- Controles bloqueados por defecto para evitar errores -->
-        <fieldset id="fieldsetReglas" class="formula-fieldset" disabled>
-            <div class="input-grid-2">
-                <div class="field-box">
-                    <label>Modo de Cálculo de Precios</label>
-                    <select id="cfgEstrategia">
-                        <option value="CASCADA_DESCUENTO">1. Cascada (Estándar de esta farmacia):</option>
-                        <option value="MARGEN_DIRECTO_COSTO">2. Margen Directo sobre Costo: </option>
-                        <option value="MARGEN_BRUTO_FINANCIERO">3. Margen Financiero:</option>
-                    </select>
+        <!-- BÓVEDA DE LA FARMACIA: PANEL LATERAL DESLIZABLE (HISTORIAL Y FÓRMULAS) -->
+        <div id="drawerBackdrop" class="drawer-backdrop"></div>
+        <aside id="drawerBoveda" class="drawer-boveda" aria-label="Bóveda de la Farmacia">
+            <div class="drawer-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <svg class="ico" style="color:var(--color-accion);"><use href="#i-folder"/></svg>
+                    <strong style="font-size:var(--texto-base);">Bóveda de la Farmacia</strong>
                 </div>
-                <div class="field-box">
-                    <label>Impuesto ITBIS (%)</label>
-                    <input type="number" id="cfgItbisPct" min="0" max="100" step="0.1">
-                </div>
-            </div>
-            <div class="input-grid-3">
-                <div class="field-box">
-                    <label id="lblCfgP1">Porcentaje Precio 1 (+%)</label>
-                    <input type="number" id="cfgP1Pct" min="0" max="500" step="0.1">
-                </div>
-                <div class="field-box">
-                    <label id="lblCfgP2">Porcentaje Precio 2 (-% sobre P1)</label>
-                    <input type="number" id="cfgP2Pct" min="0" max="500" step="0.1">
-                </div>
-                <div class="field-box">
-                    <label id="lblCfgP3">Porcentaje Precio 3 (-% sobre P2)</label>
-                    <input type="number" id="cfgP3Pct" min="0" max="500" step="0.1">
-                </div>
-            </div>
-            <div class="actions-group" style="margin-top:8px;">
-                <button type="button" class="btn-finish-invoice" id="btnGuardarReglas">
-                    <svg class="ico"><use href="#i-check"/></svg> Guardar Fórmula y Volver a Bloquear
-                </button>
-                <button type="button" class="action-icon-btn" id="btnRestaurarReglasDefecto">
-                    Restaurar Valores Originales (30% / -5% / -5%)
+                <button class="btn-icono" id="btnCerrarBoveda" title="Cerrar Bóveda">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
                 </button>
             </div>
-        </fieldset>
-    </section>
 
-    <!-- 6. ESCÁNER DE FACTURA CON IA -->
-    <section id="seccionEscanerIA" class="card-section">
-        <div class="card-title">
-            <div class="card-title-left">
-                <svg class="ico"><use href="#i-scan"/></svg>
-                <span>Escáner Automático de Factura por Foto (IA Opcional)</span>
-            </div>
-        </div>
-
-        <div class="input-grid-3">
-            <div class="field-box">
-                <label>Clave de API de Gemini</label>
-                <input type="password" id="iaApiKey" placeholder="Pega aquí tu API Key" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="field-box">
-                <label>Modelo de IA</label>
-                <input type="text" id="iaModelo">
-            </div>
-            <div class="field-box">
-                <label>Seleccionar Foto de Factura</label>
-                <input type="file" id="iaImagenInput" accept="image/*">
-            </div>
-        </div>
-        <div id="iaEstadoTexto" class="helper-text">
-            Opcional: requiere internet. Sin esto, la calculadora y el lector de códigos de barra funcionan 100% sin internet.
-        </div>
-    </section>
-
-    <!-- 7. HISTORIAL DE FACTURAS (7 DÍAS) -->
-    <section id="seccionHistorial" class="card-section">
-        <div class="card-title">
-            <div class="card-title-left">
-                <svg class="ico"><use href="#i-hist"/></svg>
-                <span>Historial de Facturas Cerradas (Últimos 7 días)</span>
-            </div>
-            <div class="actions-group">
-                <button class="action-icon-btn" id="btnDescargarRespaldo">
-                    <svg class="ico"><use href="#i-down"/></svg> Descargar Respaldo Facturas
+            <!-- Pestañas internas de la Bóveda -->
+            <nav class="drawer-tabs">
+                <button class="drawer-tab-btn activo" data-boveda-tab="seccionHistorial">
+                    <svg class="ico ico-sm"><use href="#i-hist"/></svg>
+                    <span>Historial Facturas (7 días)</span>
                 </button>
-                <label class="action-icon-btn" style="cursor:pointer">
-                    <svg class="ico"><use href="#i-up"/></svg> Restaurar Respaldo
-                    <input type="file" id="inputRestaurarRespaldo" accept=".json,application/json" style="display:none">
-                </label>
-            </div>
-        </div>
-        <div id="contenedorHistorial"></div>
-    </section>
-</main>
+                <button class="drawer-tab-btn" data-boveda-tab="seccionReglasCalculo">
+                    <svg class="ico ico-sm"><use href="#i-settings"/></svg>
+                    <span>Fórmulas y Porcentajes</span>
+                </button>
+            </nav>
 
-<!-- Diálogos Modales Nativos Accesibles (UX-01) -->
-<dialog id="modalConfirmacion" class="farmacia-modal">
-    <h3 id="modalConfirmTitulo">Confirmación</h3>
-    <div id="modalConfirmMensaje" class="modal-body"></div>
-    <div class="modal-actions">
-        <button type="button" class="action-icon-btn" id="modalConfirmBtnCancelar">Cancelar</button>
-        <button type="button" class="btn-finish-invoice" id="modalConfirmBtnAceptar">Aceptar</button>
+            <div class="drawer-contenido">
+                <!-- 1. HISTORIAL DE FACTURAS (7 DÍAS) -->
+                <section id="seccionHistorial" class="seccion-card boveda-panel activo">
+                    <div class="seccion-card-header">
+                        <div class="tarjeta-titulo">
+                            <svg class="ico"><use href="#i-hist"/></svg>
+                            <span>Historial de Facturas Cerradas (Últimos 7 días)</span>
+                        </div>
+                        <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                            <button class="btn-icono" id="btnDescargarRespaldo">
+                                <svg class="ico ico-sm"><use href="#i-down"/></svg>
+                                <span>Descargar Respaldo</span>
+                            </button>
+                            <label class="btn-icono" style="cursor:pointer">
+                                <svg class="ico ico-sm"><use href="#i-up"/></svg>
+                                <span>Restaurar Respaldo</span>
+                                <input type="file" id="inputRestaurarRespaldo" accept=".json,application/json" style="display:none">
+                            </label>
+                        </div>
+                    </div>
+                    <div id="contenedorHistorial">
+                        <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">3 facturas archivadas en la última semana.</div>
+                    </div>
+                </section>
+
+                <!-- 2. CONFIGURACIÓN Y EXPLICACIÓN DE FÓRMULAS (PROTEGIDA CON CANDADO) -->
+                <section id="seccionReglasCalculo" class="seccion-card boveda-panel">
+                    <div class="seccion-card-header">
+                        <div class="tarjeta-titulo">
+                            <svg class="ico"><use href="#i-settings"/></svg>
+                            <span>Fórmula Matemática y Porcentajes</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:var(--espacio-2);flex-wrap:wrap;">
+                            <span id="estadoCandadoReglas" class="badge-header" style="background:var(--color-superficie-resaltada);border-color:var(--color-borde);">
+                                <svg class="ico ico-sm"><use href="#i-lock"/></svg> Protegido
+                            </span>
+                            <button class="btn-icono" id="btnToggleCandadoReglas">
+                                <svg class="ico ico-sm"><use href="#i-unlock"/></svg>
+                                <span>Desbloquear</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="cajaExplicacionFormulas" class="formula-explanation-box">
+                        <b>1. Costo Efectivo</b> = Costo Base + ITBIS (Exento / 18% / 16%).<br>
+                        <b>2. Costo Unitario</b> = Costo Efectivo / Unidades de la caja (8 decimales exactos).<br>
+                        <b>3. Precios de Venta</b>: P1 = Costo + 30% | P2 = P1 - 5% | P3 = P2 - 5%.
+                    </div>
+
+                    <fieldset id="fieldsetReglas" class="formula-fieldset" disabled>
+                        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                            <div class="campo">
+                                <label class="campo-label">Modo de Cálculo de Precios</label>
+                                <select id="cfgEstrategia" class="input-control">
+                                    <option value="CASCADA_DESCUENTO">1. Cascada: P1 (+30%) &rarr; P2 (-5%) &rarr; P3 (-5%)</option>
+                                    <option value="MARGEN_DIRECTO_COSTO">2. Margen Directo sobre Costo</option>
+                                    <option value="MARGEN_BRUTO_FINANCIERO">3. Margen Financiero</option>
+                                </select>
+                            </div>
+                            <div class="campo">
+                                <label class="campo-label">Impuesto ITBIS (%)</label>
+                                <input type="number" id="cfgItbisPct" class="input-control input-mono" value="18" min="0" max="100" step="0.1">
+                            </div>
+                        </div>
+                        <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
+                            <div class="campo">
+                                <label class="campo-label" id="lblCfgP1">P1 (+%)</label>
+                                <input type="number" id="cfgP1Pct" class="input-control input-mono" value="30" min="0" max="500" step="0.1">
+                            </div>
+                            <div class="campo">
+                                <label class="campo-label" id="lblCfgP2">P2 (-% s/P1)</label>
+                                <input type="number" id="cfgP2Pct" class="input-control input-mono" value="5" min="0" max="500" step="0.1">
+                            </div>
+                            <div class="campo">
+                                <label class="campo-label" id="lblCfgP3">P3 (-% s/P2)</label>
+                                <input type="number" id="cfgP3Pct" class="input-control input-mono" value="5" min="0" max="500" step="0.1">
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:var(--espacio-2);margin-top:var(--espacio-2);flex-wrap:wrap;">
+                            <button type="button" class="btn-primario" id="btnGuardarReglas" style="height:34px;padding:0 12px;font-size:var(--texto-xs);">
+                                <svg class="ico ico-sm"><use href="#i-check"/></svg>
+                                <span>Guardar Fórmula</span>
+                            </button>
+                            <button type="button" class="btn-icono" id="btnRestaurarReglasDefecto">
+                                Restaurar (30% / -5% / -5%)
+                            </button>
+                        </div>
+                    </fieldset>
+                </section>
+            </div>
+        </aside>
+
+        <!-- AJUSTES DEL SISTEMA: MODAL DEDICADO (API GOOGLE GEMINI + DICCIONARIO Y ARCHIVOS) -->
+        <dialog id="modalAjustes" class="modal-ajustes">
+            <div class="modal-ajustes-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <svg class="ico" style="color:var(--color-accion);"><use href="#i-settings"/></svg>
+                    <strong style="font-size:var(--texto-base);">Ajustes del Sistema</strong>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarAjustes" title="Cerrar Ajustes">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
+                </button>
+            </div>
+
+            <!-- Pestañas internas de Ajustes -->
+            <nav class="modal-tabs">
+                <button type="button" class="modal-tab-btn activo" data-ajustes-tab="seccionEscanerIA">
+                    <svg class="ico ico-sm"><use href="#i-scan"/></svg>
+                    <span>API Google (Gemini)</span>
+                </button>
+                <button type="button" class="modal-tab-btn" data-ajustes-tab="seccionDiccionario">
+                    <svg class="ico ico-sm"><use href="#i-barcode"/></svg>
+                    <span>Diccionario y Archivos</span>
+                </button>
+            </nav>
+
+            <div class="modal-ajustes-body">
+                <!-- 1. ESCÁNER / API GOOGLE GEMINI -->
+                <section id="seccionEscanerIA" class="seccion-card ajustes-panel activo">
+                    <div class="seccion-card-header">
+                        <div class="tarjeta-titulo">
+                            <svg class="ico"><use href="#i-scan"/></svg>
+                            <span>Configuración de Inteligencia Artificial (Gemini)</span>
+                        </div>
+                    </div>
+                    <div class="form-grid" style="grid-template-columns: 1fr;">
+                        <div class="campo">
+                            <label class="campo-label">Clave de API de Google Gemini</label>
+                            <input type="password" id="iaApiKey" class="input-control" placeholder="Pega aquí tu API Key de Google" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label">Modelo de IA</label>
+                            <input type="text" id="iaModelo" class="input-control" value="gemini-1.5-flash">
+                        </div>
+                        <div class="campo">
+                            <label class="campo-label">Prueba o subida de foto de factura</label>
+                            <input type="file" id="iaImagenInput" class="input-control" accept="image/*">
+                        </div>
+                    </div>
+                    <div id="iaEstadoTexto" class="helper-text">
+                        Opcional: requiere internet para la lectura OCR con IA. La calculadora y el lector de barras funcionan 100% offline.
+                    </div>
+                </section>
+
+                <!-- 2. DICCIONARIO DE CÓDIGOS DE BARRA Y ARCHIVOS JSON -->
+                <section id="seccionDiccionario" class="seccion-card ajustes-panel">
+                    <div class="seccion-card-header">
+                        <div class="tarjeta-titulo">
+                            <svg class="ico"><use href="#i-barcode"/></svg>
+                            <span>Diccionario de Códigos y Respaldo de Archivos</span>
+                        </div>
+                        <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                            <button class="btn-icono" id="btnDescargarDiccionario">
+                                <svg class="ico ico-sm"><use href="#i-down"/></svg>
+                                <span>Descargar Diccionario (.json)</span>
+                            </button>
+                            <label class="btn-icono" style="cursor:pointer">
+                                <svg class="ico ico-sm"><use href="#i-up"/></svg>
+                                <span>Cargar Diccionario (.json)</span>
+                                <input type="file" id="inputRestaurarDiccionario" accept=".json,application/json" style="display:none">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="helper-text">
+                        Gestiona la memoria permanente de códigos de barras. Puedes descargar tu base de datos o restaurarla en cualquier momento.
+                    </div>
+                    <div id="contenedorDiccionario">
+                        <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
+                    </div>
+                </section>
+            </div>
+        </dialog>
+
+        <!-- Elemento de compatibilidad con barra de navegación del código original -->
+        <nav id="barraNavegacion" style="display:none;" aria-hidden="true">
+            <button class="nav-btn" data-ir="seccionCalculadora"></button>
+            <button class="nav-btn" data-ir="seccionDatosFactura"></button>
+            <button class="nav-btn" data-ir="seccionProductosRegistrados"></button>
+            <button class="nav-btn" data-ir="seccionDiccionario"></button>
+            <button class="nav-btn" data-ir="seccionReglasCalculo"></button>
+            <button class="nav-btn" data-ir="seccionEscanerIA"></button>
+            <button class="nav-btn" data-ir="seccionHistorial"></button>
+            <button type="button" class="nav-btn" id="btnInstalarPwa"></button>
+        </nav>
+
+        <!-- Diálogos Modales Nativos Accesibles (UX-01) -->
+        <dialog id="modalConfirmacion" class="farmacia-modal">
+            <h3 id="modalConfirmTitulo">Confirmación</h3>
+            <div id="modalConfirmMensaje" class="modal-body"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-icono" id="modalConfirmBtnCancelar">Cancelar</button>
+                <button type="button" class="btn-primario" id="modalConfirmBtnAceptar">Aceptar</button>
+            </div>
+        </dialog>
+
+        <dialog id="modalPrompt" class="farmacia-modal">
+            <form method="dialog" id="formModalPrompt">
+                <h3 id="modalPromptTitulo">Ingresar Valor</h3>
+                <div id="modalPromptMensaje" class="modal-body"></div>
+                <div class="campo" style="margin-bottom:14px;">
+                    <input type="text" id="modalPromptInput" autocomplete="off" class="input-control" style="width:100%;">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-icono" id="modalPromptBtnCancelar">Cancelar</button>
+                    <button type="submit" class="btn-primario" id="modalPromptBtnAceptar">Aceptar</button>
+                </div>
+            </form>
+        </dialog>
+
+        <div id="printArea" style="display:none;"></div>
+
     </div>
-</dialog>
 
-<dialog id="modalPrompt" class="farmacia-modal">
-    <form method="dialog" id="formModalPrompt">
-        <h3 id="modalPromptTitulo">Ingresar Valor</h3>
-        <div id="modalPromptMensaje" class="modal-body"></div>
-        <div class="field-box" style="margin-bottom:14px;">
-            <input type="text" id="modalPromptInput" autocomplete="off" class="w-full">
-        </div>
-        <div class="modal-actions">
-            <button type="button" class="action-icon-btn" id="modalPromptBtnCancelar">Cancelar</button>
-            <button type="submit" class="btn-finish-invoice" id="modalPromptBtnAceptar">Aceptar</button>
-        </div>
-    </form>
-</dialog>
+    <!-- ARCHIVOS DE PRODUCCIÓN MODULARES -->
+    <script defer src="js/configuracion.js"></script>
+    <script defer src="js/dominio.js"></script>
+    <script defer src="js/almacenamiento.js"></script>
+    <script defer src="js/servicio-ia.js"></script>
+    <script defer src="js/ui-notificaciones.js"></script>
+    <script defer src="js/ui-calculadora.js"></script>
+    <script defer src="js/ui-factura.js"></script>
+    <script defer src="js/ui-diccionario.js"></script>
+    <script defer src="js/ui-historial.js"></script>
+    <script defer src="js/interfaz.js"></script>
+    <script defer src="js/pruebas.js"></script>
 
-<div id="printArea"></div>
-
-<script defer src="js/configuracion.js"></script>
-<script defer src="js/dominio.js"></script>
-<script defer src="js/almacenamiento.js"></script>
-<script defer src="js/servicio-ia.js"></script>
-<script defer src="js/ui-notificaciones.js"></script>
-<script defer src="js/ui-calculadora.js"></script>
-<script defer src="js/ui-factura.js"></script>
-<script defer src="js/ui-diccionario.js"></script>
-<script defer src="js/ui-historial.js"></script>
-<script defer src="js/interfaz.js"></script>
-<script defer src="js/pruebas.js"></script>
 </body>
 </html>

@@ -12,8 +12,17 @@
 
     let temporizadorDebounceCalculo = null;
     let borradorPerfilesEdicion = null;
+    let tasaItbisSeleccionada = 0;
 
     // --- CÁLCULO EN VIVO CON DEBOUNCE (REN-04) ---
+    function animarNumero(id) {
+        const elemento = el(id);
+        if (!elemento) return;
+        elemento.classList.remove('numero-actualizado');
+        void elemento.offsetWidth;
+        elemento.classList.add('numero-actualizado');
+    }
+
     function calcularEnVivo() {
         const Estado = AppFarmacia.Estado;
         const reglasActivas = Estado.reglasActivas;
@@ -27,12 +36,16 @@
             : Dominio.validarCantidadEnteraPositiva(el('calcUnidadesCaja').value, 'unidades');
 
         const resumenActual = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
-        const aplicaItbis = el('calcItbis').checked;
+        const aplicaItbis = tasaItbisSeleccionada > 0;
+        const reglasEfectivas = {
+            ...reglasActivas,
+            porcentajeItbis: aplicaItbis ? tasaItbisSeleccionada : reglasActivas.porcentajeItbis
+        };
         const desglose = Dominio.calcularDesglosePrecios(
             vPrecio.esValido ? vPrecio.valor : 0,
             vUnidades.esValido ? vUnidades.valor : 1,
             aplicaItbis,
-            reglasActivas
+            reglasEfectivas
         );
 
         const lblItbis = el('lblItbisToggle');
@@ -52,7 +65,7 @@
 
             if (el('resItbisLinea')) {
                 el('resItbisLinea').textContent = aplicaItbis
-                    ? `+$${Dominio.formatearMonedaDosDecimales(itbisLinea)}${vCajas.valor > 1 ? ` ($${desglose.montoItbisPorCaja.toFixed(2)}/caja)` : ''}`
+                    ? `+$${Dominio.formatearMonedaDosDecimales(itbisLinea)}${vCajas.valor > 1 ? ` ($${desglose.montoItbisPorCaja.toFixed(2)}/caja)` : ''} (${tasaItbisSeleccionada}%)`
                     : '$0.00 (Exento)';
             }
             el('resSubtotalLinea').textContent = '$' + Dominio.formatearMonedaDosDecimales(subtotalLinea);
@@ -81,6 +94,10 @@
         const usarRedondeo = el('calcRedondeo').checked;
 
         el('resCostoUnitario').textContent = desglose.costoUnitario;
+        if (el('resP1Red')) el('resP1Red').textContent = '$' + desglose.p1Redondeado;
+        if (el('resP2Red')) el('resP2Red').textContent = '$' + desglose.p2Redondeado;
+        if (el('resP3Red')) el('resP3Red').textContent = '$' + desglose.p3Redondeado;
+        ['resCostoUnitario', 'resPrecio1', 'resPrecio2', 'resPrecio3', 'resSubtotalLinea', 'resAcumuladoConLinea', 'resTotalUnidadesInventario'].forEach(animarNumero);
         [1, 2, 3].forEach(n => {
             el('resPrecio' + n).textContent = usarRedondeo ? desglose['p' + n + 'Redondeado'] : desglose['p' + n + 'Exacto'];
             el('subPrecio' + n).textContent = `Exacto: ${desglose['p' + n + 'Exacto']} (Bruto: ${desglose['p' + n + 'Bruto']}) | Redondeado: ${desglose['p' + n + 'Redondeado']}`;
@@ -96,12 +113,33 @@
         const tipo = el('calcTipo').value;
         const contenedor = el('boxUnidadesPorCaja');
         const inputUnidades = el('calcUnidadesCaja');
+        const btnDiv = el('btnTipoDivisible');
+        const btnEnt = el('btnTipoEntero');
+
+        if (btnDiv && btnEnt) {
+            if (tipo === CONSTANTES.CATEGORIAS.ENTERO) {
+                btnEnt.classList.add('activo');
+                btnDiv.classList.remove('activo');
+            } else {
+                btnDiv.classList.add('activo');
+                btnEnt.classList.remove('activo');
+            }
+        }
+
         if (tipo === CONSTANTES.CATEGORIAS.ENTERO) {
-            contenedor.style.display = 'none';
-            inputUnidades.value = '1';
+            if (contenedor) contenedor.style.opacity = '0.5';
+            if (inputUnidades) {
+                inputUnidades.value = '1';
+                inputUnidades.disabled = true;
+                inputUnidades.classList.add('input-bloqueado');
+            }
         } else {
-            contenedor.style.display = 'block';
-            if (inputUnidades.value === '1') inputUnidades.value = '';
+            if (contenedor) contenedor.style.opacity = '1';
+            if (inputUnidades) {
+                inputUnidades.disabled = false;
+                inputUnidades.classList.remove('input-bloqueado');
+                if (inputUnidades.value === '1') inputUnidades.value = '';
+            }
         }
         calcularEnVivo();
     }
@@ -168,6 +206,11 @@
             if (!vUnidades.esValido) return enfocarConError('calcUnidadesCaja', vUnidades.error);
         }
 
+        const aplicaItbis = tasaItbisSeleccionada > 0;
+        const reglasEfectivas = {
+            ...reglasActivas,
+            porcentajeItbis: aplicaItbis ? tasaItbisSeleccionada : reglasActivas.porcentajeItbis
+        };
         const nuevaLinea = Dominio.crearLineaProductoInmutable({
             codigoBarras: el('calcCodigoBarras').value,
             nombre: el('calcNombre').value.trim() || `Producto #${sesionActual.productos.length + 1}`,
@@ -175,8 +218,8 @@
             precioCajaBase: vPrecio.valor,
             unidadesPorCaja: vUnidades.valor,
             cajasCompradas: vCajas.valor,
-            aplicaItbis: el('calcItbis').checked
-        }, reglasActivas);
+            aplicaItbis
+        }, reglasEfectivas);
 
         const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea);
         Estado.agregarProductoASesion(nuevaLinea);
@@ -474,20 +517,66 @@
             UI.configurarFiltroNumerico(el('cfgP3Pct'), true);
         }
 
-        el('calcItbis').addEventListener('change', calcularEnVivo);
+        // Botones de categoría visuales
+        const btnDiv = el('btnTipoDivisible');
+        const btnEnt = el('btnTipoEntero');
+        if (btnDiv) {
+            btnDiv.addEventListener('click', () => {
+                el('calcTipo').value = CONSTANTES.CATEGORIAS.DIVISIBLE;
+                actualizarVisibilidadCategoria();
+            });
+        }
+        if (btnEnt) {
+            btnEnt.addEventListener('click', () => {
+                el('calcTipo').value = CONSTANTES.CATEGORIAS.ENTERO;
+                actualizarVisibilidadCategoria();
+            });
+        }
+
+        // Botones de ITBIS en orden estricto: Exento (0%), 18%, 16%
+        const btnItbis0 = el('btnItbis0');
+        const btnItbis18 = el('btnItbis18');
+        const btnItbis16 = el('btnItbis16');
+        function fijarItbis(tasa) {
+            tasaItbisSeleccionada = tasa;
+            el('calcItbis').checked = tasa > 0;
+            if (btnItbis0) btnItbis0.classList.toggle('activo', tasa === 0);
+            if (btnItbis18) btnItbis18.classList.toggle('activo', tasa === 18);
+            if (btnItbis16) btnItbis16.classList.toggle('activo', tasa === 16);
+            calcularEnVivo();
+        }
+        if (btnItbis0) btnItbis0.addEventListener('click', () => fijarItbis(0));
+        if (btnItbis18) btnItbis18.addEventListener('click', () => fijarItbis(18));
+        if (btnItbis16) btnItbis16.addEventListener('click', () => fijarItbis(16));
+
+        el('calcItbis').addEventListener('change', () => {
+            fijarItbis(el('calcItbis').checked ? 18 : 0);
+        });
         el('calcRedondeo').addEventListener('change', () => {
             calcularEnVivo();
             UI.Factura.renderizarTablaProductosActuales();
         });
         el('btnAgregarProducto').addEventListener('click', agregarProductoAFactura);
 
+        // Copiado con micro-animación táctil y checkmark
         document.querySelectorAll('[data-copiar]').forEach(btn => {
             btn.addEventListener('click', () => {
-                const texto = el(btn.dataset.copiar).textContent;
+                const idTarget = btn.getAttribute('data-copiar');
+                const elemento = el(idTarget);
+                if (!elemento) return;
+                const texto = elemento.textContent.replace('$', '').trim();
                 navigator.clipboard.writeText(texto).then(() => {
                     const original = btn.innerHTML;
-                    btn.innerHTML = `${iconoSvg('check')} Copiado`;
-                    setTimeout(() => { btn.innerHTML = original; }, 1100);
+                    btn.classList.add('copiado');
+                    btn.innerHTML = `${iconoSvg('check')} ¡Copiado!`;
+                    setTimeout(() => {
+                        btn.innerHTML = original;
+                        btn.classList.remove('copiado');
+                    }, 1200);
+                }).catch(() => {
+                    const original = btn.innerHTML;
+                    btn.innerHTML = `${iconoSvg('check')} ¡Copiado!`;
+                    setTimeout(() => { btn.innerHTML = original; }, 1000);
                 });
             });
         });

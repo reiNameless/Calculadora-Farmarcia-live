@@ -44,3 +44,7 @@ yarn-error.log*
 scratch/
 .system_generated/
 .user_uploaded/
+
+# Catálogos Locales y Prototipos de Diseño
+catalogo_rd_inicial.json
+prototipo-diseno.html

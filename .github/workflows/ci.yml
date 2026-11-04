@@ -26,6 +26,7 @@ jobs:
           node -c js/dominio.js
           node -c js/almacenamiento.js
           node -c js/servicio-ia.js
+          node -c js/servicio-catalogo.js
           node -c js/ui-notificaciones.js
           node -c js/ui-calculadora.js
           node -c js/ui-factura.js

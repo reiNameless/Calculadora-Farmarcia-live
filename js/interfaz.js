@@ -171,6 +171,18 @@
 
             renderizarTodo();
 
+            // Inicializar persistencia asíncrona con IndexedDB
+            Almacenamiento.inicializarPersistencia().then(seActualizaronDatos => {
+                if (seActualizaronDatos) {
+                    sesionActual = Almacenamiento.cargarBorradorActivo();
+                    reglasActivas = Almacenamiento.obtenerReglasNegocio();
+                    renderizarTodo();
+                    UI.Calculadora.calcularEnVivo();
+                }
+            }).catch(err => {
+                console.warn('[Almacenamiento] Error inicializando persistencia IndexedDB:', err);
+            });
+
             // Eventos IA
             el('iaApiKey').addEventListener('change', e => {
                 sessionStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY, e.target.value.trim());
@@ -179,19 +191,26 @@
                 localStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_MODELO, e.target.value.trim());
             });
 
-            el('iaImagenInput').addEventListener('change', async e => {
-                const archivo = e.target.files[0];
-                e.target.value = '';
-                if (!archivo) return;
+            async function procesarArchivosFacturaIA(archivos) {
+                const lista = Array.from(archivos || []).filter(Boolean);
+                if (lista.length === 0) return;
+
+                const apiKey = sessionStorage.getItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY) || el('iaApiKey').value.trim();
+                if (!apiKey) {
+                    if (typeof abrirAjustes === 'function') abrirAjustes('seccionEscanerIA');
+                    UI.Notificaciones.mostrarMensaje('Primero ingresa tu API Key de Gemini en Ajustes para procesar facturas.', 'warning');
+                    return;
+                }
 
                 const contenedorIA = el('seccionEscanerIA');
-                contenedorIA.classList.add('btn-loading');
-                el('iaEstadoTexto').textContent = 'Analizando factura con IA de Google...';
+                if (contenedorIA) contenedorIA.classList.add('btn-loading');
+                const plural = lista.length > 1 ? `${lista.length} páginas` : '1 página';
+                el('iaEstadoTexto').textContent = `Optimizando y analizando ${plural} de factura con IA...`;
+                UI.Notificaciones.mostrarMensaje(`Analizando ${plural} con IA... Por favor espera unos momentos.`, 'info');
 
                 try {
-                    const apiKey = sessionStorage.getItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY) || el('iaApiKey').value.trim();
                     const modelo = el('iaModelo').value.trim() || CONSTANTES.MODELO_IA_POR_DEFECTO;
-                    const res = await ServicioIA.analizarImagenFactura(archivo, apiKey, modelo, reglasActivas);
+                    const res = await ServicioIA.analizarImagenFactura(lista, apiKey, modelo, reglasActivas);
 
                     if (res.proveedor && !sesionActual.proveedor) sesionActual.proveedor = res.proveedor;
                     if (res.numeroFactura && !sesionActual.numeroFactura) sesionActual.numeroFactura = res.numeroFactura;
@@ -202,15 +221,30 @@
                     sincronizarYGuardarSesion();
                     renderizarTodo();
                     UI.Calculadora.calcularEnVivo();
-                    el('iaEstadoTexto').textContent = `Se cargaron ${res.productos.length} productos desde la imagen.`;
-                    UI.Notificaciones.mostrarMensaje(`Escaneo completado: ${res.productos.length} productos añadidos.`, 'success');
+
+                    const msgExito = `Escaneo completado: ${res.productos.length} productos cargados desde ${plural}.`;
+                    el('iaEstadoTexto').textContent = msgExito;
+                    UI.Notificaciones.mostrarMensaje(msgExito, 'success');
                 } catch (err) {
                     el('iaEstadoTexto').textContent = err.message;
                     UI.Notificaciones.mostrarMensaje(err.message, 'error');
                 } finally {
-                    contenedorIA.classList.remove('btn-loading');
+                    if (contenedorIA) contenedorIA.classList.remove('btn-loading');
                 }
+            }
+
+            el('iaImagenInput').addEventListener('change', async e => {
+                await procesarArchivosFacturaIA(e.target.files);
+                e.target.value = '';
             });
+
+            const inputDirecto = el('iaImagenInputDirecto');
+            if (inputDirecto) {
+                inputDirecto.addEventListener('change', async e => {
+                    await procesarArchivosFacturaIA(e.target.files);
+                    e.target.value = '';
+                });
+            }
 
             // --- REDISEÑO 2026: BÓVEDA, AJUSTES Y MODO ULTRA-DARK ---
 

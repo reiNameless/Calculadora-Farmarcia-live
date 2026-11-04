@@ -116,7 +116,7 @@
                         <label class="dropzone-foto" title="Arrastra o toca para abrir la cámara">
                             <svg class="ico"><use href="#i-camera"/></svg>
                             <span>Foto Factura (IA)</span>
-                            <input type="file" id="iaImagenInputDirecto" style="display:none" accept="image/*">
+                            <input type="file" id="iaImagenInputDirecto" style="display:none" accept="image/*,application/pdf" multiple>
                         </label>
                     </div>
 
@@ -143,7 +143,13 @@
                     <div class="form-grid">
                         <div class="campo">
                             <label class="campo-label"><svg class="ico ico-sm"><use href="#i-barcode"/></svg> Código de Barras</label>
-                            <input type="text" class="input-control input-mono" id="calcCodigoBarras" placeholder="Escanear..." inputmode="numeric" pattern="[0-9]*">
+                            <div style="display:flex;gap:var(--espacio-1);">
+                                <input type="text" class="input-control input-mono" id="calcCodigoBarras" placeholder="Escanear..." inputmode="numeric" pattern="[0-9]*" style="flex:1;min-width:0;">
+                                <button type="button" class="btn-icono" id="btnEscanearCamara" title="Escanear con cámara (Webcam de PC o Móvil)" aria-label="Escanear código de barras con cámara" style="flex-shrink:0;height:40px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-color:var(--color-borde-fuerte);">
+                                    <svg class="ico"><use href="#i-camera"/></svg>
+                                    <span style="font-size:12px;font-weight:600;">Cámara</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="campo">
                             <label class="campo-label">Nombre del Producto</label>
@@ -602,7 +608,7 @@
                 </button>
                 <button type="button" class="modal-tab-btn" data-ajustes-tab="seccionDiccionario">
                     <svg class="ico ico-sm"><use href="#i-barcode"/></svg>
-                    <span>Diccionario y Archivos</span>
+                    <span>Diccionario y Base de Datos</span>
                 </button>
             </nav>
 
@@ -622,11 +628,11 @@
                         </div>
                         <div class="campo">
                             <label class="campo-label">Modelo de IA</label>
-                            <input type="text" id="iaModelo" class="input-control" value="gemini-1.5-flash">
+                            <input type="text" id="iaModelo" class="input-control" value="gemini-2.5-flash">
                         </div>
                         <div class="campo">
                             <label class="campo-label">Prueba o subida de foto de factura</label>
-                            <input type="file" id="iaImagenInput" class="input-control" accept="image/*">
+                            <input type="file" id="iaImagenInput" class="input-control" accept="image/*,application/pdf" multiple>
                         </div>
                     </div>
                     <div id="iaEstadoTexto" class="helper-text">
@@ -656,6 +662,33 @@
                     <div class="helper-text">
                         Gestiona la memoria permanente de códigos de barras. Puedes descargar tu base de datos o restaurarla en cualquier momento.
                     </div>
+
+                    <!-- Respaldo Maestro del Sistema (IndexedDB Completa) -->
+                    <div style="margin:var(--espacio-2) 0 var(--espacio-3) 0;padding:var(--espacio-3);border:1.5px solid var(--color-accion);border-radius:var(--radio-md);background:var(--color-superficie-resaltada);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--espacio-2);">
+                            <div>
+                                <div style="font-weight:600;font-size:var(--texto-sm);display:flex;align-items:center;gap:6px;">
+                                    <svg class="ico ico-sm"><use href="#i-sync"/></svg>
+                                    <span>Copia de Seguridad Completa (IndexedDB)</span>
+                                </div>
+                                <div class="helper-text" style="font-size:11px;margin-top:2px;">
+                                    Descarga o restaura todos los datos juntos: Catálogo, Historial de facturas, Borrador y Fórmulas.
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                                <button type="button" class="btn-icono" id="btnDescargarBaseCompleta">
+                                    <svg class="ico ico-sm"><use href="#i-down"/></svg>
+                                    <span>Descargar Base Completa (.json)</span>
+                                </button>
+                                <label class="btn-icono" style="cursor:pointer">
+                                    <svg class="ico ico-sm"><use href="#i-up"/></svg>
+                                    <span>Restaurar Base Completa (.json)</span>
+                                    <input type="file" id="inputRestaurarBaseCompleta" accept=".json,application/json" style="display:none">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="contenedorDiccionario">
                         <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
                     </div>
@@ -685,6 +718,31 @@
             </div>
         </dialog>
 
+        <!-- Modal Escáner de Cámara para Código de Barras (Fase 3) -->
+        <dialog id="modalCamaraEscaneo" class="farmacia-modal" style="max-width:440px;padding:var(--espacio-3);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:var(--texto-base);">
+                    <svg class="ico"><use href="#i-camera"/></svg>
+                    <span>Escanear Código con Cámara</span>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarModalCamara" style="border:none;" title="Cerrar">
+                    <svg class="ico"><use href="#i-close"/></svg>
+                </button>
+            </div>
+            <div style="position:relative;background:#000;border-radius:var(--radio-md);overflow:hidden;width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;">
+                <video id="videoCamaraEscaneo" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover;"></video>
+                <div style="position:absolute;width:75%;height:50%;border:2px solid var(--color-primario);border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);pointer-events:none;">
+                    <div style="position:absolute;left:0;right:0;height:2px;background:#ef4444;box-shadow:0 0 6px #ef4444;animation:scanLine 2s infinite ease-in-out;"></div>
+                </div>
+            </div>
+            <div id="camaraEstadoTexto" class="helper-text" style="text-align:center;margin-top:var(--espacio-2);">
+                Apunta la cámara al código de barras del medicamento (EAN-13, UPC-A, EAN-8).
+            </div>
+            <div class="modal-actions" style="margin-top:var(--espacio-2);justify-content:center;">
+                <button type="button" class="btn-icono" id="btnCancelarCamara">Cerrar Cámara</button>
+            </div>
+        </dialog>
+
         <dialog id="modalPrompt" class="farmacia-modal">
             <form method="dialog" id="formModalPrompt">
                 <h3 id="modalPromptTitulo">Ingresar Valor</h3>
@@ -708,6 +766,7 @@
     <script defer src="js/dominio.js"></script>
     <script defer src="js/almacenamiento.js"></script>
     <script defer src="js/servicio-ia.js"></script>
+    <script defer src="js/servicio-catalogo.js"></script>
     <script defer src="js/ui-notificaciones.js"></script>
     <script defer src="js/ui-calculadora.js"></script>
     <script defer src="js/ui-factura.js"></script>

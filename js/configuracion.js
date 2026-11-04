@@ -28,6 +28,7 @@
         VERSION_ESQUEMA_RESPALDO: 2,
         TIPO_ARCHIVO_RESPALDO_FACTURAS: 'respaldo-farmacia-facturas',
         TIPO_ARCHIVO_DICCIONARIO_CODIGOS: 'respaldo-farmacia-diccionario',
+        TIPO_ARCHIVO_RESPALDO_COMPLETO: 'respaldo-farmacia-completo',
         DECIMALES_COSTO_UNITARIO: 8,
         DECIMALES_MONEDA: 2,
         DECIMALES_AUDITORIA: 4,
@@ -38,7 +39,7 @@
         TIEMPO_REVOCAR_URL_MS: 1000,
         DURACION_NOTIFICACION_MS: 3500,
         DEBOUNCE_CALCULO_MS: 80,
-        MODELO_IA_POR_DEFECTO: 'gemini-1.5-flash',
+        MODELO_IA_POR_DEFECTO: 'gemini-2.5-flash',
         URL_GEMINI_API_BASE: 'https://generativelanguage.googleapis.com/v1beta/models/',
         CATEGORIAS: Object.freeze({
             DIVISIBLE: 'divisible',

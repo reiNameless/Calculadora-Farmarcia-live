@@ -1330,3 +1330,11 @@ dialog.farmacia-modal .modal-actions {
         font-size: 1rem;
     }
 }
+
+
+/* Animación de escaneo para cámara de código de barras */
+@keyframes scanLine {
+    0% { top: 10%; opacity: 0.3; }
+    50% { top: 90%; opacity: 1; }
+    100% { top: 10%; opacity: 0.3; }
+}

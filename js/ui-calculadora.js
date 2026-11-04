@@ -236,6 +236,27 @@
             if (mostrarNotificacion) {
                 UI.Notificaciones.mostrarMensaje(`Código ${valEstandar.tipo} válido (${codigo}). Ingresa los datos; se memorizará al agregar a la factura.`, 'info');
             }
+
+            // Consultar catálogo abierto en segundo plano (OpenFDA / registros públicos)
+            if (AppFarmacia.ServicioCatalogo) {
+                AppFarmacia.ServicioCatalogo.consultarCodigoEnLinea(codigo).then(sugerencia => {
+                    if (sugerencia && sugerencia.nombre) {
+                        el('calcNombre').value = sugerencia.nombre;
+                        if (sugerencia.esLeche && el('calcEsLeche')) {
+                            el('calcEsLeche').checked = true;
+                        }
+                        if (sugerencia.aplicaItbis !== undefined) {
+                            fijarItbis(sugerencia.tasaItbis || (sugerencia.aplicaItbis ? 18 : 0));
+                        }
+                        const extraLab = sugerencia.laboratorio ? ` (${sugerencia.laboratorio})` : '';
+                        UI.Notificaciones.mostrarMensaje(`Sugerido desde catálogo abierto${extraLab}: "${sugerencia.nombre}".`, 'success');
+                        calcularEnVivo();
+                        el('calcCajasCompradas').focus();
+                        el('calcCajasCompradas').select();
+                    }
+                });
+            }
+
             if (!el('calcNombre').value) {
                 el('calcNombre').focus();
             } else {
@@ -751,6 +772,152 @@
 
         configurarAtajosTeclado();
         inicializarEventosBovedaReglas();
+        configurarEscaneoCamara();
+    }
+
+    // --- FASE 3: ESCÁNER DE CÓDIGOS DE BARRA CON CÁMARA NATIVA (BarcodeDetector) ---
+    let streamCamaraActivo = null;
+    let detectorIntervalo = null;
+    let detectorCodigos = null;
+
+    function emitirFeedbackEscaneo() {
+        try {
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([80]);
+            }
+        } catch (e) {}
+
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+                const ctx = new AudioCtx();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.1);
+                setTimeout(() => { ctx.close(); }, 200);
+            }
+        } catch (e) {}
+    }
+
+    async function iniciarEscaneoCamara() {
+        const modal = el('modalCamaraEscaneo');
+        const video = el('videoCamaraEscaneo');
+        const estadoTexto = el('camaraEstadoTexto');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            UI.Notificaciones.mostrarMensaje('Tu dispositivo o navegador no admite acceso a la cámara.', 'error');
+            return;
+        }
+
+        if (!('BarcodeDetector' in window)) {
+            UI.Notificaciones.mostrarMensaje('Tu navegador actual no admite la detección de códigos por cámara (BarcodeDetector). Usa Chrome/Edge en Android o una pistola lectora.', 'warning');
+            return;
+        }
+
+        try {
+            if (!detectorCodigos) {
+                const formatosSoportados = await BarcodeDetector.getSupportedFormats();
+                const formatosDeseados = ['ean_13', 'upc_a', 'ean_8', 'itf'].filter(f => formatosSoportados.includes(f));
+                detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a'] });
+            }
+
+            if (modal) modal.showModal();
+            if (estadoTexto) estadoTexto.textContent = 'Iniciando cámara... Apunta al código de barras del medicamento.';
+
+            streamCamaraActivo = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+
+            if (video) {
+                video.srcObject = streamCamaraActivo;
+                await video.play();
+            }
+
+            if (estadoTexto) estadoTexto.textContent = 'Buscando código (EAN-13, UPC-A, EAN-8)... Mantén el código centrado.';
+
+            let detectando = false;
+            detectorIntervalo = setInterval(async () => {
+                if (detectando || !streamCamaraActivo || !video || video.readyState < 2) return;
+                detectando = true;
+                try {
+                    const codigos = await detectorCodigos.detect(video);
+                    if (codigos && codigos.length > 0) {
+                        const raw = codigos[0].rawValue;
+                        const codigoNormalizado = Dominio.normalizarCodigoBarras(raw);
+                        const val = Dominio.validarCodigoBarrasEstandar(codigoNormalizado);
+
+                        if (val.esValido) {
+                            detenerEscaneoCamara();
+                            emitirFeedbackEscaneo();
+                            const inputCodigo = el('calcCodigoBarras');
+                            if (inputCodigo) {
+                                inputCodigo.value = codigoNormalizado;
+                            }
+                            procesarEscaneoCodigoBarras(true);
+                        }
+                    }
+                } catch (err) {
+                    // Silencioso entre cuadros
+                } finally {
+                    detectando = false;
+                }
+            }, 120);
+
+        } catch (err) {
+            detenerEscaneoCamara();
+            console.warn('Error accediendo a la cámara:', err);
+            UI.Notificaciones.mostrarMensaje('No se pudo abrir la cámara. Verifica los permisos del navegador.', 'error');
+        }
+    }
+
+    function detenerEscaneoCamara() {
+        if (detectorIntervalo) {
+            clearInterval(detectorIntervalo);
+            detectorIntervalo = null;
+        }
+        if (streamCamaraActivo) {
+            streamCamaraActivo.getTracks().forEach(track => track.stop());
+            streamCamaraActivo = null;
+        }
+        const video = el('videoCamaraEscaneo');
+        if (video) {
+            video.srcObject = null;
+        }
+        const modal = el('modalCamaraEscaneo');
+        if (modal && modal.open) {
+            modal.close();
+        }
+    }
+
+    function configurarEscaneoCamara() {
+        const btnEscanear = el('btnEscanearCamara');
+        if (btnEscanear) {
+            btnEscanear.addEventListener('click', iniciarEscaneoCamara);
+        }
+        const btnCerrar = el('btnCerrarModalCamara');
+        if (btnCerrar) {
+            btnCerrar.addEventListener('click', detenerEscaneoCamara);
+        }
+        const btnCancelar = el('btnCancelarCamara');
+        if (btnCancelar) {
+            btnCancelar.addEventListener('click', detenerEscaneoCamara);
+        }
+        const modal = el('modalCamaraEscaneo');
+        if (modal) {
+            modal.addEventListener('close', detenerEscaneoCamara);
+        }
     }
 
     UI.Calculadora = Object.freeze({

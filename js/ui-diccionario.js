@@ -84,12 +84,13 @@
 
         try {
             const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
-            if (datos.tipo !== CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS || !datos.diccionario || typeof datos.diccionario !== 'object') {
+            const items = datos.datos || datos.diccionario;
+            if (datos.tipo !== CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS || !items || typeof items !== 'object') {
                 throw new Error('Ese archivo no es un respaldo válido del diccionario de códigos.');
             }
             const actual = Almacenamiento.obtenerDiccionarioCodigos();
             let agregados = 0;
-            Object.entries(datos.diccionario).forEach(([cod, info]) => {
+            Object.entries(items).forEach(([cod, info]) => {
                 const codigoLimpio = Dominio.normalizarCodigoBarras(cod);
                 if (codigoLimpio && info && typeof info === 'object') {
                     const tipo = info.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
@@ -99,7 +100,14 @@
                     actual[codigoLimpio] = {
                         ...info,
                         codigoBarras: codigoLimpio,
-                        nombre: String(info.nombre || 'Producto sin nombre').trim(),
+                        nombre: String(info.nombre || info.nombreComercial || 'Producto sin nombre').trim(),
+                        nombreComercial: String(info.nombreComercial || info.nombre || 'Producto sin nombre').trim(),
+                        principioActivo: String(info.principioActivo || '').trim(),
+                        laboratorio: String(info.laboratorio || '').trim(),
+                        concentracion: String(info.concentracion || '').trim(),
+                        categoria: String(info.categoria || '').trim(),
+                        presentacion: String(info.presentacion || '').trim(),
+                        formaFarmaceutica: String(info.formaFarmaceutica || '').trim(),
                         tipo,
                         unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(info.unidadesPorCaja) || 1),
                         ultimoPrecioCaja: Number(info.ultimoPrecioCaja) || 0,
@@ -116,7 +124,7 @@
             Almacenamiento.guardarDiccionarioCodigos(actual);
             renderizarDiccionarioUI();
             UI.Factura.actualizarBarraSuperior();
-            UI.Notificaciones.mostrarMensaje(`Diccionario actualizado: ${agregados} códigos importados correctamente.`, 'success');
+            UI.Notificaciones.mostrarMensaje(`Diccionario actualizado: ${agregados} productos importados correctamente.`, 'success');
         } catch (error) {
             UI.Notificaciones.mostrarMensaje(error.message, 'error');
         }
@@ -125,6 +133,43 @@
     function inicializarEventosDiccionario() {
         el('btnDescargarDiccionario').addEventListener('click', descargarDiccionarioJson);
         el('inputRestaurarDiccionario').addEventListener('change', e => restaurarDiccionarioJson(e.target));
+
+        // Respaldo y Restauración de Base Completa (IndexedDB)
+        const btnDescargarBase = el('btnDescargarBaseCompleta');
+        if (btnDescargarBase) {
+            btnDescargarBase.addEventListener('click', () => {
+                Almacenamiento.exportarBaseCompleta();
+            });
+        }
+
+        const inputRestaurarBase = el('inputRestaurarBaseCompleta');
+        if (inputRestaurarBase) {
+            inputRestaurarBase.addEventListener('change', async e => {
+                const archivo = e.target.files[0];
+                e.target.value = '';
+                if (!archivo) return;
+                try {
+                    const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
+                    const confirmar = await UI.Notificaciones.mostrarConfirmacion(
+                        'Esta acción restaurará toda la base de datos (Catálogo, Historial y Fórmulas). ¿Deseas continuar?',
+                        'Restaurar Base Completa'
+                    );
+                    if (!confirmar) return;
+
+                    const res = Almacenamiento.restaurarBaseCompleta(datos);
+                    if (res.exito) {
+                        renderizarDiccionarioUI();
+                        AppFarmacia.Estado.renderizarTodo();
+                        UI.Calculadora.calcularEnVivo();
+                        UI.Notificaciones.mostrarMensaje(`Restauración completa exitosa: ${res.totalProductos} productos y ${res.totalFacturas} facturas restauradas.`, 'success');
+                    } else {
+                        UI.Notificaciones.mostrarMensaje(res.error || 'Error al restaurar.', 'error');
+                    }
+                } catch (err) {
+                    UI.Notificaciones.mostrarMensaje(err.message, 'error');
+                }
+            });
+        }
         el('contenedorDiccionario').addEventListener('click', async e => {
             const btnUsar = e.target.closest('[data-usar-codigo]');
             if (btnUsar) {

@@ -112,6 +112,61 @@
         return String(entradaCruda ?? '').trim().split(' ').join('');
     }
 
+    function validarCodigoBarrasEstandar(entradaCruda) {
+        const codigo = normalizarCodigoBarras(entradaCruda);
+        if (!codigo) {
+            return { esValido: false, error: 'Escribe o escanea un código de barras.', tipo: null, codigo: '' };
+        }
+        if (!/^\d+$/.test(codigo)) {
+            return { esValido: false, error: 'El código de barras debe contener solo números.', tipo: null, codigo };
+        }
+        const len = codigo.length;
+        const tiposPorLongitud = {
+            8: 'EAN-8',
+            12: 'UPC-A',
+            13: 'EAN-13',
+            14: 'ITF-14'
+        };
+        const tipoEstandar = tiposPorLongitud[len];
+        if (!tipoEstandar) {
+            return {
+                esValido: false,
+                error: `Longitud no estándar (${len} dígitos). Los estándares comerciales usan 8 (EAN-8), 12 (UPC-A) o 13 dígitos (EAN-13).`,
+                tipo: 'LONGITUD_NO_ESTANDAR',
+                codigo
+            };
+        }
+
+        // Algoritmo oficial GS1 Check Digit (Modulo 10)
+        const digitos = codigo.split('').map(Number);
+        const digitoControlIngresado = digitos[len - 1];
+        let suma = 0;
+        let peso = 3;
+        for (let i = len - 2; i >= 0; i--) {
+            suma += digitos[i] * peso;
+            peso = (peso === 3) ? 1 : 3;
+        }
+        const digitoControlEsperado = (10 - (suma % 10)) % 10;
+
+        if (digitoControlIngresado !== digitoControlEsperado) {
+            return {
+                esValido: false,
+                error: `Dígito verificador incorrecto para estándar ${tipoEstandar}. Termina en ${digitoControlIngresado}, pero debería ser ${digitoControlEsperado}.`,
+                tipo: tipoEstandar,
+                digitoIngresado: digitoControlIngresado,
+                digitoEsperado: digitoControlEsperado,
+                codigo
+            };
+        }
+
+        return {
+            esValido: true,
+            tipo: tipoEstandar,
+            codigo,
+            error: null
+        };
+    }
+
     function sanitizarReglasNegocio(reglasCandidatas) {
         const { PERFILES_POR_DEFECTO } = AppFarmacia.Configuracion;
         if (!reglasCandidatas || typeof reglasCandidatas !== 'object') {
@@ -366,6 +421,7 @@
         validarPrecioCompra,
         validarCantidadEnteraPositiva,
         normalizarCodigoBarras,
+        validarCodigoBarrasEstandar,
         sanitizarReglasNegocio,
         calcularDesglosePrecios,
         crearLineaProductoInmutable,

@@ -190,39 +190,51 @@
         const codigo = Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value);
         if (!codigo) return;
 
+        // Validación según estándar oficial GS1 (EAN-13, UPC-A, EAN-8, ITF-14)
+        const valEstandar = Dominio.validarCodigoBarrasEstandar(codigo);
+        if (!valEstandar.esValido) {
+            if (mostrarNotificacion) {
+                UI.Notificaciones.mostrarMensaje(valEstandar.error, 'error');
+            }
+            return;
+        }
+
         const aprendido = Almacenamiento.buscarProductoPorCodigo(codigo);
         if (aprendido) {
+            // 1. Nombre
             el('calcNombre').value = (aprendido.nombre && !aprendido.nombre.startsWith('Producto sin nombre')) ? aprendido.nombre : '';
-            el('calcTipo').value = aprendido.tipo || CONSTANTES.CATEGORIAS.DIVISIBLE;
-            actualizarVisibilidadCategoria();
-            if (aprendido.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE && aprendido.unidadesPorCaja) {
-                el('calcUnidadesCaja').value = aprendido.unidadesPorCaja;
+
+            // 2. Costo Caja Base (autocompletado solicitado expresamente)
+            if (aprendido.ultimoPrecioCaja && Number(aprendido.ultimoPrecioCaja) > 0) {
+                el('calcPrecioCaja').value = Number(aprendido.ultimoPrecioCaja).toFixed(2);
             }
-            if (el('calcEsLeche')) {
-                el('calcEsLeche').checked = Boolean(aprendido.esLeche);
-            }
+
+            // 3. ITBIS
             const tasa = aprendido.tasaItbis !== undefined
                 ? Number(aprendido.tasaItbis)
                 : (aprendido.aplicaItbis ? 18 : 0);
             fijarItbis(tasa);
 
-            if (aprendido.descuentoValor !== undefined && Number(aprendido.descuentoValor) > 0) {
-                if (el('calcDescuento')) el('calcDescuento').value = aprendido.descuentoValor;
-                if (aprendido.tipoDescuento) fijarTipoDescuento(aprendido.tipoDescuento);
+            // 4. Es Leche
+            if (el('calcEsLeche')) {
+                el('calcEsLeche').checked = Boolean(aprendido.esLeche);
             }
+
+            // NOTA: Categoría (tipo), unidades por caja, descuento y cajas NO se autocompletan por especificación del usuario.
 
             if (mostrarNotificacion) {
                 const nombreMostrar = (aprendido.nombre && !aprendido.nombre.startsWith('Producto #') && aprendido.nombre !== 'Producto sin nombre')
                     ? `"${aprendido.nombre}"`
                     : `código ${codigo}`;
-                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}). Ingresa Cajas y Precio.`, 'success');
+                const textoCosto = aprendido.ultimoPrecioCaja ? ` | Costo: $${Number(aprendido.ultimoPrecioCaja).toFixed(2)}` : '';
+                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}${textoCosto}). Ingresa Cajas.`, 'success');
             }
             calcularEnVivo();
             el('calcCajasCompradas').focus();
             el('calcCajasCompradas').select();
         } else {
             if (mostrarNotificacion) {
-                UI.Notificaciones.mostrarMensaje(`Código nuevo (${codigo}). Ingresa los datos; se memorizará automáticamente al agregar a la factura.`, 'info');
+                UI.Notificaciones.mostrarMensaje(`Código ${valEstandar.tipo} válido (${codigo}). Ingresa los datos; se memorizará al agregar a la factura.`, 'info');
             }
             if (!el('calcNombre').value) {
                 el('calcNombre').focus();
@@ -258,6 +270,14 @@
             input.focus();
             if (input.select) input.select();
         };
+
+        const codigoCrudo = el('calcCodigoBarras').value.trim();
+        if (codigoCrudo) {
+            const valCodigo = Dominio.validarCodigoBarrasEstandar(codigoCrudo);
+            if (!valCodigo.esValido) {
+                return enfocarConError('calcCodigoBarras', valCodigo.error);
+            }
+        }
 
         const vCajas = await solicitarConfirmacionCajas(el('calcCajasCompradas').value);
         if (!vCajas.esValido) return enfocarConError('calcCajasCompradas', vCajas.error);
@@ -302,6 +322,7 @@
         ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas', 'calcDescuento', 'calcUnidadesCaja'].forEach(id => {
             if (el(id)) el(id).value = '';
         });
+        if (el('calcCodigoBarras')) el('calcCodigoBarras').style.borderColor = '';
         if (el('calcEsLeche')) el('calcEsLeche').checked = false;
 
         // Reset de ITBIS al default (Exento / 0%)
@@ -629,12 +650,20 @@
                 if (e.target.value !== soloDigitos) {
                     e.target.value = soloDigitos;
                 }
-                // Si el código ya existe en el diccionario al escribirlo o pegarlo, autocompletar de inmediato
-                if (soloDigitos.length >= 8) {
-                    const encontrado = Almacenamiento.buscarProductoPorCodigo(soloDigitos);
-                    if (encontrado) {
-                        procesarEscaneoCodigoBarras(false);
+                const len = soloDigitos.length;
+                if ([8, 12, 13, 14].includes(len)) {
+                    const val = Dominio.validarCodigoBarrasEstandar(soloDigitos);
+                    if (val.esValido) {
+                        inputCodigo.style.borderColor = 'var(--color-exito)';
+                        const encontrado = Almacenamiento.buscarProductoPorCodigo(soloDigitos);
+                        if (encontrado) {
+                            procesarEscaneoCodigoBarras(false);
+                        }
+                    } else {
+                        inputCodigo.style.borderColor = 'var(--color-alerta)';
                     }
+                } else {
+                    inputCodigo.style.borderColor = '';
                 }
             });
             inputCodigo.addEventListener('change', () => {

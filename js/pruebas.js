@@ -176,6 +176,26 @@
         afirmarIgualdad(Dominio.normalizarCodigoBarras(' 746 123 456 '), '746123456', 'Código: Remueve espacios');
         afirmarIgualdad(Dominio.normalizarCodigoBarras(''), '', 'Código: Vacío devuelve cadena vacía');
 
+        // 14. Validación de Código de Barras según Estándar GS1 (Modulo 10)
+        const vEan13 = Dominio.validarCodigoBarrasEstandar('7461234567890');
+        afirmarIgualdad(vEan13.esValido, true, 'GS1: Valida EAN-13 correcto (7461234567890)');
+        afirmarIgualdad(vEan13.tipo, 'EAN-13', 'GS1: Identifica tipo EAN-13');
+
+        const vUpcA = Dominio.validarCodigoBarrasEstandar('012345678905');
+        afirmarIgualdad(vUpcA.esValido, true, 'GS1: Valida UPC-A correcto (012345678905)');
+        afirmarIgualdad(vUpcA.tipo, 'UPC-A', 'GS1: Identifica tipo UPC-A');
+
+        const vEan8 = Dominio.validarCodigoBarrasEstandar('96385074');
+        afirmarIgualdad(vEan8.esValido, true, 'GS1: Valida EAN-8 correcto (96385074)');
+        afirmarIgualdad(vEan8.tipo, 'EAN-8', 'GS1: Identifica tipo EAN-8');
+
+        const vChecksumInvalido = Dominio.validarCodigoBarrasEstandar('7461234567891');
+        afirmarIgualdad(vChecksumInvalido.esValido, false, 'GS1: Detecta checksum incorrecto');
+        afirmarIgualdad(vChecksumInvalido.digitoEsperado, 0, 'GS1: Calcula dígito esperado correcto (0)');
+
+        const vLongitudInvalida = Dominio.validarCodigoBarrasEstandar('12345');
+        afirmarIgualdad(vLongitudInvalida.esValido, false, 'GS1: Rechaza longitud no estándar (5 dígitos)');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

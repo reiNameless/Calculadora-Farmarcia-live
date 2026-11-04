@@ -89,8 +89,8 @@
         }
 
         if (vPrecio.esValido && vCajas.esValido) {
-            const itbisLinea = Dominio.redondearDecimalExacto(vCajas.valor * desglose.montoItbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
-            const subtotalLinea = Dominio.redondearDecimalExacto(vCajas.valor * desglose.costoCajaEfectivo, CONSTANTES.DECIMALES_MONEDA);
+            const itbisLinea = desglose.montoItbisTotal !== undefined ? desglose.montoItbisTotal : Dominio.redondearDecimalExacto(vCajas.valor * desglose.montoItbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
+            const subtotalLinea = desglose.subtotalFactura !== undefined ? desglose.subtotalFactura : Dominio.redondearDecimalExacto(vCajas.valor * desglose.costoCajaEfectivo, CONSTANTES.DECIMALES_MONEDA);
             const acumuladoConLinea = Dominio.redondearDecimalExacto(resumenActual.sumaAcumulada + subtotalLinea, CONSTANTES.DECIMALES_MONEDA);
 
             if (el('resItbisLinea')) {

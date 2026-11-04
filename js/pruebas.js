@@ -155,6 +155,18 @@
         afirmarIgualdad(lineaLeche.costoUnitario, '955.00000000', 'Línea Leche: Costo unitario compra 955');
         afirmarIgualdad(lineaLeche.p1Exacto, '1,100.00', 'Línea Leche: P1 venta 1100.00');
 
+        // 11. Caso exacto sin redondeo prematuro: 3 latas de leche a $200 c/u con $40 de descuento
+        // Total compra = (3 * 200) - 40 = 560 -> Costo unitario = 560 / 3 = 186.66666667 (NO 186.67000000)
+        const casoLeche3Latas = Dominio.calcularDesglosePrecios(200, 1, false, REGLAS_NEGOCIO_POR_DEFECTO, {
+            cajasCompradas: 3,
+            esLeche: true,
+            descuentoValor: 40,
+            tipoDescuento: 'monto'
+        });
+        afirmarIgualdad(casoLeche3Latas.costoUnitario, '186.66666667', 'Leche 3 Latas: Costo unitario fiscal exacto con 8 decimales (186.66666667)');
+        afirmarIgualdad(casoLeche3Latas.subtotalFactura, 560, 'Leche 3 Latas: Subtotal compra exacto 560.00');
+        afirmarIgualdad(casoLeche3Latas.p1Exacto, '220.00', 'Leche 3 Latas: P1 venta calculado sobre base 200 * 1.10 = 220.00');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

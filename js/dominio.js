@@ -193,26 +193,28 @@
             }
         }
 
-        // 2. Costo Efectivo de Compra (Costo Fiscal real con descuento y su ITBIS)
-        const precioCajaNeto = Math.max(0, precioCajaBase - descuentoPorCaja);
-        const montoItbisPorCaja = aplicaItbis
-            ? redondearDecimalExacto(precioCajaNeto * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
+        // 2. Costo Efectivo de Compra Fiscal (Precisión pura sin redondeo prematuro intermedio)
+        const totalBaseCompra = precioCajaBase * cajas;
+        const totalNetoCompra = Math.max(0, totalBaseCompra - descuentoTotalLinea);
+        const montoItbisTotal = aplicaItbis
+            ? redondearDecimalExacto(totalNetoCompra * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
             : 0;
-        const costoCajaEfectivo = redondearDecimalExacto(
-            aplicaItbis ? (precioCajaNeto + montoItbisPorCaja) : precioCajaNeto,
-            CONSTANTES.DECIMALES_MONEDA
-        );
-        const costoUnitarioReal = costoCajaEfectivo / unidades;
+        const subtotalFactura = redondearDecimalExacto(totalNetoCompra + montoItbisTotal, CONSTANTES.DECIMALES_MONEDA);
+        const montoItbisPorCaja = cajas > 0 ? redondearDecimalExacto(montoItbisTotal / cajas, CONSTANTES.DECIMALES_MONEDA) : 0;
+        const costoCajaEfectivo = cajas > 0 ? redondearDecimalExacto(subtotalFactura / cajas, CONSTANTES.DECIMALES_MONEDA) : 0;
+
+        // Costo unitario real: división directa exacta de la inversión real entre el total de unidades
+        const totalUnidades = cajas * unidades;
+        const costoUnitarioReal = totalUnidades > 0 ? ((totalNetoCompra + montoItbisTotal) / totalUnidades) : 0;
+        const precioCajaNeto = cajas > 0 ? (totalNetoCompra / cajas) : 0;
 
         // 3. Precios de Venta (P1, P2, P3): calculados sobre precio base SIN descuento (regla farmacia)
-        const montoItbisBasePorCaja = aplicaItbis
-            ? redondearDecimalExacto(precioCajaBase * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
+        const totalBaseVenta = precioCajaBase * cajas;
+        const montoItbisVentaTotal = aplicaItbis
+            ? redondearDecimalExacto(totalBaseVenta * (reglasSeguras.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA)
             : 0;
-        const costoCajaVentaBase = redondearDecimalExacto(
-            aplicaItbis ? (precioCajaBase + montoItbisBasePorCaja) : precioCajaBase,
-            CONSTANTES.DECIMALES_MONEDA
-        );
-        const costoUnitarioVentaReal = costoCajaVentaBase / unidades;
+        const totalVentaBase = totalBaseVenta + montoItbisVentaTotal;
+        const costoUnitarioVentaReal = totalUnidades > 0 ? (totalVentaBase / totalUnidades) : 0;
 
         // Margen P1: Leche usa 10% (costo * 1.10), otros productos usan porcentajePrecio1 activo (ej: +30%)
         const f1 = esLeche ? 0.10 : (reglasSeguras.porcentajePrecio1 / 100);
@@ -232,6 +234,8 @@
             esLeche,
             costoCajaEfectivo,
             montoItbisPorCaja,
+            montoItbisTotal,
+            subtotalFactura,
             porcentajeItbis: reglasSeguras.porcentajeItbis,
             costoUnitarioReal,
             costoUnitario: formatearCostoFiscalOchoDecimales(costoUnitarioReal),
@@ -267,7 +271,7 @@
             descuentoValor,
             tipoDescuento
         });
-        const montoItbisLinea = redondearDecimalExacto(cajasCompradas * calculos.montoItbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
+        const montoItbisLinea = calculos.montoItbisTotal;
 
         return Object.freeze({
             idLinea: datosEntrada.idLinea || generarIdUnico(),
@@ -297,7 +301,7 @@
             p2Redondeado: manual.p2 ? datosEntrada.p2Redondeado : calculos.p2Redondeado,
             p3Redondeado: manual.p3 ? datosEntrada.p3Redondeado : calculos.p3Redondeado,
             totalUnidadesInventario: cajasCompradas * unidadesPorCaja,
-            subtotalFactura: redondearDecimalExacto(cajasCompradas * calculos.costoCajaEfectivo, CONSTANTES.DECIMALES_MONEDA)
+            subtotalFactura: calculos.subtotalFactura
         });
     }
 

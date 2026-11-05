@@ -768,7 +768,7 @@
                     <svg class="ico"><use href="#i-camera"/></svg>
                     <span>Escanear Código con Cámara</span>
                 </div>
-                <button type="button" class="btn-icono" id="btnCerrarModalCamara" onclick="document.getElementById('modalCamaraEscaneo').close();" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
+                <button type="button" class="btn-icono" id="btnCerrarModalCamara" onclick="if(window.UI && UI.Calculadora && UI.Calculadora.detenerEscaneoCamara){UI.Calculadora.detenerEscaneoCamara();}else{document.getElementById('modalCamaraEscaneo').close();}" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
                     <svg class="ico"><use href="#i-close"/></svg>
                 </button>
             </div>
@@ -782,7 +782,7 @@
                 Apunta la cámara al código de barras del medicamento (EAN-13, UPC-A, EAN-8).
             </div>
             <div class="modal-actions" style="margin-top:var(--espacio-2);justify-content:center;">
-                <button type="button" class="btn-icono" id="btnCancelarCamara" onclick="document.getElementById('modalCamaraEscaneo').close();" style="padding:8px 16px;cursor:pointer;font-weight:600;"><svg class="ico ico-sm"><use href="#i-close"/></svg> <span>Cerrar Cámara</span></button>
+                <button type="button" class="btn-icono" id="btnCancelarCamara" onclick="if(window.UI && UI.Calculadora && UI.Calculadora.detenerEscaneoCamara){UI.Calculadora.detenerEscaneoCamara();}else{document.getElementById('modalCamaraEscaneo').close();}" style="padding:8px 16px;cursor:pointer;font-weight:600;"><svg class="ico ico-sm"><use href="#i-close"/></svg> <span>Cerrar Cámara</span></button>
             </div>
         </dialog>
 

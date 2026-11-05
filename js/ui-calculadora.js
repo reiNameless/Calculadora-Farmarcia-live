@@ -837,6 +837,9 @@
             return;
         }
 
+        // Limpiar cualquier residuo previo de cámara antes de abrir
+        detenerEscaneoCamara();
+
         try {
             escaneoEnCurso = true;
             if (modal) modal.showModal();
@@ -858,29 +861,35 @@
                 }
             };
 
+            // Solicitud explícita del MediaStream para control absoluto del hardware
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+
+            // Si el usuario canceló mientras se otorgaban permisos:
+            if (!escaneoEnCurso) {
+                if (stream && typeof stream.getTracks === 'function') {
+                    stream.getTracks().forEach(t => {
+                        try { t.enabled = false; } catch (e) {}
+                        try { t.stop(); } catch (e) {}
+                    });
+                }
+                return;
+            }
+
+            streamCamaraActivo = stream;
+
             if (tieneBarcodeDetector) {
                 // Modo Nativo (Android / Chromium con flag)
                 if (!detectorCodigos) {
                     const formatosSoportados = await BarcodeDetector.getSupportedFormats();
                     const formatosDeseados = ['ean_13', 'upc_a', 'ean_8', 'itf'].filter(f => formatosSoportados.includes(f));
                     detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a'] });
-                }
-
-                streamCamaraActivo = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
-                    audio: false
-                });
-
-                if (!escaneoEnCurso) {
-                    if (streamCamaraActivo) {
-                        streamCamaraActivo.getTracks().forEach(t => t.stop());
-                        streamCamaraActivo = null;
-                    }
-                    return;
                 }
 
                 if (video) {
@@ -907,23 +916,23 @@
                 }, 120);
 
             } else if (tieneZXing) {
-                // Modo Universal PC / Navegadores de escritorio vía ZXing
+                // Modo Universal PC vía ZXing conectado a nuestro stream explícito
                 if (!zxingReader) {
                     zxingReader = new global.ZXing.BrowserMultiFormatReader();
                 }
 
                 if (estadoTexto) estadoTexto.textContent = 'Cámara web activa en PC... Enfoca el código de barras.';
 
-                zxingReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+                zxingReader.decodeFromStream(streamCamaraActivo, video, (result, err) => {
                     if (!escaneoEnCurso) return;
                     if (result && result.getText()) {
                         procesarCodigoExitoso(result.getText());
                     }
                 }).catch(err => {
                     if (escaneoEnCurso) {
-                        console.warn('Error accediendo a la cámara ZXing:', err);
+                        console.warn('Error en escaneo continuo ZXing:', err);
                         detenerEscaneoCamara();
-                        UI.Notificaciones.mostrarMensaje('No se pudo abrir la cámara web o permiso denegado.', 'error');
+                        UI.Notificaciones.mostrarMensaje('Error de captura en cámara web de PC.', 'error');
                     }
                 });
             }
@@ -938,45 +947,78 @@
     function detenerEscaneoCamara() {
         escaneoEnCurso = false;
 
-        // 1. Cerrar diálogo modal nativo inmediatamente
-        const modal = el('modalCamaraEscaneo');
-        if (modal) {
-            try {
-                if (typeof modal.close === 'function') {
-                    modal.close();
-                } else {
-                    modal.removeAttribute('open');
-                }
-            } catch (e) {}
-        }
-
-        // 2. Detener BarcodeDetector
+        // 1. Detener intervalo de detección nativa
         if (detectorIntervalo) {
             clearInterval(detectorIntervalo);
             detectorIntervalo = null;
         }
 
-        // 3. Detener ZXing
+        // 2. Detener lector ZXing por completo y sus pistas internas
         if (zxingReader) {
             try {
-                zxingReader.reset();
+                if (typeof zxingReader.stopContinuousDecode === 'function') {
+                    zxingReader.stopContinuousDecode();
+                }
             } catch (e) {}
+            try {
+                if (typeof zxingReader.stopStreams === 'function') {
+                    zxingReader.stopStreams();
+                }
+            } catch (e) {}
+            try {
+                if (typeof zxingReader.reset === 'function') {
+                    zxingReader.reset();
+                }
+            } catch (e) {}
+            if (zxingReader.stream && typeof zxingReader.stream.getTracks === 'function') {
+                try {
+                    zxingReader.stream.getTracks().forEach(track => {
+                        try { track.enabled = false; } catch (e) {}
+                        try { track.stop(); } catch (e) {}
+                    });
+                } catch (e) {}
+                zxingReader.stream = null;
+            }
         }
 
-        // 4. Detener tracks de la cámara del navegador
+        // 3. Detener de forma forzada TODOS los tracks de hardware en streamCamaraActivo
         if (streamCamaraActivo) {
             try {
-                streamCamaraActivo.getTracks().forEach(track => track.stop());
+                const tracks = typeof streamCamaraActivo.getTracks === 'function' ? streamCamaraActivo.getTracks() : [];
+                tracks.forEach(track => {
+                    try { track.enabled = false; } catch (e) {}
+                    try { track.stop(); } catch (e) {}
+                });
             } catch (e) {}
             streamCamaraActivo = null;
         }
 
-        // 5. Limpiar elemento video
+        // 4. Detener tracks y limpiar elemento <video>
         const video = el('videoCamaraEscaneo');
         if (video) {
             try {
+                if (video.srcObject && typeof video.srcObject.getTracks === 'function') {
+                    video.srcObject.getTracks().forEach(track => {
+                        try { track.enabled = false; } catch (e) {}
+                        try { track.stop(); } catch (e) {}
+                    });
+                }
+            } catch (e) {}
+            try {
                 video.pause();
-                video.srcObject = null;
+            } catch (e) {}
+            video.srcObject = null;
+        }
+
+        // 5. Cerrar diálogo modal nativo
+        const modal = el('modalCamaraEscaneo');
+        if (modal) {
+            try {
+                if (modal.open && typeof modal.close === 'function') {
+                    modal.close();
+                } else {
+                    modal.removeAttribute('open');
+                }
             } catch (e) {}
         }
     }
@@ -1018,6 +1060,18 @@
                 }
             });
         }
+
+        // Apagar la cámara si el usuario cambia de pestaña o cierra la ventana
+        if (typeof window !== 'undefined') {
+            window.addEventListener('beforeunload', detenerEscaneoCamara);
+        }
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && escaneoEnCurso) {
+                    detenerEscaneoCamara();
+                }
+            });
+        }
     }
 
     UI.Calculadora = Object.freeze({
@@ -1027,6 +1081,8 @@
         procesarEscaneoCodigoBarras,
         establecerBloqueoReglas,
         actualizarEtiquetasReglasUI,
-        inicializarEventosCalculadora
+        inicializarEventosCalculadora,
+        iniciarEscaneoCamara,
+        detenerEscaneoCamara
     });
 })(window);

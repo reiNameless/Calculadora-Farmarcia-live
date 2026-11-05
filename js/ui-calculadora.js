@@ -786,10 +786,12 @@
         configurarEscaneoCamara();
     }
 
-    // --- FASE 3: ESCÁNER DE CÓDIGOS DE BARRA CON CÁMARA NATIVA (BarcodeDetector) ---
+    // --- FASE 3: ESCÁNER DE CÓDIGOS DE BARRA CON CÁMARA NATIVA (BarcodeDetector) & PC (ZXing) ---
     let streamCamaraActivo = null;
     let detectorIntervalo = null;
     let detectorCodigos = null;
+    let zxingReader = null;
+    let escaneoEnCurso = false;
 
     function emitirFeedbackEscaneo() {
         try {
@@ -831,15 +833,17 @@
         const tieneZXing = Boolean(global.ZXing && global.ZXing.BrowserMultiFormatReader);
 
         if (!tieneBarcodeDetector && !tieneZXing) {
-            UI.Notificaciones.mostrarMensaje('Tu navegador no admite detección por cámara. Usa una pistola lectora o activa la webcam.', 'warning');
+            UI.Notificaciones.mostrarMensaje('Tu navegador no admite detección por cámara. Usa una pistola lectora o escribe el código manualmente.', 'warning');
             return;
         }
 
         try {
+            escaneoEnCurso = true;
             if (modal) modal.showModal();
             if (estadoTexto) estadoTexto.textContent = 'Iniciando cámara... Apunta al código de barras del medicamento.';
 
             const procesarCodigoExitoso = (rawCode) => {
+                if (!escaneoEnCurso) return;
                 const codigoNormalizado = Dominio.normalizarCodigoBarras(rawCode);
                 const val = Dominio.validarCodigoBarrasEstandar(codigoNormalizado);
 
@@ -854,20 +858,6 @@
                 }
             };
 
-            streamCamaraActivo = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: 'environment' },
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
-                audio: false
-            });
-
-            if (video) {
-                video.srcObject = streamCamaraActivo;
-                await video.play();
-            }
-
             if (tieneBarcodeDetector) {
                 // Modo Nativo (Android / Chromium con flag)
                 if (!detectorCodigos) {
@@ -876,11 +866,33 @@
                     detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a'] });
                 }
 
+                streamCamaraActivo = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+
+                if (!escaneoEnCurso) {
+                    if (streamCamaraActivo) {
+                        streamCamaraActivo.getTracks().forEach(t => t.stop());
+                        streamCamaraActivo = null;
+                    }
+                    return;
+                }
+
+                if (video) {
+                    video.srcObject = streamCamaraActivo;
+                    await video.play();
+                }
+
                 if (estadoTexto) estadoTexto.textContent = 'Buscando código (EAN-13, UPC-A, EAN-8)... Mantén el código centrado.';
 
                 let detectando = false;
                 detectorIntervalo = setInterval(async () => {
-                    if (detectando || !streamCamaraActivo || !video || video.readyState < 2) return;
+                    if (!escaneoEnCurso || detectando || !streamCamaraActivo || !video || video.readyState < 2) return;
                     detectando = true;
                     try {
                         const codigos = await detectorCodigos.detect(video);
@@ -893,17 +905,25 @@
                         detectando = false;
                     }
                 }, 120);
+
             } else if (tieneZXing) {
                 // Modo Universal PC / Navegadores de escritorio vía ZXing
                 if (!zxingReader) {
                     zxingReader = new global.ZXing.BrowserMultiFormatReader();
                 }
 
-                if (estadoTexto) estadoTexto.textContent = 'Escáner activo en PC (ZXing)... Enfoca el código con la cámara.';
+                if (estadoTexto) estadoTexto.textContent = 'Cámara web activa en PC... Enfoca el código de barras.';
 
-                zxingReader.decodeFromVideoElement(video, (result, err) => {
+                zxingReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+                    if (!escaneoEnCurso) return;
                     if (result && result.getText()) {
                         procesarCodigoExitoso(result.getText());
+                    }
+                }).catch(err => {
+                    if (escaneoEnCurso) {
+                        console.warn('Error accediendo a la cámara ZXing:', err);
+                        detenerEscaneoCamara();
+                        UI.Notificaciones.mostrarMensaje('No se pudo abrir la cámara web o permiso denegado.', 'error');
                     }
                 });
             }
@@ -916,26 +936,48 @@
     }
 
     function detenerEscaneoCamara() {
+        escaneoEnCurso = false;
+
+        // 1. Cerrar diálogo modal nativo inmediatamente
+        const modal = el('modalCamaraEscaneo');
+        if (modal) {
+            try {
+                if (typeof modal.close === 'function') {
+                    modal.close();
+                } else {
+                    modal.removeAttribute('open');
+                }
+            } catch (e) {}
+        }
+
+        // 2. Detener BarcodeDetector
         if (detectorIntervalo) {
             clearInterval(detectorIntervalo);
             detectorIntervalo = null;
         }
+
+        // 3. Detener ZXing
         if (zxingReader) {
             try {
                 zxingReader.reset();
             } catch (e) {}
         }
+
+        // 4. Detener tracks de la cámara del navegador
         if (streamCamaraActivo) {
-            streamCamaraActivo.getTracks().forEach(track => track.stop());
+            try {
+                streamCamaraActivo.getTracks().forEach(track => track.stop());
+            } catch (e) {}
             streamCamaraActivo = null;
         }
+
+        // 5. Limpiar elemento video
         const video = el('videoCamaraEscaneo');
         if (video) {
-            video.srcObject = null;
-        }
-        const modal = el('modalCamaraEscaneo');
-        if (modal && modal.open) {
-            modal.close();
+            try {
+                video.pause();
+                video.srcObject = null;
+            } catch (e) {}
         }
     }
 
@@ -944,17 +986,37 @@
         if (btnEscanear) {
             btnEscanear.addEventListener('click', iniciarEscaneoCamara);
         }
+
         const btnCerrar = el('btnCerrarModalCamara');
         if (btnCerrar) {
-            btnCerrar.addEventListener('click', detenerEscaneoCamara);
+            btnCerrar.addEventListener('click', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                detenerEscaneoCamara();
+            });
         }
+
         const btnCancelar = el('btnCancelarCamara');
         if (btnCancelar) {
-            btnCancelar.addEventListener('click', detenerEscaneoCamara);
+            btnCancelar.addEventListener('click', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                detenerEscaneoCamara();
+            });
         }
+
         const modal = el('modalCamaraEscaneo');
         if (modal) {
             modal.addEventListener('close', detenerEscaneoCamara);
+            modal.addEventListener('cancel', e => {
+                e.preventDefault();
+                detenerEscaneoCamara();
+            });
+            modal.addEventListener('click', e => {
+                if (e.target === modal) {
+                    detenerEscaneoCamara();
+                }
+            });
         }
     }
 

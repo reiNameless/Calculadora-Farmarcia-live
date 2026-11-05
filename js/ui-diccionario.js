@@ -140,21 +140,6 @@
     }
 
     function inicializarEventosDiccionario() {
-        const btnPrecargar = el('btnPrecargarCatalogoRD');
-        if (btnPrecargar) {
-            btnPrecargar.addEventListener('click', async () => {
-                const confirmar = await UI.Notificaciones.mostrarConfirmacion(
-                    '¿Deseas precargar los 25 medicamentos dominicanos oficiales (Winasorb, Cataflam, Amoxil, fórmulas infantiles, etc.)?',
-                    'Precargar Catálogo Dominicano'
-                );
-                if (!confirmar) return;
-                const total = Almacenamiento.precargarCatalogoDominicano();
-                renderizarDiccionarioUI();
-                UI.Factura.actualizarBarraSuperior();
-                UI.Notificaciones.mostrarMensaje(`¡Catálogo inicial dominicano cargado! ${total} productos memorizados.`, 'success');
-            });
-        }
-
         el('btnDescargarDiccionario').addEventListener('click', descargarDiccionarioJson);
         el('inputRestaurarDiccionario').addEventListener('change', e => restaurarDiccionarioJson(e.target));
 

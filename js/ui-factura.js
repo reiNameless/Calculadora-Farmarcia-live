@@ -192,7 +192,7 @@
         const usarRedondeo = el('calcRedondeo').checked;
 
         if (!Estado.sesionActual.productos.length) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>';
             actualizarDesgloseFiscalGlobal();
             return;
         }
@@ -264,23 +264,45 @@
 
     function alternarItbisEnTabla(producto) {
         const Estado = AppFarmacia.Estado;
-        const nuevoEstado = !producto.aplicaItbis;
+        const tasaActual = producto.aplicaItbis ? (Number(producto.tasaItbis) || 18) : 0;
+        let nuevaTasa = 0;
+        let nuevoAplica = false;
+
+        // Ciclo oficial RD: Exento (0%) -> 18% -> 16% -> Exento (0%)
+        if (tasaActual === 0) {
+            nuevaTasa = 18;
+            nuevoAplica = true;
+        } else if (tasaActual === 18) {
+            nuevaTasa = 16;
+            nuevoAplica = true;
+        } else {
+            nuevaTasa = 0;
+            nuevoAplica = false;
+        }
+
+        const reglasEfectivas = {
+            ...Estado.reglasActivas,
+            porcentajeItbis: nuevaTasa > 0 ? nuevaTasa : Estado.reglasActivas.porcentajeItbis
+        };
+
         const actualizado = Dominio.crearLineaProductoInmutable({
             ...producto,
-            aplicaItbis: nuevoEstado,
+            aplicaItbis: nuevoAplica,
+            tasaItbis: nuevaTasa,
             manual: {}
-        }, Estado.reglasActivas);
+        }, reglasEfectivas);
 
         Estado.reemplazarProductoEnSesion(producto.idLinea, actualizado);
-        const detalleMonto = actualizado.montoItbisPorCaja > 0
-            ? ` (+$${actualizado.montoItbisPorCaja.toFixed(2)}/caja | Tot: $${actualizado.montoItbisLinea.toFixed(2)})`
-            : '';
+
+        const detalleTexto = nuevoAplica
+            ? ("+" + nuevaTasa + "% ITBIS (+$" + actualizado.montoItbisPorCaja.toFixed(2) + "/caja)")
+            : "Exento de ITBIS ($0.00 - Art. 343)";
+
         UI.Notificaciones.mostrarMensaje(
-            `ITBIS ${nuevoEstado ? 'aplicado (+18%)' + detalleMonto : 'desactivado ($0.00 Exento)'} para "${actualizado.nombre}".`,
-            nuevoEstado ? 'success' : 'info'
+            "ITBIS para \"" + actualizado.nombre + "\": " + detalleTexto + ".",
+            nuevoAplica ? "success" : "info"
         );
     }
-
     async function alternarTipoEnTabla(producto) {
         const Estado = AppFarmacia.Estado;
         if (producto.tipo === CONSTANTES.CATEGORIAS.ENTERO) {
@@ -326,13 +348,14 @@
             nombre: producto.nombre,
             cajasCompradas: producto.cajasCompradas,
             unidadesPorCaja: producto.unidadesPorCaja,
-            precioCajaBase: producto.precioCajaBase
+            precioCajaBase: producto.precioCajaBase,
+            descuento: producto.descuentoValor || 0
         };
         const valorActual = mapaValores[campo];
         if (valorActual === undefined) return;
 
-        const esCampoNumerico = campo === 'cajasCompradas' || campo === 'unidadesPorCaja' || campo === 'precioCajaBase';
-        const esDecimal = campo === 'precioCajaBase';
+        const esCampoNumerico = campo === 'cajasCompradas' || campo === 'unidadesPorCaja' || campo === 'precioCajaBase' || campo === 'descuento';
+        const esDecimal = campo === 'precioCajaBase' || campo === 'descuento';
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -424,6 +447,14 @@
                 return false;
             }
             datosClonados.precioCajaBase = v.valor;
+            datosClonados.manual = {};
+        } else if (campo === 'descuento') {
+            const v = parseFloat(nuevoTexto);
+            if (isNaN(v) || v < 0) {
+                UI.Notificaciones.mostrarMensaje('El descuento debe ser un número mayor o igual a 0.', 'error');
+                return false;
+            }
+            datosClonados.descuentoValor = v;
             datosClonados.manual = {};
         }
 

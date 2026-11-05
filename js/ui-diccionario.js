@@ -86,6 +86,12 @@
             const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
             const items = datos.datos || datos.diccionario;
             if (datos.tipo !== CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS || !items || typeof items !== 'object') {
+                if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
+                    throw new Error('Has seleccionado un archivo de Respaldo Completo. Para restaurar la base completa usa la casilla "Restaurar Base Completa (.json)" de abajo.');
+                }
+                if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) {
+                    throw new Error('Has seleccionado un archivo de Historial de Facturas. Para restaurarlo ve a la Bóveda de la Farmacia.');
+                }
                 throw new Error('Ese archivo no es un respaldo válido del diccionario de códigos.');
             }
             const actual = Almacenamiento.obtenerDiccionarioCodigos();
@@ -108,6 +114,9 @@
                         categoria: String(info.categoria || '').trim(),
                         presentacion: String(info.presentacion || '').trim(),
                         formaFarmaceutica: String(info.formaFarmaceutica || '').trim(),
+                        registroSanitario: String(info.registroSanitario || '').trim(),
+                        condicionVenta: String(info.condicionVenta || 'OTC').trim(),
+                        ubicacion: String(info.ubicacion || '').trim(),
                         tipo,
                         unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(info.unidadesPorCaja) || 1),
                         ultimoPrecioCaja: Number(info.ultimoPrecioCaja) || 0,
@@ -131,6 +140,21 @@
     }
 
     function inicializarEventosDiccionario() {
+        const btnPrecargar = el('btnPrecargarCatalogoRD');
+        if (btnPrecargar) {
+            btnPrecargar.addEventListener('click', async () => {
+                const confirmar = await UI.Notificaciones.mostrarConfirmacion(
+                    '¿Deseas precargar los 25 medicamentos dominicanos oficiales (Winasorb, Cataflam, Amoxil, fórmulas infantiles, etc.)?',
+                    'Precargar Catálogo Dominicano'
+                );
+                if (!confirmar) return;
+                const total = Almacenamiento.precargarCatalogoDominicano();
+                renderizarDiccionarioUI();
+                UI.Factura.actualizarBarraSuperior();
+                UI.Notificaciones.mostrarMensaje(`¡Catálogo inicial dominicano cargado! ${total} productos memorizados.`, 'success');
+            });
+        }
+
         el('btnDescargarDiccionario').addEventListener('click', descargarDiccionarioJson);
         el('inputRestaurarDiccionario').addEventListener('change', e => restaurarDiccionarioJson(e.target));
 

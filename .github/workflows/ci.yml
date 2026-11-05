@@ -22,6 +22,7 @@ jobs:
       - name: 1. Verificación de Sintaxis JavaScript
         run: |
           node -c sw.js
+          node -c js/zxing.min.js
           node -c js/configuracion.js
           node -c js/dominio.js
           node -c js/almacenamiento.js

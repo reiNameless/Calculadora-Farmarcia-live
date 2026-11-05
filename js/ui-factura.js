@@ -109,78 +109,157 @@
         }
     }
 
+    function actualizarDesgloseFiscalGlobal() {
+        const Estado = AppFarmacia.Estado;
+        const productos = Estado.sesionActual.productos || [];
+        const totalFisico = parseFloat(el('facTotalFisico') ? el('facTotalFisico').value : 0) || 0;
+
+        let totalBruto = 0;
+        let totalDescuento = 0;
+        let totalExento = 0;
+        let totalGravado = 0;
+        let totalItbis = 0;
+
+        productos.forEach(p => {
+            const cajas = Number(p.cajasCompradas) || 1;
+            const precioBase = Number(p.precioCajaBase) || 0;
+            const desc = Number(p.descuentoTotalLinea) || 0;
+            const brutoLinea = cajas * precioBase;
+            const netoLinea = Math.max(0, brutoLinea - desc);
+
+            totalBruto += brutoLinea;
+            totalDescuento += desc;
+
+            if (!p.aplicaItbis || p.tasaItbis === 0) {
+                totalExento += netoLinea;
+            } else {
+                totalGravado += netoLinea;
+            }
+
+            const itbisLinea = p.montoItbisLinea !== undefined
+                ? Number(p.montoItbisLinea)
+                : (p.aplicaItbis ? netoLinea * ((p.tasaItbis || 18) / 100) : 0);
+            totalItbis += itbisLinea;
+        });
+
+        const totalCalculado = totalExento + totalGravado + totalItbis;
+        const diferencia = Dominio.redondearDecimalExacto(totalCalculado - totalFisico, CONSTANTES.DECIMALES_MONEDA);
+        const tieneFisico = totalFisico > 0;
+        const cuadre = tieneFisico && Math.abs(diferencia) <= CONSTANTES.TOLERANCIA_CUADRE_FACTURA;
+
+        if (el('resumenFiscalBruto')) el('resumenFiscalBruto').textContent = '$' + totalBruto.toFixed(2);
+        if (el('resumenFiscalDescuento')) el('resumenFiscalDescuento').textContent = '-$' + totalDescuento.toFixed(2);
+        if (el('resumenFiscalExento')) el('resumenFiscalExento').textContent = '$' + totalExento.toFixed(2);
+        if (el('resumenFiscalGravado')) el('resumenFiscalGravado').textContent = '$' + totalGravado.toFixed(2);
+        if (el('resumenFiscalItbis')) el('resumenFiscalItbis').textContent = '+$' + totalItbis.toFixed(2);
+        if (el('resumenFiscalTotalCalculado')) el('resumenFiscalTotalCalculado').textContent = '$' + totalCalculado.toFixed(2);
+        if (el('resumenFiscalTotalFisico')) el('resumenFiscalTotalFisico').textContent = '$' + totalFisico.toFixed(2);
+
+        const elDif = el('resumenFiscalDiferencia');
+        const badge = el('badgeCuadreFiscal');
+        const boxSemaforo = el('boxSemaforoCuadre');
+
+        if (elDif && badge) {
+            if (!tieneFisico) {
+                elDif.textContent = 'Digita Total en Papel';
+                elDif.style.color = 'var(--color-texto-secundario)';
+                badge.textContent = 'Sin Total Físico';
+                badge.style.background = 'var(--color-superficie-resaltada)';
+                badge.style.color = 'var(--color-texto-secundario)';
+                if (boxSemaforo) boxSemaforo.style.borderColor = 'var(--color-borde-fuerte)';
+            } else if (cuadre) {
+                elDif.textContent = 'Cuadre Exacto (±0.05)';
+                elDif.style.color = 'var(--color-exito)';
+                badge.textContent = '✅ Factura Cuadrada';
+                badge.style.background = 'var(--color-exito-fondo)';
+                badge.style.color = 'var(--color-exito)';
+                if (boxSemaforo) boxSemaforo.style.borderColor = 'var(--color-exito)';
+            } else {
+                const signo = diferencia > 0 ? '+' : '';
+                elDif.textContent = 'Diferencia: ' + signo + '$' + diferencia.toFixed(2);
+                elDif.style.color = 'var(--color-alerta)';
+                badge.textContent = '⚠️ Descuadre (' + signo + '$' + diferencia.toFixed(2) + ')';
+                badge.style.background = 'var(--color-alerta-fondo)';
+                badge.style.color = 'var(--color-alerta)';
+                if (boxSemaforo) boxSemaforo.style.borderColor = 'var(--color-alerta)';
+            }
+        }
+    }
+
     function renderizarTablaProductosActuales() {
         const Estado = AppFarmacia.Estado;
         const tbody = el('tablaProductosActuales');
         const usarRedondeo = el('calcRedondeo').checked;
 
         if (!Estado.sesionActual.productos.length) {
-            tbody.innerHTML = `<tr><td colspan="13" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>`;
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>';
+            actualizarDesgloseFiscalGlobal();
             return;
         }
 
         const celdaPrecio = (p, n) => {
             const exacto = p['p' + n + 'Exacto'];
             const redondeado = p['p' + n + 'Redondeado'];
-            return `<td class="mono c-p${n}">
-                ${usarRedondeo ? redondeado : exacto}
-                <span class="fs-xs text-muted">(${usarRedondeo ? exacto : redondeado})</span>
-            </td>`;
+            const valorPrincipal = usarRedondeo ? redondeado : exacto;
+            const valorSecundario = usarRedondeo ? exacto : redondeado;
+            return '<td class="mono c-p' + n + '" style="text-align:right;">' +
+                '<button type="button" class="copy-chip" data-copiar-precio="' + valorPrincipal + '" title="Clic para copiar $' + valorPrincipal + ' al portapapeles">' +
+                    '<span>$' + valorPrincipal + '</span>' +
+                    '<svg class="ico ico-sm" style="width:11px;height:11px;"><use href="#i-copy"/></svg>' +
+                '</button>' +
+                '<div class="fs-xs text-muted" style="font-size:10px;">($' + valorSecundario + ')</div>' +
+            '</td>';
         };
 
         tbody.innerHTML = Estado.sesionActual.productos.map(p => {
-            const attrId = `data-id="${escaparHtml(p.idLinea)}"`;
-            const etiquetaCodigo = p.codigoBarras ? `<div class="fs-xs text-muted">${iconoSvg('barcode')} ${escaparHtml(p.codigoBarras)}</div>` : '';
-            const badgeLeche = p.esLeche ? `<span style="display:inline-block;padding:1px 5px;font-size:9px;background:var(--color-superficie-resaltada);border:1px solid var(--color-primario);color:var(--color-primario);border-radius:3px;margin-left:4px;font-weight:var(--peso-seminegrita);">Leche 10%</span>` : '';
-            const textoDescuento = (p.descuentoTotalLinea && p.descuentoTotalLinea > 0)
-                ? `<div class="fs-xs" style="color:var(--color-exito);font-weight:var(--peso-seminegrita);">Desc: -$${p.descuentoPorCaja.toFixed(2)}${p.tipoDescuento === 'porcentaje' ? ` (${p.descuentoValor}%)` : ''}</div>`
-                : '';
+            const attrId = 'data-id="' + escaparHtml(p.idLinea) + '"';
+            const etiquetaCodigo = p.codigoBarras ? '<div class="fs-xs text-muted" style="font-size:11px;">' + iconoSvg('barcode') + ' ' + escaparHtml(p.codigoBarras) + '</div>' : '';
+            const badgeLeche = p.esLeche ? '<span style="display:inline-block;padding:1px 5px;font-size:9px;background:var(--color-superficie-resaltada);border:1px solid var(--color-primario);color:var(--color-primario);border-radius:3px;margin-left:4px;font-weight:var(--peso-seminegrita);">Leche 10%</span>' : '';
+            const descLinea = (p.descuentoTotalLinea && p.descuentoTotalLinea > 0) ? p.descuentoTotalLinea : 0;
+            const subtotalNetoLinea = Math.max(0, (p.cajasCompradas * p.precioCajaBase) - descLinea);
+
             const itbisPorCaja = p.montoItbisPorCaja !== undefined
                 ? p.montoItbisPorCaja
                 : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase * (Estado.reglasActivas.porcentajeItbis / 100), CONSTANTES.DECIMALES_MONEDA) : 0);
             const itbisLinea = p.montoItbisLinea !== undefined
                 ? p.montoItbisLinea
                 : Dominio.redondearDecimalExacto(p.cajasCompradas * itbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
-            const costoCajaEfectivo = p.costoCajaEfectivo !== undefined
-                ? p.costoCajaEfectivo
-                : (p.aplicaItbis ? Dominio.redondearDecimalExacto(p.precioCajaBase + itbisPorCaja, CONSTANTES.DECIMALES_MONEDA) : p.precioCajaBase);
 
-            return `<tr>
-                <td class="celda-edit" ${attrId} data-campo="nombre"><strong>${escaparHtml(p.nombre)}</strong>${badgeLeche}${etiquetaCodigo}</td>
-                <td class="celda-edit" ${attrId} data-campo="tipo" title="Clic para alternar categoría (Se divide / Se vende entero)">
-                    <span class="action-icon-btn" style="pointer-events:none">
-                        ${iconoSvg(p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'grid' : 'drop')}
-                        ${p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}
-                    </span>
-                </td>
-                <td class="mono celda-edit" ${attrId} data-campo="cajasCompradas">${p.cajasCompradas}</td>
-                <td class="mono celda-edit" ${attrId} data-campo="unidadesPorCaja">${p.unidadesPorCaja}</td>
-                <td class="mono c-inv">${p.totalUnidadesInventario} uds</td>
-                <td class="mono celda-edit c-caja" ${attrId} data-campo="precioCajaBase" title="Clic para editar precio de compra base">
-                    $${p.precioCajaBase.toFixed(2)}
-                    ${textoDescuento}
-                    ${p.aplicaItbis ? `<div class="fs-xs text-muted">C/ITBIS: $${costoCajaEfectivo.toFixed(2)}</div>` : ''}
-                </td>
-                <td class="celda-edit mono c-itbis" ${attrId} data-campo="itbis" title="Clic para activar o desactivar ITBIS">
-                    <span class="${p.aplicaItbis ? 'badge-itbis-on' : 'badge-itbis-off'}">
-                        ${iconoSvg(p.aplicaItbis ? 'check' : 'tag')}
-                        ${p.aplicaItbis ? `+$${itbisPorCaja.toFixed(2)}` : '$0.00'}
-                    </span>
-                    <div class="fs-xs ${p.aplicaItbis ? 'text-success' : 'text-muted'}" style="margin-top:2px;">
-                        ${p.aplicaItbis ? (p.cajasCompradas > 1 ? `Tot: $${itbisLinea.toFixed(2)}` : `${Estado.reglasActivas.porcentajeItbis}%`) : 'Exento'}
-                    </div>
-                </td>
-                <td class="mono c-sub"><strong>$${p.subtotalFactura.toFixed(2)}</strong></td>
-                <td class="mono c-costo">${p.costoUnitario}</td>
-                ${celdaPrecio(p, 1)}${celdaPrecio(p, 2)}${celdaPrecio(p, 3)}
-                <td>
-                    <div style="display:flex; gap:4px;">
-                        <button type="button" class="action-icon-btn" data-accion="editar" ${attrId} title="Editar fila completa" aria-label="Editar fila">${iconoSvg('edit')}</button>
-                        <button type="button" class="action-icon-btn text-danger" data-accion="eliminar" ${attrId} title="Eliminar fila" aria-label="Eliminar fila">${iconoSvg('trash')}</button>
-                    </div>
-                </td>
-            </tr>`;
+            const detalleInvCosto = p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE
+                ? 'Trae ' + p.unidadesPorCaja + ' uds (' + p.totalUnidadesInventario + ' total) | Unit Fiscal: $' + Dominio.formatearCostoFiscalOchoDecimales(p.costoUnitarioFinal || p.costoUnitario)
+                : 'Venta entera (1 ud) | Unit Fiscal: $' + Dominio.formatearCostoFiscalOchoDecimales(p.costoUnitarioFinal || p.costoUnitario);
+
+            return '<tr>' +
+                '<td class="celda-edit" ' + attrId + ' data-campo="nombre">' +
+                    '<strong>' + escaparHtml(p.nombre) + '</strong>' + badgeLeche +
+                    etiquetaCodigo +
+                    '<div class="fs-xs text-muted" style="font-size:10px;margin-top:2px;">' + detalleInvCosto + '</div>' +
+                '</td>' +
+                '<td class="mono celda-edit" ' + attrId + ' data-campo="cajasCompradas" style="text-align:right;">' + p.cajasCompradas + '</td>' +
+                '<td class="mono celda-edit c-caja" ' + attrId + ' data-campo="precioCajaBase" style="text-align:right;" title="Clic para editar precio de compra base">' +
+                    '$' + p.precioCajaBase.toFixed(2) +
+                '</td>' +
+                '<td class="mono" style="text-align:right;color:' + (descLinea > 0 ? 'var(--color-exito)' : 'inherit') + ';">' +
+                    (descLinea > 0 ? '-$' + descLinea.toFixed(2) : '$0.00') +
+                '</td>' +
+                '<td class="mono c-sub" style="text-align:right;"><strong>$' + subtotalNetoLinea.toFixed(2) + '</strong></td>' +
+                '<td class="celda-edit mono c-itbis" ' + attrId + ' data-campo="itbis" style="text-align:center;" title="Clic para alternar ITBIS">' +
+                    '<span class="' + (p.aplicaItbis ? 'badge-itbis-on' : 'badge-itbis-off') + '">' +
+                        (p.aplicaItbis ? '+' + (p.tasaItbis || 18) + '% ($' + itbisLinea.toFixed(2) + ')' : 'Exento') +
+                    '</span>' +
+                '</td>' +
+                '<td class="mono" style="text-align:right;"><strong>$' + p.subtotalFactura.toFixed(2) + '</strong></td>' +
+                celdaPrecio(p, 1) + celdaPrecio(p, 2) + celdaPrecio(p, 3) +
+                '<td style="text-align:center;">' +
+                    '<div style="display:flex; gap:4px; justify-content:center;">' +
+                        '<button type="button" class="action-icon-btn" data-accion="editar" ' + attrId + ' title="Editar fila completa" aria-label="Editar fila">' + iconoSvg('edit') + '</button>' +
+                        '<button type="button" class="action-icon-btn text-danger" data-accion="eliminar" ' + attrId + ' title="Eliminar fila" aria-label="Eliminar fila">' + iconoSvg('trash') + '</button>' +
+                    '</div>' +
+                '</td>' +
+            '</tr>';
         }).join('');
+
+        actualizarDesgloseFiscalGlobal();
     }
 
     function alternarItbisEnTabla(producto) {
@@ -456,6 +535,20 @@
         }
 
         el('tablaProductosActuales').addEventListener('click', async e => {
+            const btnCopiar = e.target.closest('[data-copiar-precio]');
+            if (btnCopiar) {
+                const valor = btnCopiar.dataset.copiarPrecio;
+                try {
+                    await navigator.clipboard.writeText(valor);
+                    btnCopiar.classList.add('copiado');
+                    UI.Notificaciones.mostrarMensaje('Precio copiado: $' + valor, 'info');
+                    setTimeout(() => btnCopiar.classList.remove('copiado'), 1200);
+                } catch (err) {
+                    UI.Notificaciones.mostrarMensaje('$' + valor, 'info');
+                }
+                return;
+            }
+
             const btnAccion = e.target.closest('[data-accion]');
             if (btnAccion) {
                 const idProd = btnAccion.dataset.id;

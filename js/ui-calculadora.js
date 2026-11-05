@@ -220,7 +220,18 @@
                 el('calcEsLeche').checked = Boolean(aprendido.esLeche);
             }
 
-            // NOTA: Categoría (tipo), unidades por caja, descuento y cajas NO se autocompletan por especificación del usuario.
+            // 5. Forma de Venta (Tipo) y Unidades por Caja (Autocompletado persistente)
+            if (aprendido.tipo) {
+                el('calcTipo').value = (aprendido.tipo === CONSTANTES.CATEGORIAS.ENTERO)
+                    ? CONSTANTES.CATEGORIAS.ENTERO
+                    : CONSTANTES.CATEGORIAS.DIVISIBLE;
+                actualizarVisibilidadCategoria();
+            }
+            if (aprendido.tipo === CONSTANTES.CATEGORIAS.ENTERO) {
+                el('calcUnidadesCaja').value = '1';
+            } else if (aprendido.unidadesPorCaja && Number(aprendido.unidadesPorCaja) > 0) {
+                el('calcUnidadesCaja').value = Number(aprendido.unidadesPorCaja);
+            }
 
             if (mostrarNotificacion) {
                 const nombreMostrar = (aprendido.nombre && !aprendido.nombre.startsWith('Producto #') && aprendido.nombre !== 'Producto sin nombre')
@@ -816,20 +827,32 @@
             return;
         }
 
-        if (!('BarcodeDetector' in window)) {
-            UI.Notificaciones.mostrarMensaje('Tu navegador actual no admite la detección de códigos por cámara (BarcodeDetector). Usa Chrome/Edge en Android o una pistola lectora.', 'warning');
+        const tieneBarcodeDetector = ('BarcodeDetector' in window);
+        const tieneZXing = Boolean(global.ZXing && global.ZXing.BrowserMultiFormatReader);
+
+        if (!tieneBarcodeDetector && !tieneZXing) {
+            UI.Notificaciones.mostrarMensaje('Tu navegador no admite detección por cámara. Usa una pistola lectora o activa la webcam.', 'warning');
             return;
         }
 
         try {
-            if (!detectorCodigos) {
-                const formatosSoportados = await BarcodeDetector.getSupportedFormats();
-                const formatosDeseados = ['ean_13', 'upc_a', 'ean_8', 'itf'].filter(f => formatosSoportados.includes(f));
-                detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a'] });
-            }
-
             if (modal) modal.showModal();
             if (estadoTexto) estadoTexto.textContent = 'Iniciando cámara... Apunta al código de barras del medicamento.';
+
+            const procesarCodigoExitoso = (rawCode) => {
+                const codigoNormalizado = Dominio.normalizarCodigoBarras(rawCode);
+                const val = Dominio.validarCodigoBarrasEstandar(codigoNormalizado);
+
+                if (val.esValido) {
+                    detenerEscaneoCamara();
+                    emitirFeedbackEscaneo();
+                    const inputCodigo = el('calcCodigoBarras');
+                    if (inputCodigo) {
+                        inputCodigo.value = codigoNormalizado;
+                    }
+                    procesarEscaneoCodigoBarras(true);
+                }
+            };
 
             streamCamaraActivo = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -845,35 +868,45 @@
                 await video.play();
             }
 
-            if (estadoTexto) estadoTexto.textContent = 'Buscando código (EAN-13, UPC-A, EAN-8)... Mantén el código centrado.';
-
-            let detectando = false;
-            detectorIntervalo = setInterval(async () => {
-                if (detectando || !streamCamaraActivo || !video || video.readyState < 2) return;
-                detectando = true;
-                try {
-                    const codigos = await detectorCodigos.detect(video);
-                    if (codigos && codigos.length > 0) {
-                        const raw = codigos[0].rawValue;
-                        const codigoNormalizado = Dominio.normalizarCodigoBarras(raw);
-                        const val = Dominio.validarCodigoBarrasEstandar(codigoNormalizado);
-
-                        if (val.esValido) {
-                            detenerEscaneoCamara();
-                            emitirFeedbackEscaneo();
-                            const inputCodigo = el('calcCodigoBarras');
-                            if (inputCodigo) {
-                                inputCodigo.value = codigoNormalizado;
-                            }
-                            procesarEscaneoCodigoBarras(true);
-                        }
-                    }
-                } catch (err) {
-                    // Silencioso entre cuadros
-                } finally {
-                    detectando = false;
+            if (tieneBarcodeDetector) {
+                // Modo Nativo (Android / Chromium con flag)
+                if (!detectorCodigos) {
+                    const formatosSoportados = await BarcodeDetector.getSupportedFormats();
+                    const formatosDeseados = ['ean_13', 'upc_a', 'ean_8', 'itf'].filter(f => formatosSoportados.includes(f));
+                    detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a'] });
                 }
-            }, 120);
+
+                if (estadoTexto) estadoTexto.textContent = 'Buscando código (EAN-13, UPC-A, EAN-8)... Mantén el código centrado.';
+
+                let detectando = false;
+                detectorIntervalo = setInterval(async () => {
+                    if (detectando || !streamCamaraActivo || !video || video.readyState < 2) return;
+                    detectando = true;
+                    try {
+                        const codigos = await detectorCodigos.detect(video);
+                        if (codigos && codigos.length > 0) {
+                            procesarCodigoExitoso(codigos[0].rawValue);
+                        }
+                    } catch (err) {
+                        // Silencioso entre cuadros
+                    } finally {
+                        detectando = false;
+                    }
+                }, 120);
+            } else if (tieneZXing) {
+                // Modo Universal PC / Navegadores de escritorio vía ZXing
+                if (!zxingReader) {
+                    zxingReader = new global.ZXing.BrowserMultiFormatReader();
+                }
+
+                if (estadoTexto) estadoTexto.textContent = 'Escáner activo en PC (ZXing)... Enfoca el código con la cámara.';
+
+                zxingReader.decodeFromVideoElement(video, (result, err) => {
+                    if (result && result.getText()) {
+                        procesarCodigoExitoso(result.getText());
+                    }
+                });
+            }
 
         } catch (err) {
             detenerEscaneoCamara();
@@ -886,6 +919,11 @@
         if (detectorIntervalo) {
             clearInterval(detectorIntervalo);
             detectorIntervalo = null;
+        }
+        if (zxingReader) {
+            try {
+                zxingReader.reset();
+            } catch (e) {}
         }
         if (streamCamaraActivo) {
             streamCamaraActivo.getTracks().forEach(track => track.stop());

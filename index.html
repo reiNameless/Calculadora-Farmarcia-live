@@ -354,17 +354,15 @@
                         <thead>
                             <tr>
                                 <th>Producto / Código</th>
-                                <th style="text-align:center;">Tipo</th>
-                                <th style="text-align:right;">Cajas</th>
-                                <th style="text-align:right;">Trae</th>
-                                <th class="c-inv" style="text-align:right;">Total Inv</th>
+                                <th style="text-align:right;">Cant</th>
                                 <th class="c-caja" style="text-align:right;">Costo Caja</th>
-                                <th class="c-itbis" style="text-align:center;">ITBIS (Clic)</th>
+                                <th style="text-align:right;">Desc.</th>
                                 <th class="c-sub" style="text-align:right;">Subtotal</th>
-                                <th class="c-costo" style="text-align:right;">Costo Unit. (8 dec)</th>
-                                <th class="c-p1" style="text-align:right;">Precio 1</th>
-                                <th class="c-p2" style="text-align:right;">Precio 2</th>
-                                <th class="c-p3" style="text-align:right;">Precio 3</th>
+                                <th class="c-itbis" style="text-align:center;">ITBIS</th>
+                                <th style="text-align:right;">Total Línea</th>
+                                <th class="c-p1" style="text-align:right;">Precio 1 (Púb)</th>
+                                <th class="c-p2" style="text-align:right;">Precio 2 (Mín)</th>
+                                <th class="c-p3" style="text-align:right;">Precio 3 (Seg/May)</th>
                                 <th style="text-align:center;">Acc</th>
                             </tr>
                         </thead>
@@ -466,6 +464,50 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- DESGLOSE GLOBAL FISCAL Y TOTALIZADOR DE FACTURA EN CURSO (DGII RD) -->
+                <div class="factura-resumen-fiscal" id="facturaResumenFiscal" style="margin-top:var(--espacio-3);padding:var(--espacio-3);background:var(--color-superficie);border:1.5px solid var(--color-borde);border-radius:var(--radio-md);">
+                    <div style="font-weight:var(--peso-negrita);font-size:var(--texto-sm);margin-bottom:var(--espacio-2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <svg class="ico ico-sm" style="color:var(--color-accion);"><use href="#i-doc"/></svg>
+                            <span>Desglose Fiscal Global de la Factura (RD)</span>
+                        </div>
+                        <div id="badgeCuadreFiscal" class="badge" style="font-size:11px;padding:3px 8px;border-radius:4px;background:var(--color-superficie-resaltada);">
+                            Pendiente de cuadre
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(135px, 1fr));gap:var(--espacio-2);font-size:var(--texto-xs);">
+                        <div style="padding:8px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);">
+                            <div class="text-muted" style="font-size:11px;">Total Bruto</div>
+                            <strong class="mono" style="font-size:13px;" id="resumenFiscalBruto">$0.00</strong>
+                        </div>
+                        <div style="padding:8px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);">
+                            <div class="text-muted" style="font-size:11px;">(-) Descuentos</div>
+                            <strong class="mono" style="font-size:13px;color:var(--color-exito);" id="resumenFiscalDescuento">-$0.00</strong>
+                        </div>
+                        <div style="padding:8px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);">
+                            <div class="text-muted" style="font-size:11px;">Exento (0% ITBIS)</div>
+                            <strong class="mono" style="font-size:13px;" id="resumenFiscalExento">$0.00</strong>
+                        </div>
+                        <div style="padding:8px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);">
+                            <div class="text-muted" style="font-size:11px;">Gravado (18%/16%)</div>
+                            <strong class="mono" style="font-size:13px;" id="resumenFiscalGravado">$0.00</strong>
+                        </div>
+                        <div style="padding:8px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);">
+                            <div class="text-muted" style="font-size:11px;">(+) ITBIS Total</div>
+                            <strong class="mono" style="font-size:13px;color:var(--color-alerta);" id="resumenFiscalItbis">+$0.00</strong>
+                        </div>
+                        <div style="padding:8px;border:1.5px solid var(--color-accion);border-radius:var(--radio-sm);background:var(--color-accion-fondo);">
+                            <div style="font-size:11px;font-weight:var(--peso-negrita);color:var(--color-texto-principal);">TOTAL CALCULADO</div>
+                            <strong class="mono" style="font-size:14px;color:var(--color-accion);" id="resumenFiscalTotalCalculado">$0.00</strong>
+                        </div>
+                        <div style="padding:8px;border:1.5px solid var(--color-borde-fuerte);border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);" id="boxSemaforoCuadre">
+                            <div class="text-muted" style="font-size:11px;">Total Papel (Físico)</div>
+                            <strong class="mono" style="font-size:14px;" id="resumenFiscalTotalFisico">$0.00</strong>
+                            <div id="resumenFiscalDiferencia" style="font-size:10px;margin-top:2px;font-weight:600;">Dif: $0.00</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -648,6 +690,10 @@
                             <span>Diccionario de Códigos y Respaldo de Archivos</span>
                         </div>
                         <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                            <button type="button" class="btn-icono" id="btnPrecargarCatalogoRD" style="border-color:var(--color-primario);color:var(--color-primario);" title="Cargar 25 medicamentos dominicanos oficiales en la memoria">
+                                <svg class="ico ico-sm"><use href="#i-sync"/></svg>
+                                <span>Precargar Catálogo RD</span>
+                            </button>
                             <button class="btn-icono" id="btnDescargarDiccionario">
                                 <svg class="ico ico-sm"><use href="#i-down"/></svg>
                                 <span>Descargar Diccionario (.json)</span>
@@ -762,6 +808,7 @@
     </div>
 
     <!-- ARCHIVOS DE PRODUCCIÓN MODULARES -->
+    <script defer src="js/zxing.min.js"></script>
     <script defer src="js/configuracion.js"></script>
     <script defer src="js/dominio.js"></script>
     <script defer src="js/almacenamiento.js"></script>

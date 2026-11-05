@@ -846,7 +846,9 @@
                 const dispositivos = await navigator.mediaDevices.enumerateDevices();
                 const tieneCamara = dispositivos.some(d => d.kind === 'videoinput');
                 if (dispositivos.length > 0 && !tieneCamara) {
-                    UI.Notificaciones.mostrarMensaje('No se detectó ninguna cámara de video conectada a este equipo. Ingresa los datos manualmente o usa una pistola lectora 2D.', 'warning');
+                    UI.Notificaciones.mostrarMensaje('No se detectó ninguna cámara de video en este equipo. Puedes seleccionar una foto o captura de la factura desde tus archivos.', 'info');
+                    const inputArchivo = el('inputArchivoEscaneoLocal');
+                    if (inputArchivo) inputArchivo.click();
                     return;
                 }
             } catch (e) {
@@ -873,6 +875,21 @@
                 modalTitulo.textContent = (modoEscaneoActual === 'factura')
                     ? 'Escanear QR de Factura DGII'
                     : 'Escanear Código con Cámara';
+            }
+
+            const guiaVisual = el('guiaEscaneoVisual');
+            if (guiaVisual) {
+                if (modoEscaneoActual === 'factura') {
+                    guiaVisual.style.width = '65%';
+                    guiaVisual.style.height = '65%';
+                    guiaVisual.style.aspectRatio = '1 / 1';
+                    guiaVisual.style.borderRadius = '14px';
+                } else {
+                    guiaVisual.style.width = '80%';
+                    guiaVisual.style.height = '42%';
+                    guiaVisual.style.aspectRatio = 'auto';
+                    guiaVisual.style.borderRadius = '8px';
+                }
             }
 
             if (estadoTexto) {
@@ -1125,12 +1142,96 @@
         }
     }
 
+    async function procesarArchivoImagenEscaneo(archivo, modo = modoEscaneoActual) {
+        if (!archivo) return;
+        try {
+            UI.Notificaciones.mostrarMensaje('Analizando imagen en busca de códigos...', 'info');
+
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(archivo);
+
+            await new Promise((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error('No se pudo cargar la imagen seleccionada.'));
+                img.src = objectUrl;
+            });
+
+            let codigoDetectado = null;
+
+            // 1. Detección nativa con BarcodeDetector si está soportada
+            if ('BarcodeDetector' in window) {
+                try {
+                    const detector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'upc_a', 'ean_8', 'itf'] });
+                    const resultados = await detector.detect(img);
+                    if (resultados && resultados.length > 0 && resultados[0].rawValue) {
+                        codigoDetectado = resultados[0].rawValue;
+                    }
+                } catch (e) {}
+            }
+
+            // 2. Detección universal con ZXing si BarcodeDetector no halló código
+            if (!codigoDetectado && global.ZXing && global.ZXing.BrowserMultiFormatReader) {
+                try {
+                    const reader = new global.ZXing.BrowserMultiFormatReader();
+                    const resZXing = await reader.decodeFromImageElement(img);
+                    if (resZXing && resZXing.getText()) {
+                        codigoDetectado = resZXing.getText();
+                    }
+                } catch (e) {}
+            }
+
+            URL.revokeObjectURL(objectUrl);
+
+            if (!codigoDetectado) {
+                UI.Notificaciones.mostrarMensaje('No se detectó ningún código QR o de barras en la imagen. Asegúrate de que el código esté bien enfocado y legible.', 'warning');
+                return;
+            }
+
+            detenerEscaneoCamara();
+            emitirFeedbackEscaneo();
+
+            if (modo === 'factura' || Dominio.parsearQrFacturaDgii(codigoDetectado).esDgii) {
+                const resDgii = Dominio.parsearQrFacturaDgii(codigoDetectado);
+                if (resDgii.esDgii && resDgii.esValido) {
+                    UI.Factura.cargarDatosDesdeQrDgii(resDgii.datos);
+                } else {
+                    UI.Notificaciones.mostrarMensaje('El código en la imagen no es un comprobante fiscal DGII válido.', 'warning');
+                }
+            } else {
+                const codigoNormalizado = Dominio.normalizarCodigoBarras(codigoDetectado);
+                const val = Dominio.validarCodigoBarrasEstandar(codigoNormalizado);
+                if (val.esValido) {
+                    const inputCodigo = el('calcCodigoBarras');
+                    if (inputCodigo) inputCodigo.value = codigoNormalizado;
+                    procesarEscaneoCodigoBarras(true);
+                } else {
+                    UI.Notificaciones.mostrarMensaje('Código de barras no estándar o inválido en la imagen.', 'warning');
+                }
+            }
+
+        } catch (err) {
+            console.warn('Error decodificando imagen subida:', err);
+            UI.Notificaciones.mostrarMensaje('Error al leer el archivo de imagen (' + (err.message || 'formato no soportado') + ').', 'error');
+        } finally {
+            const inputArchivo = el('inputArchivoEscaneoLocal');
+            if (inputArchivo) inputArchivo.value = '';
+        }
+    }
+
     function configurarEscaneoCamara() {
         const btnEscanear = el('btnEscanearCamara');
         if (btnEscanear) {
             btnEscanear.addEventListener('click', () => iniciarEscaneoCamara('producto'));
         }
 
+        const inputArchivo = el('inputArchivoEscaneoLocal');
+        if (inputArchivo) {
+            inputArchivo.addEventListener('change', e => {
+                if (e.target.files && e.target.files[0]) {
+                    procesarArchivoImagenEscaneo(e.target.files[0], modoEscaneoActual);
+                }
+            });
+        }
         const btnQrFactura = el('btnEscanearQrFactura');
         if (btnQrFactura) {
             btnQrFactura.addEventListener('click', () => iniciarEscaneoCamara('factura'));
@@ -1199,6 +1300,7 @@
     }
 
     UI.Calculadora = Object.freeze({
+        procesarArchivoImagenEscaneo,
         calcularEnVivo,
         dispararCalculoDebounced,
         actualizarVisibilidadCategoria,

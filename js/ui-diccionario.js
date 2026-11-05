@@ -84,15 +84,40 @@
 
         try {
             const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
-            const items = datos.datos || datos.diccionario;
-            if (datos.tipo !== CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS || !items || typeof items !== 'object') {
-                if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
-                    throw new Error('Has seleccionado un archivo de Respaldo Completo. Para restaurar la base completa usa la casilla "Restaurar Base Completa (.json)" de abajo.');
-                }
-                if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) {
-                    throw new Error('Has seleccionado un archivo de Historial de Facturas. Para restaurarlo ve a la Bóveda de la Farmacia.');
-                }
-                throw new Error('Ese archivo no es un respaldo válido del diccionario de códigos.');
+            if (!datos || typeof datos !== 'object') {
+                throw new Error('El archivo no contiene un objeto JSON válido.');
+            }
+
+            if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
+                throw new Error('Has seleccionado un archivo de Respaldo Completo. Para restaurar la base completa usa la casilla "Restaurar Base Completa (.json)" de abajo.');
+            }
+            if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) {
+                throw new Error('Has seleccionado un archivo de Historial de Facturas. Para restaurarlo ve a la Bóveda de la Farmacia.');
+            }
+
+            // Detección inteligente y flexible de catálogos
+            let items = null;
+            if (datos.diccionario && typeof datos.diccionario === 'object' && !Array.isArray(datos.diccionario)) {
+                items = datos.diccionario;
+            } else if (datos.datos && typeof datos.datos === 'object' && !Array.isArray(datos.datos)) {
+                items = datos.datos;
+            } else if (Array.isArray(datos)) {
+                items = {};
+                datos.forEach(p => {
+                    if (p && p.codigoBarras) items[p.codigoBarras] = p;
+                });
+            } else if (Array.isArray(datos.productos)) {
+                items = {};
+                datos.productos.forEach(p => {
+                    if (p && p.codigoBarras) items[p.codigoBarras] = p;
+                });
+            } else {
+                // Si es un mapa directo de productos: { "746001": {...} }
+                items = datos;
+            }
+
+            if (!items || typeof items !== 'object' || Object.keys(items).length === 0) {
+                throw new Error('El archivo no contiene productos reconocibles en el diccionario.');
             }
             const actual = Almacenamiento.obtenerDiccionarioCodigos();
             let agregados = 0;

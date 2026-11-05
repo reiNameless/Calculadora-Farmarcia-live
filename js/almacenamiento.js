@@ -458,7 +458,11 @@
             const lector = new FileReader();
             lector.onload = () => {
                 try {
-                    resolve(Dominio.sanitizarJsonSeguro(JSON.parse(lector.result)));
+                    const raw = JSON.parse(lector.result);
+                    const sanitizado = (Dominio && typeof Dominio.sanitizarJsonSeguro === 'function')
+                        ? Dominio.sanitizarJsonSeguro(raw)
+                        : raw;
+                    resolve(sanitizado);
                 } catch (e) {
                     reject(new Error('El archivo seleccionado no tiene un formato JSON válido.'));
                 }

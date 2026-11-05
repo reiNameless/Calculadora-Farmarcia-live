@@ -415,6 +415,41 @@
      * @param {string|number} texto
      * @returns {Promise<void>}
      */
+        /**
+     * Sanitiza cadenas para renderizado seguro en DOM contra XSS.
+     * @param {string|number} texto
+     * @returns {string}
+     */
+    function escaparHtml(texto) {
+        return String(texto ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[c]));
+    }
+
+    /**
+     * Inmunización recursiva contra Prototype Pollution en objetos deserializados de JSON.
+     * @param {any} obj
+     * @returns {any}
+     */
+    function sanitizarJsonSeguro(obj) {
+        if (obj === null || typeof obj !== 'object') return obj;
+        if (Array.isArray(obj)) {
+            return obj.map(sanitizarJsonSeguro);
+        }
+        const limpio = {};
+        for (const [clave, valor] of Object.entries(obj)) {
+            if (clave === '__proto__' || clave === 'constructor' || clave === 'prototype') {
+                continue;
+            }
+            limpio[clave] = sanitizarJsonSeguro(valor);
+        }
+        return limpio;
+    }
+
     function copiarAlPortapapeles(texto) {
         const textoStr = String(texto ?? '');
         if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -447,6 +482,8 @@
     }
 
     AppFarmacia.Dominio = Object.freeze({
+        escaparHtml,
+        sanitizarJsonSeguro,
         copiarAlPortapapeles,
         clonarObjetoSeguro,
         generarIdUnico,

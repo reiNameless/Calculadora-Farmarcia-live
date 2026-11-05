@@ -121,7 +121,7 @@
                 <b>Total ITBIS:</b> $${(resumen.totalItbisAcumulado || 0).toFixed(2)} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <b>Total Factura Físico:</b> $${Number(factura.totalFisico || 0).toFixed(2)} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <b>Total Calculado Acumulado:</b> $${resumen.sumaAcumulada.toFixed(2)}
-                ${resumen.totalFisico > 0 ? `<br><small style="color:${resumen.cuadreExacto ? 'green' : 'orange'};">${resumen.cuadreExacto ? '✔ Factura Cuadra Exactamente' : `Diferencia: $${resumen.diferencia.toFixed(2)}`}</small>` : ''}
+                ${resumen.totalFisico > 0 ? `<br><small style="color:${resumen.cuadreExacto ? 'green' : 'orange'};">${resumen.cuadreExacto ? 'Factura Cuadra Exactamente' : `Diferencia: $${resumen.diferencia.toFixed(2)}`}</small>` : ''}
             </div>`;
         window.print();
     }

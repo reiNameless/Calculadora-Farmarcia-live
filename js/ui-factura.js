@@ -170,7 +170,7 @@
             } else if (cuadre) {
                 elDif.textContent = 'Cuadre Exacto (±0.05)';
                 elDif.style.color = 'var(--color-exito)';
-                badge.textContent = '✅ Factura Cuadrada';
+                badge.textContent = 'Factura Cuadrada';
                 badge.style.background = 'var(--color-exito-fondo)';
                 badge.style.color = 'var(--color-exito)';
                 if (boxSemaforo) boxSemaforo.style.borderColor = 'var(--color-exito)';
@@ -178,7 +178,7 @@
                 const signo = diferencia > 0 ? '+' : '';
                 elDif.textContent = 'Diferencia: ' + signo + '$' + diferencia.toFixed(2);
                 elDif.style.color = 'var(--color-alerta)';
-                badge.textContent = '⚠️ Descuadre (' + signo + '$' + diferencia.toFixed(2) + ')';
+                badge.textContent = 'Descuadre (' + signo + '$' + diferencia.toFixed(2) + ')';
                 badge.style.background = 'var(--color-alerta-fondo)';
                 badge.style.color = 'var(--color-alerta)';
                 if (boxSemaforo) boxSemaforo.style.borderColor = 'var(--color-alerta)';

@@ -410,7 +410,44 @@
         });
     }
 
+    /**
+     * Copia texto al portapapeles con degradación elegante a execCommand para entornos HTTP o permisos denegados.
+     * @param {string|number} texto
+     * @returns {Promise<void>}
+     */
+    function copiarAlPortapapeles(texto) {
+        const textoStr = String(texto ?? '');
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            return navigator.clipboard.writeText(textoStr).catch(() => fallbackCopiar(textoStr));
+        }
+        return fallbackCopiar(textoStr);
+    }
+
+    function fallbackCopiar(texto) {
+        return new Promise((resolve, reject) => {
+            try {
+                if (typeof document === 'undefined') return reject(new Error('No DOM'));
+                const area = document.createElement('textarea');
+                area.value = texto;
+                area.setAttribute('readonly', '');
+                area.style.position = 'fixed';
+                area.style.left = '-9999px';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.focus();
+                area.select();
+                const exito = document.execCommand('copy');
+                document.body.removeChild(area);
+                if (exito) resolve();
+                else reject(new Error('Fallo al copiar al portapapeles'));
+            } catch (err) {
+                reject(err);
+            }
+        });
+    }
+
     AppFarmacia.Dominio = Object.freeze({
+        copiarAlPortapapeles,
         clonarObjetoSeguro,
         generarIdUnico,
         obtenerFechaLocalISO,

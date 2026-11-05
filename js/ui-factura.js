@@ -570,7 +570,7 @@
             if (btnCopiar) {
                 const valor = btnCopiar.dataset.copiarPrecio;
                 try {
-                    await navigator.clipboard.writeText(valor);
+                    await Dominio.copiarAlPortapapeles(valor);
                     btnCopiar.classList.add('copiado');
                     UI.Notificaciones.mostrarMensaje('Precio copiado: $' + valor, 'info');
                     setTimeout(() => btnCopiar.classList.remove('copiado'), 1200);

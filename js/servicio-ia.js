@@ -133,12 +133,17 @@ Instrucciones de auditoría:
         const modeloActivo = modelo || CONSTANTES.MODELO_IA_POR_DEFECTO;
         const url = `${CONSTANTES.URL_GEMINI_API_BASE}${encodeURIComponent(modeloActivo)}:generateContent`;
 
-        const respuesta = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
-            },
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000); // 35 segundos límite
+        let respuesta;
+        try {
+            respuesta = await fetch(url, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                },
             body: JSON.stringify({
                 contents: [{ parts: partesContenido }],
                 generationConfig: {
@@ -175,6 +180,15 @@ Instrucciones de auditoría:
                 }
             })
         });
+
+            clearTimeout(timeoutId);
+        } catch (errFetch) {
+            clearTimeout(timeoutId);
+            if (errFetch && errFetch.name === 'AbortError') {
+                throw new Error('Tiempo de espera agotado al conectar con el servicio de IA (Timeout de 35s). Verifica tu conexión a internet.');
+            }
+            throw errFetch;
+        }
 
         if (!respuesta.ok) {
             throw new Error(traducirErrorHttp(respuesta.status, modeloActivo));

@@ -765,7 +765,7 @@
                 const elemento = el(idTarget);
                 if (!elemento) return;
                 const texto = elemento.textContent.replace('$', '').trim();
-                navigator.clipboard.writeText(texto).then(() => {
+                Dominio.copiarAlPortapapeles(texto).then(() => {
                     const original = btn.innerHTML;
                     btn.classList.add('copiado');
                     btn.innerHTML = `${iconoSvg('check')} ¡Copiado!`;
@@ -861,15 +861,24 @@
                 }
             };
 
-            // Solicitud explícita del MediaStream para control absoluto del hardware
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: 'environment' },
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
-                audio: false
-            });
+            // Solicitud de MediaStream con degradación elegante si la cámara no soporta resolución o facingMode
+            let stream = null;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+            } catch (errConstraints) {
+                // Fallback para webcams genéricas o terminales POS
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false
+                });
+            }
 
             // Si el usuario canceló mientras se otorgaban permisos:
             if (!escaneoEnCurso) {

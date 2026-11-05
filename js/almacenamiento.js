@@ -99,7 +99,7 @@
                 cacheStorage.set(claveStorage, valorPorDefecto);
                 return Dominio.clonarObjetoSeguro(valorPorDefecto);
             }
-            const parseado = JSON.parse(texto);
+            const parseado = Dominio.sanitizarJsonSeguro(JSON.parse(texto));
             cacheStorage.set(claveStorage, parseado);
             return Dominio.clonarObjetoSeguro(parseado);
         } catch (error) {
@@ -458,7 +458,7 @@
             const lector = new FileReader();
             lector.onload = () => {
                 try {
-                    resolve(JSON.parse(lector.result));
+                    resolve(Dominio.sanitizarJsonSeguro(JSON.parse(lector.result)));
                 } catch (e) {
                     reject(new Error('El archivo seleccionado no tiene un formato JSON válido.'));
                 }

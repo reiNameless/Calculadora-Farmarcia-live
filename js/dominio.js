@@ -481,7 +481,165 @@
         });
     }
 
+
+    // --- VALIDACIÓN DE RNC Y CÉDULA DE LA REPÚBLICA DOMINICANA (DGII) ---
+    function validarRnc(rncCrudo) {
+        const rnc = String(rncCrudo ?? '').replace(/\D/g, '');
+        if (!rnc) {
+            return { esValido: false, motivo: 'RNC vacío.', tipo: null, rnc: '' };
+        }
+        if (rnc.length === 9) {
+            // Persona Jurídica (Módulo 11 DGII)
+            const pesos = [7, 9, 8, 6, 5, 4, 3, 2];
+            let suma = 0;
+            for (let i = 0; i < 8; i++) {
+                suma += parseInt(rnc.charAt(i), 10) * pesos[i];
+            }
+            const resto = suma % 11;
+            let digitoEsperado;
+            if (resto === 0) {
+                digitoEsperado = 2;
+            } else if (resto === 1) {
+                digitoEsperado = 1;
+            } else {
+                digitoEsperado = 11 - resto;
+            }
+            const digitoReal = parseInt(rnc.charAt(8), 10);
+            const esValido = digitoEsperado === digitoReal;
+            return {
+                esValido,
+                tipo: 'RNC Jurídico (9 dígitos)',
+                rnc,
+                digitoEsperado,
+                digitoReal,
+                motivo: esValido ? 'RNC válido según Módulo 11 DGII.' : 'Dígito verificador incorrecto.'
+            };
+        } else if (rnc.length === 11) {
+            // Persona Física / Cédula (Luhn / Módulo 10 DGII)
+            if (rnc.startsWith('000')) {
+                return { esValido: false, motivo: 'Secuencia inicial no válida.', tipo: 'Cédula / RNC Físico (11 dígitos)', rnc };
+            }
+            const pesos = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
+            let suma = 0;
+            for (let i = 0; i < 10; i++) {
+                const mult = parseInt(rnc.charAt(i), 10) * pesos[i];
+                suma += mult >= 10 ? Math.floor(mult / 10) + (mult % 10) : mult;
+            }
+            const digitoEsperado = (10 - (suma % 10)) % 10;
+            const digitoReal = parseInt(rnc.charAt(10), 10);
+            const esValido = digitoEsperado === digitoReal;
+            return {
+                esValido,
+                tipo: 'Cédula / RNC Físico (11 dígitos)',
+                rnc,
+                digitoEsperado,
+                digitoReal,
+                motivo: esValido ? 'Cédula/RNC válido según algoritmo DGII.' : 'Dígito verificador incorrecto.'
+            };
+        }
+        return {
+            esValido: false,
+            tipo: 'Desconocido',
+            rnc,
+            motivo: 'El RNC debe contener 9 dígitos (empresas) u 11 dígitos (personas físicas).'
+        };
+    }
+
+    // --- DECODIFICADOR DE CÓDIGOS QR DE COMPROBANTES FISCALES ELECTRÓNICOS (e-CF / DGII) ---
+    function parsearQrFacturaDgii(textoCrudo) {
+        const texto = String(textoCrudo ?? '').trim();
+        if (!texto) {
+            return { esValido: false, esDgii: false, error: 'Código QR vacío.' };
+        }
+
+        let params = null;
+        try {
+            if (/^https?:\/\//i.test(texto)) {
+                const urlObj = new URL(texto);
+                params = urlObj.searchParams;
+            } else if (texto.includes('?') || texto.includes('=')) {
+                const queryPart = texto.includes('?') ? texto.split('?')[1] : texto;
+                params = new URLSearchParams(queryPart);
+            }
+        } catch (e) {
+            params = null;
+        }
+
+        const obtenerParametro = (nombres) => {
+            if (params) {
+                for (const n of nombres) {
+                    const val = params.get(n);
+                    if (val !== null && val !== undefined && String(val).trim() !== '') return String(val).trim();
+                }
+            }
+            for (const n of nombres) {
+                const regex = new RegExp('(?:[?&]|^)' + n + '=([^&\\s]+)', 'i');
+                const match = texto.match(regex);
+                if (match && match[1]) {
+                    try {
+                        return decodeURIComponent(match[1]).trim();
+                    } catch (e) {
+                        return match[1].trim();
+                    }
+                }
+            }
+            return '';
+        };
+
+        const rncEmisor = obtenerParametro(['RncEmisor', 'rncemisor', 'RNC_EMISOR', 'rnc_emisor', 'Rnc', 'rnc']);
+        const rncComprador = obtenerParametro(['RncComprador', 'rnccomprador', 'RNC_COMPRADOR', 'rnc_comprador']);
+        const encf = obtenerParametro(['eNCF', 'encf', 'ENCF', 'NCF', 'ncf']);
+        const fechaEmisionCruda = obtenerParametro(['FechaEmision', 'fechaemision', 'FechaFirma', 'fechafirma', 'Fecha', 'fecha']);
+        const montoTotalCrudo = obtenerParametro(['MontoTotal', 'montototal', 'Total', 'total', 'monto']);
+        const codigoSeguridad = obtenerParametro(['CodigoSeguridad', 'codigoseguridad', 'Codigo', 'codigo', 'timbre']);
+        const totalItbisCrudo = obtenerParametro(['TotalITBIS', 'totalitbis', 'MontoITBIS', 'montoitbis', 'ITBIS', 'itbis']);
+
+        const esUrlDgii = /dgii\.gov\.do/i.test(texto) || /ConsultaTimbre/i.test(texto);
+        const tieneCamposDgii = Boolean(encf && (rncEmisor || montoTotalCrudo));
+
+        if (!esUrlDgii && !tieneCamposDgii) {
+            return {
+                esValido: false,
+                esDgii: false,
+                error: 'El código escaneado no corresponde a un comprobante fiscal electrónico de la DGII.'
+            };
+        }
+
+        let fechaEmision = '';
+        if (fechaEmisionCruda) {
+            const matchIso = fechaEmisionCruda.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+            const matchLat = fechaEmisionCruda.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+            const matchCompact = fechaEmisionCruda.match(/^(\d{4})(\d{2})(\d{2})$/);
+            if (matchIso) {
+                fechaEmision = matchIso[1] + '-' + matchIso[2] + '-' + matchIso[3];
+            } else if (matchLat) {
+                fechaEmision = matchLat[3] + '-' + matchLat[2] + '-' + matchLat[1];
+            } else if (matchCompact) {
+                fechaEmision = matchCompact[1] + '-' + matchCompact[2] + '-' + matchCompact[3];
+            }
+        }
+
+        const montoTotal = parseFloat(String(montoTotalCrudo || '').replace(/,/g, '')) || 0;
+        const totalItbis = parseFloat(String(totalItbisCrudo || '').replace(/,/g, '')) || 0;
+
+        return {
+            esValido: Boolean(encf || rncEmisor || montoTotal > 0),
+            esDgii: true,
+            datos: {
+                rncEmisor: String(rncEmisor || '').replace(/\D/g, ''),
+                rncComprador: String(rncComprador || '').replace(/\D/g, ''),
+                encf: encf.toUpperCase(),
+                fechaEmision,
+                montoTotal,
+                totalItbis,
+                codigoSeguridad: (codigoSeguridad || '').toUpperCase()
+            }
+        };
+    }
+
     AppFarmacia.Dominio = Object.freeze({
+        validarRnc,
+        parsearQrFacturaDgii,
         escaparHtml,
         sanitizarJsonSeguro,
         copiarAlPortapapeles,

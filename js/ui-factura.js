@@ -39,9 +39,77 @@
         return true;
     }
 
+    function actualizarDatalistProveedores() {
+        const dl = el('listaProveedoresSugeridos');
+        if (!dl) return;
+        const proveedores = Almacenamiento.obtenerDirectorioProveedores();
+        dl.innerHTML = proveedores.map(p => `<option value="${escaparHtml(p.nombre)}">${escaparHtml(p.rnc ? p.rnc + ' — ' : '')}${escaparHtml(p.razonSocial || '')}</option>`).join('');
+    }
+
+    function cargarDatosDesdeQrDgii(datos) {
+        if (!datos) return;
+        const Estado = AppFarmacia.Estado;
+        const sesionActual = Estado.sesionActual;
+
+        if (datos.encf) {
+            sesionActual.numeroFactura = datos.encf;
+            const inputNum = el('facNumero');
+            if (inputNum) inputNum.value = datos.encf;
+        }
+
+        if (datos.rncEmisor) {
+            sesionActual.rnc = datos.rncEmisor;
+            const inputRnc = el('facRnc');
+            if (inputRnc) inputRnc.value = datos.rncEmisor;
+
+            const provEncontrado = Almacenamiento.buscarProveedorPorRnc(datos.rncEmisor);
+            if (provEncontrado && provEncontrado.nombre) {
+                sesionActual.proveedor = provEncontrado.nombre;
+                const inputProv = el('facProveedor');
+                if (inputProv) inputProv.value = provEncontrado.nombre;
+            }
+        }
+
+        if (datos.montoTotal && datos.montoTotal > 0) {
+            sesionActual.totalFisico = datos.montoTotal;
+            const inputTotal = el('facTotalFisico');
+            if (inputTotal) inputTotal.value = datos.montoTotal.toFixed(2);
+        }
+
+        if (datos.fechaEmision) {
+            sesionActual.fechaEmision = datos.fechaEmision;
+            const inputFecha = el('facFechaEmision');
+            if (inputFecha) inputFecha.value = datos.fechaEmision;
+            if (!sesionActual.fechaVencimiento) {
+                sesionActual.fechaVencimiento = Dominio.sumarDiasAFechaISO(datos.fechaEmision, 30);
+                const inputVenc = el('facFechaVencimiento');
+                if (inputVenc) inputVenc.value = sesionActual.fechaVencimiento;
+            }
+        }
+
+        if (datos.codigoSeguridad) {
+            sesionActual.codigoSeguridad = datos.codigoSeguridad;
+        }
+
+        // Validación RncComprador vs RNC configurado de la farmacia
+        const config = Almacenamiento.obtenerReglasNegocio();
+        const rncFarmaciaPropia = config && config.rncFarmacia ? String(config.rncFarmacia).replace(/\D/g, '') : '';
+        if (rncFarmaciaPropia && datos.rncComprador && datos.rncComprador !== rncFarmaciaPropia) {
+            UI.Notificaciones.mostrarMensaje(`Precaución: El RNC Comprador (${datos.rncComprador}) no coincide con el RNC registrado de tu farmacia (${rncFarmaciaPropia}).`, 'warning');
+        } else {
+            UI.Notificaciones.mostrarMensaje(`Factura e-CF ${datos.encf || ''} cargada correctamente desde el QR DGII.`, 'success');
+        }
+
+        verificarDuplicadoUI();
+        Estado.sincronizarYGuardarSesion();
+        actualizarBarraSuperior();
+        UI.Calculadora.calcularEnVivo();
+    }
+
     function actualizarCabeceraFacturaDesdeUI() {
         const Estado = AppFarmacia.Estado;
         Estado.sesionActual.proveedor = el('facProveedor').value.trim();
+        if (el('facRnc')) Estado.sesionActual.rnc = el('facRnc').value.trim();
         Estado.sesionActual.numeroFactura = el('facNumero').value.trim();
         Estado.sesionActual.fechaEmision = el('facFechaEmision').value;
         if (!el('facFechaVencimiento').value && el('facFechaEmision').value) {
@@ -533,6 +601,14 @@
         else historial.unshift(facturaCerrada);
 
         const guardado = Almacenamiento.guardarHistorialFacturas(historial);
+
+        if (Estado.sesionActual.proveedor || Estado.sesionActual.rnc) {
+            Almacenamiento.guardarProveedorEnDirectorio({
+                nombre: Estado.sesionActual.proveedor,
+                rnc: Estado.sesionActual.rnc
+            });
+            actualizarDatalistProveedores();
+        }
         if (!guardado.exito) {
             return UI.Notificaciones.mostrarMensaje(guardado.error || 'Error al guardar la factura en el historial.', 'error');
         }
@@ -544,9 +620,47 @@
     function inicializarEventosFactura() {
         const Estado = AppFarmacia.Estado;
 
-        ['facProveedor', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento'].forEach(id => {
+        ['facProveedor', 'facRnc', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento'].forEach(id => {
             el(id).addEventListener('input', actualizarCabeceraFacturaDesdeUI);
         });
+
+                const inputProveedor = el('facProveedor');
+        const inputRnc = el('facRnc');
+
+        if (inputProveedor) {
+            inputProveedor.addEventListener('change', () => {
+                const nombre = inputProveedor.value.trim();
+                if (nombre) {
+                    const match = Almacenamiento.buscarProveedorPorNombre(nombre);
+                    if (match && match.rnc && inputRnc && !inputRnc.value) {
+                        inputRnc.value = match.rnc;
+                        Estado.sesionActual.rnc = match.rnc;
+                        Estado.sincronizarYGuardarSesion();
+                    }
+                }
+            });
+        }
+
+        if (inputRnc) {
+            inputRnc.addEventListener('blur', () => {
+                const rncVal = inputRnc.value.trim();
+                if (rncVal) {
+                    const res = Dominio.validarRnc(rncVal);
+                    if (!res.esValido && rncVal.length >= 9) {
+                        UI.Notificaciones.mostrarMensaje(res.motivo, 'warning');
+                    } else if (res.esValido && inputProveedor && !inputProveedor.value) {
+                        const match = Almacenamiento.buscarProveedorPorRnc(rncVal);
+                        if (match && match.nombre) {
+                            inputProveedor.value = match.nombre;
+                            Estado.sesionActual.proveedor = match.nombre;
+                            Estado.sincronizarYGuardarSesion();
+                        }
+                    }
+                }
+            });
+        }
+
+        actualizarDatalistProveedores();
 
         const inputEmision = el('facFechaEmision');
         if (inputEmision) {
@@ -607,6 +721,8 @@
     }
 
     UI.Factura = Object.freeze({
+        cargarDatosDesdeQrDgii,
+        actualizarDatalistProveedores,
         actualizarCabeceraFacturaDesdeUI,
         actualizarBarraSuperior,
         renderizarTablaProductosActuales,

@@ -20,7 +20,7 @@
     }
 
     function ejecutarSuitePruebas() {
-        console.group('🧪 Suite de Pruebas Automatizadas - Calculadora de Farmacia');
+        console.group('Suite de Pruebas Automatizadas - Calculadora de Farmacia');
 
         // 1. Validaciones básicas de entrada
         const valCajaUno = Dominio.validarCantidadEnteraPositiva('1', 'cajas');
@@ -195,6 +195,43 @@
 
         const vLongitudInvalida = Dominio.validarCodigoBarrasEstandar('12345');
         afirmarIgualdad(vLongitudInvalida.esValido, false, 'GS1: Rechaza longitud no estándar (5 dígitos)');
+
+
+        // 9. Validaciones de RNC dominicano (DGII Módulo 11 y Cédula Módulo 10)
+        const rncClaro = Dominio.validarRnc('101-00157-7');
+        afirmarIgualdad(rncClaro.esValido, true, 'RNC: Valida RNC jurídico 101-00157-7 con guiones');
+        afirmarIgualdad(rncClaro.tipo, 'RNC Jurídico (9 dígitos)', 'RNC: Identifica tipo jurídico');
+
+        const rncPopular = Dominio.validarRnc('101010632');
+        afirmarIgualdad(rncPopular.esValido, true, 'RNC: Valida RNC 101010632 (resto 0 -> esperado 2)');
+
+        const rncInvalido = Dominio.validarRnc('101001570');
+        afirmarIgualdad(rncInvalido.esValido, false, 'RNC: Detecta dígito verificador incorrecto');
+
+        const cedulaValida = Dominio.validarRnc('001-1645428-1');
+        afirmarIgualdad(cedulaValida.esValido, true, 'RNC: Valida Cédula / RNC físico 001-1645428-1');
+        afirmarIgualdad(cedulaValida.tipo, 'Cédula / RNC Físico (11 dígitos)', 'RNC: Identifica tipo físico');
+
+        const cedulaInvalida = Dominio.validarRnc('00116454289');
+        afirmarIgualdad(cedulaInvalida.esValido, false, 'RNC: Detecta cédula con dígito inválido');
+
+        // 10. Decodificador de QR de Factura Fiscal Electrónica DGII (e-CF)
+        const urlDgii = 'https://dgii.gov.do/ecf/ConsultaTimbre?RncEmisor=101001577&RncComprador=130000001&eNCF=E3100028491&FechaEmision=15-10-2024&MontoTotal=15840.50&CodigoSeguridad=A8F12C';
+        const parsedDgii = Dominio.parsearQrFacturaDgii(urlDgii);
+        afirmarIgualdad(parsedDgii.esValido, true, 'QR-DGII: Reconoce URL válida de ConsultaTimbre');
+        afirmarIgualdad(parsedDgii.esDgii, true, 'QR-DGII: Marca bandera esDgii');
+        afirmarIgualdad(parsedDgii.datos.encf, 'E3100028491', 'QR-DGII: Extrae e-NCF E3100028491');
+        afirmarIgualdad(parsedDgii.datos.rncEmisor, '101001577', 'QR-DGII: Extrae RNC Emisor');
+        afirmarIgualdad(parsedDgii.datos.fechaEmision, '2024-10-15', 'QR-DGII: Normaliza fecha a YYYY-MM-DD');
+        afirmarIgualdad(parsedDgii.datos.montoTotal, 15840.5, 'QR-DGII: Extrae total numérico');
+        afirmarIgualdad(parsedDgii.datos.codigoSeguridad, 'A8F12C', 'QR-DGII: Extrae timbre digital de seguridad');
+
+        const urlNoDgii = 'https://ejemplo.com/producto/12345';
+        const parsedNoDgii = Dominio.parsearQrFacturaDgii(urlNoDgii);
+        afirmarIgualdad(parsedNoDgii.esDgii, false, 'QR-DGII: Rechaza URL ajena a DGII');
+
+        const vacioDgii = Dominio.parsearQrFacturaDgii('');
+        afirmarIgualdad(vacioDgii.esValido, false, 'QR-DGII: Manejo resiliente de entrada vacía');
 
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();

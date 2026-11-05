@@ -49,6 +49,7 @@
             BORRADOR_ACTIVO: 'farmacia_borrador_activo',
             HISTORIAL_7DIAS: 'farmacia_historial_7dias',
             DICCIONARIO_CODIGOS: 'farmacia_diccionario_codigos_v1',
+            PROVEEDORES: 'farmacia_proveedores_v1',
             REGLAS_NEGOCIO: 'farmacia_reglas_calculo_v2',
             IA_API_KEY: 'farmacia_gemini_api_key', // Se almacena en sessionStorage por seguridad
             IA_MODELO: 'farmacia_gemini_modelo'

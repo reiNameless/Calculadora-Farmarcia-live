@@ -786,12 +786,14 @@
         configurarEscaneoCamara();
     }
 
-    // --- FASE 3: ESCÁNER DE CÓDIGOS DE BARRA CON CÁMARA NATIVA (BarcodeDetector) & PC (ZXing) ---
+    // --- FASE 3: ESCÁNER DE CÓDIGOS DE BARRA Y QR DGII CON CÁMARA (BarcodeDetector & ZXing) ---
     let streamCamaraActivo = null;
     let detectorIntervalo = null;
     let detectorCodigos = null;
     let zxingReader = null;
     let escaneoEnCurso = false;
+    let modoEscaneoActual = 'producto'; // 'producto' | 'factura'
+    let temporizadorTimeoutCamara = null;
 
     function emitirFeedbackEscaneo() {
         try {
@@ -819,21 +821,44 @@
         } catch (e) {}
     }
 
-    async function iniciarEscaneoCamara() {
+    async function iniciarEscaneoCamara(modo = 'producto') {
+        modoEscaneoActual = (modo === 'factura') ? 'factura' : 'producto';
         const modal = el('modalCamaraEscaneo');
         const video = el('videoCamaraEscaneo');
         const estadoTexto = el('camaraEstadoTexto');
+        const modalTitulo = el('modalCamaraTitulo');
 
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            UI.Notificaciones.mostrarMensaje('Tu dispositivo o navegador no admite acceso a la cámara.', 'error');
+        // 1. Verificación de entorno seguro (HTTPS o localhost)
+        if (typeof window !== 'undefined' && window.isSecureContext === false && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+            UI.Notificaciones.mostrarMensaje('El escaneo con cámara requiere una conexión segura (HTTPS o localhost). En red local HTTP, ingresa los datos manualmente o usa una pistola lectora USB.', 'warning');
             return;
+        }
+
+        // 2. Verificación de soporte de API MediaDevices
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            UI.Notificaciones.mostrarMensaje('Tu dispositivo o navegador no admite acceso a la cámara. Usa una pistola lectora o ingreso manual.', 'error');
+            return;
+        }
+
+        // 3. Verificación de cámaras físicas conectadas
+        if (typeof navigator.mediaDevices.enumerateDevices === 'function') {
+            try {
+                const dispositivos = await navigator.mediaDevices.enumerateDevices();
+                const tieneCamara = dispositivos.some(d => d.kind === 'videoinput');
+                if (dispositivos.length > 0 && !tieneCamara) {
+                    UI.Notificaciones.mostrarMensaje('No se detectó ninguna cámara de video conectada a este equipo. Ingresa los datos manualmente o usa una pistola lectora 2D.', 'warning');
+                    return;
+                }
+            } catch (e) {
+                // Continuar a getUserMedia si el navegador exige permiso previo para listar
+            }
         }
 
         const tieneBarcodeDetector = ('BarcodeDetector' in window);
         const tieneZXing = Boolean(global.ZXing && global.ZXing.BrowserMultiFormatReader);
 
         if (!tieneBarcodeDetector && !tieneZXing) {
-            UI.Notificaciones.mostrarMensaje('Tu navegador no admite detección por cámara. Usa una pistola lectora o escribe el código manualmente.', 'warning');
+            UI.Notificaciones.mostrarMensaje('Tu navegador no admite decodificación de códigos por cámara. Usa una pistola lectora o escribe el código manualmente.', 'warning');
             return;
         }
 
@@ -843,11 +868,58 @@
         try {
             escaneoEnCurso = true;
             if (modal) modal.showModal();
-            if (estadoTexto) estadoTexto.textContent = 'Iniciando cámara... Apunta al código de barras del medicamento.';
 
-            const procesarCodigoExitoso = (rawCode) => {
+            if (modalTitulo) {
+                modalTitulo.textContent = (modoEscaneoActual === 'factura')
+                    ? 'Escanear QR de Factura DGII'
+                    : 'Escanear Código con Cámara';
+            }
+
+            if (estadoTexto) {
+                estadoTexto.textContent = (modoEscaneoActual === 'factura')
+                    ? 'Iniciando cámara... Apunta al recuadro QR impreso en la factura fiscal (e-CF).'
+                    : 'Iniciando cámara... Apunta al código de barras del medicamento.';
+            }
+
+            // Temporizador de inactividad preventiva: 45 segundos
+            if (temporizadorTimeoutCamara) clearTimeout(temporizadorTimeoutCamara);
+            temporizadorTimeoutCamara = setTimeout(() => {
+                if (escaneoEnCurso) {
+                    detenerEscaneoCamara();
+                    UI.Notificaciones.mostrarMensaje('Tiempo de escaneo agotado (45 segundos). Puedes reintentar o ingresar los datos mediante el teclado.', 'info');
+                }
+            }, 45000);
+
+            const procesarCodigoDetectado = (rawCode) => {
                 if (!escaneoEnCurso) return;
-                const codigoNormalizado = Dominio.normalizarCodigoBarras(rawCode);
+                const textoLimpio = String(rawCode || '').trim();
+                if (!textoLimpio) return;
+
+                if (modoEscaneoActual === 'factura') {
+                    const resDgii = Dominio.parsearQrFacturaDgii(textoLimpio);
+                    if (resDgii.esDgii && resDgii.esValido) {
+                        detenerEscaneoCamara();
+                        emitirFeedbackEscaneo();
+                        UI.Factura.cargarDatosDesdeQrDgii(resDgii.datos);
+                    } else {
+                        if (estadoTexto) {
+                            estadoTexto.textContent = 'El código enfocado no es un comprobante fiscal DGII válido. Mantén enfocado el QR de la factura.';
+                        }
+                    }
+                    return;
+                }
+
+                // Modo Producto
+                const checkDgii = Dominio.parsearQrFacturaDgii(textoLimpio);
+                if (checkDgii.esDgii && checkDgii.esValido) {
+                    detenerEscaneoCamara();
+                    emitirFeedbackEscaneo();
+                    UI.Factura.cargarDatosDesdeQrDgii(checkDgii.datos);
+                    UI.Notificaciones.mostrarMensaje('Se detectó un QR de factura fiscal DGII. Datos aplicados a la factura en curso.', 'info');
+                    return;
+                }
+
+                const codigoNormalizado = Dominio.normalizarCodigoBarras(textoLimpio);
                 const val = Dominio.validarCodigoBarrasEstandar(codigoNormalizado);
 
                 if (val.esValido) {
@@ -861,7 +933,7 @@
                 }
             };
 
-            // Solicitud de MediaStream con degradación elegante si la cámara no soporta resolución o facingMode
+            // Solicitud de MediaStream con degradación elegante
             let stream = null;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({
@@ -873,14 +945,13 @@
                     audio: false
                 });
             } catch (errConstraints) {
-                // Fallback para webcams genéricas o terminales POS
+                // Fallback para webcams genéricas de PC o terminales POS
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: true,
                     audio: false
                 });
             }
 
-            // Si el usuario canceló mientras se otorgaban permisos:
             if (!escaneoEnCurso) {
                 if (stream && typeof stream.getTracks === 'function') {
                     stream.getTracks().forEach(t => {
@@ -894,11 +965,10 @@
             streamCamaraActivo = stream;
 
             if (tieneBarcodeDetector) {
-                // Modo Nativo (Android / Chromium con flag)
                 if (!detectorCodigos) {
                     const formatosSoportados = await BarcodeDetector.getSupportedFormats();
-                    const formatosDeseados = ['ean_13', 'upc_a', 'ean_8', 'itf'].filter(f => formatosSoportados.includes(f));
-                    detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a'] });
+                    const formatosDeseados = ['ean_13', 'upc_a', 'ean_8', 'itf', 'qr_code'].filter(f => formatosSoportados.includes(f));
+                    detectorCodigos = new BarcodeDetector({ formats: formatosDeseados.length > 0 ? formatosDeseados : ['ean_13', 'upc_a', 'qr_code'] });
                 }
 
                 if (video) {
@@ -906,7 +976,11 @@
                     await video.play();
                 }
 
-                if (estadoTexto) estadoTexto.textContent = 'Buscando código (EAN-13, UPC-A, EAN-8)... Mantén el código centrado.';
+                if (estadoTexto) {
+                    estadoTexto.textContent = (modoEscaneoActual === 'factura')
+                        ? 'Buscando QR de Factura DGII... Centra el recuadro QR en la guía.'
+                        : 'Buscando código (EAN-13, UPC-A, EAN-8)... Mantén el código centrado.';
+                }
 
                 let detectando = false;
                 detectorIntervalo = setInterval(async () => {
@@ -915,7 +989,7 @@
                     try {
                         const codigos = await detectorCodigos.detect(video);
                         if (codigos && codigos.length > 0) {
-                            procesarCodigoExitoso(codigos[0].rawValue);
+                            procesarCodigoDetectado(codigos[0].rawValue);
                         }
                     } catch (err) {
                         // Silencioso entre cuadros
@@ -925,17 +999,20 @@
                 }, 120);
 
             } else if (tieneZXing) {
-                // Modo Universal PC vía ZXing conectado a nuestro stream explícito
                 if (!zxingReader) {
                     zxingReader = new global.ZXing.BrowserMultiFormatReader();
                 }
 
-                if (estadoTexto) estadoTexto.textContent = 'Cámara web activa en PC... Enfoca el código de barras.';
+                if (estadoTexto) {
+                    estadoTexto.textContent = (modoEscaneoActual === 'factura')
+                        ? 'Cámara web activa en PC... Enfoca el QR de la factura fiscal.'
+                        : 'Cámara web activa en PC... Enfoca el código de barras.';
+                }
 
                 zxingReader.decodeFromStream(streamCamaraActivo, video, (result, err) => {
                     if (!escaneoEnCurso) return;
                     if (result && result.getText()) {
-                        procesarCodigoExitoso(result.getText());
+                        procesarCodigoDetectado(result.getText());
                     }
                 }).catch(err => {
                     if (escaneoEnCurso) {
@@ -949,12 +1026,28 @@
         } catch (err) {
             detenerEscaneoCamara();
             console.warn('Error accediendo a la cámara:', err);
-            UI.Notificaciones.mostrarMensaje('No se pudo abrir la cámara. Verifica los permisos del navegador.', 'error');
+            const nombreError = err?.name || '';
+            if (nombreError === 'NotAllowedError' || nombreError === 'PermissionDeniedError') {
+                UI.Notificaciones.mostrarMensaje('Acceso a la cámara bloqueado. Permite el permiso de video en el icono de candado de tu navegador para usar el escáner.', 'error');
+            } else if (nombreError === 'NotFoundError' || nombreError === 'DevicesNotFoundError') {
+                UI.Notificaciones.mostrarMensaje('No se detectó ninguna cámara disponible en este equipo.', 'warning');
+            } else if (nombreError === 'NotReadableError' || nombreError === 'TrackStartError') {
+                UI.Notificaciones.mostrarMensaje('La cámara está en uso por otra aplicación o pestaña. Ciérrala para continuar.', 'error');
+            } else if (nombreError === 'SecurityError') {
+                UI.Notificaciones.mostrarMensaje('El navegador bloqueó la cámara por políticas de seguridad (requiere HTTPS o localhost).', 'error');
+            } else {
+                UI.Notificaciones.mostrarMensaje('No se pudo acceder a la cámara (' + (err.message || 'error de dispositivo') + ').', 'error');
+            }
         }
     }
 
     function detenerEscaneoCamara() {
         escaneoEnCurso = false;
+
+        if (temporizadorTimeoutCamara) {
+            clearTimeout(temporizadorTimeoutCamara);
+            temporizadorTimeoutCamara = null;
+        }
 
         // 1. Detener intervalo de detección nativa
         if (detectorIntervalo) {
@@ -1035,7 +1128,12 @@
     function configurarEscaneoCamara() {
         const btnEscanear = el('btnEscanearCamara');
         if (btnEscanear) {
-            btnEscanear.addEventListener('click', iniciarEscaneoCamara);
+            btnEscanear.addEventListener('click', () => iniciarEscaneoCamara('producto'));
+        }
+
+        const btnQrFactura = el('btnEscanearQrFactura');
+        if (btnQrFactura) {
+            btnQrFactura.addEventListener('click', () => iniciarEscaneoCamara('factura'));
         }
 
         const btnCerrar = el('btnCerrarModalCamara');
@@ -1066,6 +1164,23 @@
             modal.addEventListener('click', e => {
                 if (e.target === modal) {
                     detenerEscaneoCamara();
+                }
+            });
+        }
+
+        // Intercepción inteligente para pistolas lectoras 2D USB (escaneo directo a inputs)
+        if (typeof document !== 'undefined') {
+            document.addEventListener('input', e => {
+                const target = e.target;
+                if (!target || typeof target.value !== 'string') return;
+                const val = target.value.trim();
+                if (val.length > 20 && (val.includes('ConsultaTimbre') || val.includes('eNCF='))) {
+                    const parsed = Dominio.parsearQrFacturaDgii(val);
+                    if (parsed.esDgii && parsed.esValido) {
+                        target.value = '';
+                        emitirFeedbackEscaneo();
+                        UI.Factura.cargarDatosDesdeQrDgii(parsed.datos);
+                    }
                 }
             });
         }

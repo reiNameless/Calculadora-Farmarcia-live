@@ -320,14 +320,25 @@
                 <div id="alertaFacturaDuplicada" class="alert-banner alert-warning" style="display:none;margin-top:4px;"></div>
 
                 <!-- TODOS LOS CAMPOS DE LA FACTURA: PROVEEDOR, NÚMERO, TOTAL PAPEL, FECHA EMISIÓN, FECHA VENCIMIENTO -->
-                <div class="factura-campos-grid">
+                                <div class="factura-campos-grid">
                     <div class="campo">
                         <label class="campo-label">Proveedor / Lab. *</label>
-                        <input type="text" class="input-control" id="facProveedor" placeholder="Ej. Rowe / Ethical">
+                        <input type="text" class="input-control" id="facProveedor" placeholder="Ej. Rowe / Ethical" list="listaProveedoresSugeridos">
+                        <datalist id="listaProveedoresSugeridos"></datalist>
                     </div>
                     <div class="campo">
-                        <label class="campo-label">Factura # *</label>
-                        <input type="text" class="input-control" id="facNumero" placeholder="Ej. 004582">
+                        <label class="campo-label">RNC Proveedor (Opc.)</label>
+                        <input type="text" class="input-control input-mono" id="facRnc" placeholder="Ej. 101023456" maxlength="11" inputmode="numeric">
+                    </div>
+                    <div class="campo">
+                        <label class="campo-label">Factura # / e-NCF *</label>
+                        <div style="display:flex;gap:var(--espacio-1);">
+                            <input type="text" class="input-control input-mono" id="facNumero" placeholder="Ej. E3100028491 o 004582" style="flex:1;min-width:0;">
+                            <button type="button" class="btn-icono" id="btnEscanearQrFactura" title="Escanear QR de Factura DGII con Cámara" aria-label="Escanear QR de Factura DGII con Cámara" style="flex-shrink:0;height:40px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border-color:var(--color-borde-fuerte);">
+                                <svg class="ico"><use href="#i-camera"/></svg>
+                                <span style="font-size:11px;font-weight:600;">QR</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="campo">
                         <label class="campo-label">Total en Papel ($) *</label>
@@ -766,7 +777,7 @@
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:var(--texto-base);">
                     <svg class="ico"><use href="#i-camera"/></svg>
-                    <span>Escanear Código con Cámara</span>
+                    <span id="modalCamaraTitulo">Escanear Código con Cámara</span>
                 </div>
                 <button type="button" class="btn-icono" id="btnCerrarModalCamara" onclick="if(window.UI && UI.Calculadora && UI.Calculadora.detenerEscaneoCamara){UI.Calculadora.detenerEscaneoCamara();}else{document.getElementById('modalCamaraEscaneo').close();}" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
                     <svg class="ico"><use href="#i-close"/></svg>

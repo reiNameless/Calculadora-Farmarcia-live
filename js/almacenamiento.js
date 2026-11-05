@@ -537,7 +537,76 @@
         };
     }
 
+
+    // --- DIRECTORIO DE PROVEEDORES Y LABORATORIOS (RD) ---
+    const PROVEEDORES_SEMILLA = Object.freeze([
+        { rnc: '101023456', nombre: 'Droguería Betances', razonSocial: 'Droguería Betances, S.A.S.' },
+        { rnc: '101012345', nombre: 'Droguería Farach', razonSocial: 'Droguería Farach, S.A.' },
+        { rnc: '101098765', nombre: 'Laboratorios Rowe', razonSocial: 'Laboratorios Rowe, S.R.L.' },
+        { rnc: '101054321', nombre: 'Ethical Farmacéutica', razonSocial: 'Ethical Farmacéutica, S.A.' },
+        { rnc: '130123456', nombre: 'Suiphar Dominicana', razonSocial: 'Suiphar de la República Dominicana, S.R.L.' },
+        { rnc: '101045678', nombre: 'Alfa Farmacéutica', razonSocial: 'Laboratorios Alfa, S.R.L.' }
+    ]);
+
+    function obtenerDirectorioProveedores() {
+        const guardados = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, null);
+        if (Array.isArray(guardados) && guardados.length > 0) {
+            return guardados;
+        }
+        return [...PROVEEDORES_SEMILLA];
+    }
+
+    function guardarProveedorEnDirectorio(proveedor) {
+        if (!proveedor || (!proveedor.rnc && !proveedor.nombre)) return false;
+        const directorio = obtenerDirectorioProveedores();
+        const rncLimpio = String(proveedor.rnc || '').replace(/\D/g, '');
+        const nombreLimpio = String(proveedor.nombre || proveedor.razonSocial || '').trim();
+
+        const idx = directorio.findIndex(p => {
+            const rncP = String(p.rnc || '').replace(/\D/g, '');
+            const nomP = String(p.nombre || p.razonSocial || '').toLowerCase().trim();
+            return (rncLimpio && rncP === rncLimpio) || (nombreLimpio && nomP === nombreLimpio.toLowerCase());
+        });
+
+        const registro = {
+            rnc: rncLimpio || (idx >= 0 ? directorio[idx].rnc : ''),
+            nombre: nombreLimpio || (idx >= 0 ? directorio[idx].nombre : ''),
+            razonSocial: String(proveedor.razonSocial || proveedor.nombre || (idx >= 0 ? directorio[idx].razonSocial : '')).trim(),
+            actualizadoEn: new Date().toISOString()
+        };
+
+        if (idx >= 0) {
+            directorio[idx] = { ...directorio[idx], ...registro };
+        } else {
+            directorio.push(registro);
+        }
+
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
+        return true;
+    }
+
+    function buscarProveedorPorRnc(rncCrudo) {
+        const rnc = String(rncCrudo || '').replace(/\D/g, '');
+        if (!rnc) return null;
+        const directorio = obtenerDirectorioProveedores();
+        return directorio.find(p => String(p.rnc || '').replace(/\D/g, '') === rnc) || null;
+    }
+
+    function buscarProveedorPorNombre(nombreCrudo) {
+        const termino = String(nombreCrudo || '').toLowerCase().trim();
+        if (!termino) return null;
+        const directorio = obtenerDirectorioProveedores();
+        return directorio.find(p =>
+            String(p.nombre || '').toLowerCase().trim() === termino ||
+            String(p.razonSocial || '').toLowerCase().trim() === termino
+        ) || null;
+    }
+
     AppFarmacia.Almacenamiento = Object.freeze({
+        obtenerDirectorioProveedores,
+        guardarProveedorEnDirectorio,
+        buscarProveedorPorRnc,
+        buscarProveedorPorNombre,
         leerJsonSeguro,
         escribirJsonSeguro,
         invalidarCacheStorage,

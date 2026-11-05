@@ -70,6 +70,8 @@
             sesionActual.fechaVencimiento = Dominio.sumarDiasAFechaISO(sesionActual.fechaEmision, 30);
         }
         el('facProveedor').value = sesionActual.proveedor;
+        if (el('facRnc')) el('facRnc').value = sesionActual.rnc || '';
+        UI.Factura.actualizarDatalistProveedores?.();
         el('facNumero').value = sesionActual.numeroFactura;
         el('facFechaEmision').value = sesionActual.fechaEmision;
         el('facFechaVencimiento').value = sesionActual.fechaVencimiento;

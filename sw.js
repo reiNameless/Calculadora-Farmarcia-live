@@ -1,10 +1,11 @@
 // Service Worker para Calculadora de Farmacia PWA (CAL-03)
-const CACHE_NAME = 'farmacia-pwa-v18';
+const CACHE_NAME = 'farmacia-pwa-v19';
 
 const ARCHIVOS_ESTATICOS = [
     './',
     './index.html',
     './manifest.json',
+    './catalogo_rd_inicial.json',
     './css/estilos.css',
     './js/zxing.min.js',
     './js/configuracion.js',

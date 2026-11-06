@@ -173,13 +173,26 @@
 
             renderizarTodo();
 
+            // Resguardo contra condiciones de carrera durante la hidratación asíncrona de IndexedDB
+            let interaccionUsuarioIniciada = false;
+            const marcarInteraccion = () => { interaccionUsuarioIniciada = true; };
+            window.addEventListener('input', marcarInteraccion, { once: true, passive: true });
+            window.addEventListener('click', marcarInteraccion, { once: true, passive: true });
+
             // Inicializar persistencia asíncrona con IndexedDB
             Almacenamiento.inicializarPersistencia().then(seActualizaronDatos => {
                 if (seActualizaronDatos) {
-                    sesionActual = Almacenamiento.cargarBorradorActivo();
-                    reglasActivas = Almacenamiento.obtenerReglasNegocio();
-                    renderizarTodo();
-                    UI.Calculadora.calcularEnVivo();
+                    if (!interaccionUsuarioIniciada) {
+                        sesionActual = Almacenamiento.cargarBorradorActivo();
+                        reglasActivas = Almacenamiento.obtenerReglasNegocio();
+                        renderizarTodo();
+                        UI.Calculadora.calcularEnVivo();
+                    } else {
+                        // Preservar la sesión activa del usuario para evitar sobreescritura por carrera
+                        reglasActivas = Almacenamiento.obtenerReglasNegocio();
+                        UI.Diccionario.renderizarDiccionarioUI();
+                        UI.Historial.renderizarHistorialUI();
+                    }
                 }
             }).catch(err => {
                 console.warn('[Almacenamiento] Error inicializando persistencia IndexedDB:', err);

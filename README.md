@@ -52,7 +52,7 @@ Calculadora-Farmacia/
 │
 ├── index.html              # Estructura semántica, accesibilidad y modales HTML5
 ├── manifest.json           # Manifiesto PWA para instalación en Android/iOS/PC
-├── sw.js                   # Service Worker para funcionamiento 100% offline (Caché v10)
+├── sw.js                   # Service Worker para funcionamiento 100% offline (Caché v19)
 ├── robots.txt              # Configuración para motores de búsqueda
 ├── LICENSE                 # Licencia propietaria (All Rights Reserved)
 ├── SECURITY.md             # Política de seguridad y privacidad
@@ -69,12 +69,17 @@ Calculadora-Farmacia/
 │
 ├── css/
 │   └── estilos.css         # Paleta Ultra-Dark, diseño responsivo y estilos de impresión
+├── docs/
+│   └── Project_State.md    # Fuente de verdad técnica y estado del proyecto
+├── catalogo_rd_inicial.json# Catálogo semilla dominicano (77 medicamentos y productos)
 │
 └── js/
     ├── configuracion.js    # Constantes globales, claves de almacenamiento y perfiles
     ├── dominio.js          # Lógica pura de cálculo (Strategy Pattern), algoritmo GS1 y fechas
-    ├── almacenamiento.js   # Persistencia en localStorage, caché en memoria y respaldos JSON
+    ├── almacenamiento.js   # Persistencia en localStorage, IndexedDB y respaldos JSON
     ├── servicio-ia.js      # Conexión con Google Gemini API
+    ├── servicio-catalogo.js# Consulta inteligente a bases de datos de productos
+    ├── zxing.min.js        # Decodificador universal cliente de códigos de barra y QR
     │
     ├── ui-notificaciones.js# Alertas toast accesibles y diálogos modales
     ├── ui-calculadora.js   # Cockpit de cálculo en vivo, atajos de teclado y escáner GS1

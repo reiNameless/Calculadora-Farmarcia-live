@@ -58,8 +58,16 @@
     function redondearDecimalExacto(numero, cantidadDecimales) {
         const valorNumerico = Number(numero);
         if (!Number.isFinite(valorNumerico)) return 0;
-        const factor = Math.pow(10, cantidadDecimales);
-        return Math.round((valorNumerico + Number.EPSILON) * factor) / factor;
+        const dec = Math.max(0, Math.min(20, Math.floor(cantidadDecimales || 0)));
+        const signo = valorNumerico < 0 ? -1 : 1;
+        const valorAbsoluto = Math.abs(valorNumerico);
+        if (dec === 0) return signo * Math.round(valorAbsoluto);
+        // Notación exponencial exacta en base 10 para neutralizar sesgo de coma flotante IEEE 754
+        const partes = String(valorAbsoluto).split('e');
+        const valorAlineado = Number(partes[0] + 'e' + (partes[1] ? Number(partes[1]) + dec : dec));
+        const redondeado = Math.round(valorAlineado);
+        const partesRedondeadas = String(redondeado).split('e');
+        return signo * Number(partesRedondeadas[0] + 'e' + (partesRedondeadas[1] ? Number(partesRedondeadas[1]) - dec : -dec));
     }
 
     const formateadorMoneda = (typeof Intl !== 'undefined' && Intl.NumberFormat)

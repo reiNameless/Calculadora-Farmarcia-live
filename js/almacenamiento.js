@@ -130,6 +130,39 @@
         }
     }
 
+    // --- SEMBRADO AUTOMÁTICO DE CATÁLOGO INICIAL DOMINICANO ---
+    async function sembrarCatalogoInicial(forzar = false) {
+        try {
+            const dicActual = obtenerDiccionarioCodigos();
+            const totalActual = Object.keys(dicActual || {}).length;
+            if (!forzar && totalActual > 0) {
+                return { sembrado: false, motivo: "Diccionario ya contiene productos.", totalProductos: totalActual };
+            }
+            if (typeof fetch !== "function") {
+                return { sembrado: false, motivo: "Entorno sin soporte de fetch.", totalProductos: 0 };
+            }
+            const respuesta = await fetch("./catalogo_rd_inicial.json");
+            if (!respuesta.ok) {
+                return { sembrado: false, motivo: "HTTP " + respuesta.status + " al leer catalogo_rd_inicial.json", totalProductos: 0 };
+            }
+            const contenido = await respuesta.json();
+            if (!contenido || !contenido.diccionario || typeof contenido.diccionario !== "object") {
+                return { sembrado: false, motivo: "Estructura inválida en archivo de catálogo.", totalProductos: 0 };
+            }
+            const dicSemilla = Dominio.sanitizarJsonSeguro(contenido.diccionario);
+            const totalSemilla = Object.keys(dicSemilla).length;
+            if (totalSemilla === 0) {
+                return { sembrado: false, motivo: "Catálogo semilla sin productos.", totalProductos: 0 };
+            }
+            const dicFinal = forzar ? dicSemilla : { ...dicSemilla, ...dicActual };
+            guardarDiccionarioCodigos(dicFinal);
+            console.info("[Almacenamiento] Catálogo dominicano sembrado con éxito: " + totalSemilla + " productos.");
+            return { sembrado: true, totalProductos: Object.keys(dicFinal).length, totalSemilla };
+        } catch (error) {
+            console.warn("[Almacenamiento] Error durante sembrado de catálogo:", error.message);
+            return { sembrado: false, error: error.message, totalProductos: 0 };
+        }
+    }
     // --- INICIALIZACIÓN ASÍNCRONA Y MIGRACIÓN AUTOMÁTICA ---
     async function inicializarPersistencia() {
         const db = await abrirBaseDatos();
@@ -167,7 +200,12 @@
 
                         txMigrar.oncomplete = () => {
                             console.info('[IndexedDB] Migración transparente completada.');
-                            resolve(false);
+                            const tieneDicPrevio = Object.keys(dicPrevio || {}).length > 0;
+                            if (!tieneDicPrevio) {
+                                sembrarCatalogoInicial(false).then(res => resolve(res.sembrado)).catch(() => resolve(false));
+                            } else {
+                                resolve(false);
+                            }
                         };
                         txMigrar.onerror = () => resolve(false);
                     } else {
@@ -611,6 +649,7 @@
         escribirJsonSeguro,
         invalidarCacheStorage,
         inicializarPersistencia,
+        sembrarCatalogoInicial,
         obtenerReglasNegocio,
         guardarReglasNegocio,
         obtenerDiccionarioCodigos,

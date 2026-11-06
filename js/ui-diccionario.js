@@ -165,6 +165,26 @@
     }
 
     function inicializarEventosDiccionario() {
+        const btnSembrar = el('btnSembrarCatalogoRd');
+        if (btnSembrar) {
+            btnSembrar.addEventListener('click', async () => {
+                const confirmar = await UI.Notificaciones.mostrarConfirmacion(
+                    '¿Deseas precargar el catálogo oficial dominicano con 77 medicamentos y productos esenciales? Se preservarán los productos que ya tengas registrados.',
+                    'Sembrar Catálogo Dominicano'
+                );
+                if (confirmar) {
+                    const res = await Almacenamiento.sembrarCatalogoInicial(false);
+                    if (res.sembrado) {
+                        renderizarDiccionarioUI();
+                        UI.Factura.actualizarBarraSuperior();
+                        UI.Notificaciones.mostrarMensaje('¡Catálogo dominicano precargado con éxito (' + res.totalProductos + ' productos disponibles)!', 'success');
+                    } else {
+                        UI.Notificaciones.mostrarMensaje(res.motivo || res.error || 'El catálogo ya está actualizado.', 'info');
+                    }
+                }
+            });
+        }
+
         el('btnDescargarDiccionario').addEventListener('click', descargarDiccionarioJson);
         el('inputRestaurarDiccionario').addEventListener('change', e => restaurarDiccionarioJson(e.target));
 

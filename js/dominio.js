@@ -673,8 +673,43 @@
         };
     }
 
+    // --- SINTETIZADOR DE TONOS WEB AUDIO API PARA LECTURAS GS1 (CERO DEPENDENCIAS) ---
+    function emitirBip(frecuencia = 880, duracionMs = 80, tipo = "sine") {
+        try {
+            if (typeof window === "undefined") return;
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = tipo;
+            osc.frequency.setValueAtTime(frecuencia, ctx.currentTime);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (duracionMs / 1000));
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + (duracionMs / 1000));
+            setTimeout(() => { ctx.close().catch(() => {}); }, duracionMs + 100);
+        } catch (_) {}
+    }
+
+    function emitirBipExito() {
+        emitirBip(880, 80, "sine");
+    }
+
+    function emitirBipError() {
+        emitirBip(240, 100, "sawtooth");
+        setTimeout(() => emitirBip(180, 140, "sawtooth"), 120);
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+            try { navigator.vibrate([80, 60, 80]); } catch (_) {}
+        }
+    }
+
     AppFarmacia.Dominio = Object.freeze({
         validarRnc,
+        emitirBipExito,
+        emitirBipError,
         parsearQrFacturaDgii,
         escaparHtml,
         sanitizarJsonSeguro,

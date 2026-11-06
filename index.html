@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Calculadora de Farmacia y Cockpit de Operaciones Local-First con cálculo fiscal dominicano a 8 decimales, validación GS1 y comprobantes DGII.">
+    <meta name="author" content="Croniris / reiNameless">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="light dark">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com;">
@@ -54,6 +56,8 @@
             <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2" fill="none"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/></symbol>
             <symbol id="i-menu" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
             <symbol id="i-close" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+            <symbol id="i-kbd" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><line x1="6" y1="8" x2="6" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="8" x2="18" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="12" x2="10" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="12" x2="18" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="16" x2="17" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+            <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/><line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2"/></symbol>
         </defs>
     </svg>
 <div class="contenedor">
@@ -88,6 +92,11 @@
                 </span>
             </div>
             <div style="display:flex;gap:var(--espacio-2);align-items:center;">
+                <!-- BOTÓN PARA ATAJOS DE TECLADO Y AYUDA -->
+                <button type="button" class="btn-header" id="btnModalAtajos" title="Atajos de Teclado y Ayuda (F1)">
+                    <svg class="ico"><use href="#i-kbd"/></svg>
+                    <span>Atajos (F1)</span>
+                </button>
                 <!-- BOTÓN PARA CAMBIAR AL MODO ULTRA-DARK CON ICONO SVG -->
                 <button class="btn-header" id="btnToggleTema">
                     <svg class="ico" id="svgIconoTema"><use href="#i-moon"/></svg>
@@ -102,6 +111,8 @@
 
         <div id="notificacionGlobal" class="alert-banner" role="alert" aria-live="polite" style="display:none;margin-bottom:var(--espacio-2);"></div>
 
+        <!-- CONTENIDO PRINCIPAL DE OPERACIONES (MAIN LANDMARK SEMÁNTICO) -->
+        <main id="contenidoPrincipal">
         <!-- NIVEL 1: PRIMER PANTALLAZO (Calculadora + Precios en Vivo sin scroll) -->
         <section class="grid-operativo" id="seccionCalculadora">
             
@@ -524,6 +535,36 @@
             </div>
 
         </section>
+        </main>
+
+        <!-- PIE DE PÁGINA SEMÁNTICO Y LEGAL (CRONIRIS OS) -->
+        <footer class="pie-pagina-farmacia" role="contentinfo">
+            <div class="footer-contenido">
+                <div class="footer-col-info">
+                    <div class="footer-marca">
+                        <svg class="ico"><use href="#i-calc"/></svg>
+                        <span>Calculadora de Farmacia</span>
+                        <span class="badge-version">v19 • Local-First</span>
+                    </div>
+                    <p class="footer-desc">
+                        Cockpit de recepción rápida de mercancía, cálculo fiscal de costos a 8 decimales, determinación de precios P1, P2 y P3, cuadre de facturas y memorización GS1.
+                    </p>
+                    <p class="footer-legal">
+                        &copy; 2026 <strong>Croniris</strong>. Desarrollado por <strong>reiNameless</strong>. Todos los derechos reservados. Cumplimiento fiscal República Dominicana (DGII Art. 343).
+                    </p>
+                </div>
+                <div class="footer-col-acciones">
+                    <button type="button" class="btn-footer" id="btnAtajosFooter" title="Ver catálogo de atajos de teclado">
+                        <svg class="ico ico-sm"><use href="#i-kbd"/></svg>
+                        <span>Atajos de Teclado (F1)</span>
+                    </button>
+                    <button type="button" class="btn-footer" id="btnAcercaDeFooter" title="Información del sistema y normativa fiscal">
+                        <svg class="ico ico-sm"><use href="#i-info"/></svg>
+                        <span>Acerca de Croniris</span>
+                    </button>
+                </div>
+            </div>
+        </footer>
 
         <!-- BÓVEDA DE LA FARMACIA: PANEL LATERAL DESLIZABLE (HISTORIAL Y FÓRMULAS) -->
         <div id="drawerBackdrop" class="drawer-backdrop"></div>
@@ -765,6 +806,68 @@
             <button class="nav-btn" data-ir="seccionHistorial"></button>
             <button type="button" class="nav-btn" id="btnInstalarPwa"></button>
         </nav>
+
+        <!-- Modal Accesible: Atajos de Teclado e Información del Sistema (Croniris) -->
+        <dialog id="modalAtajosAyuda" class="farmacia-modal" style="max-width:620px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
+                    <svg class="ico"><use href="#i-kbd"/></svg>
+                    <span>Atajos de Teclado y Operación de Mostrador</span>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarModalAtajos" style="border:none;padding:6px;cursor:pointer;" title="Cerrar ventana">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" style="font-size:13px;line-height:1.5;">
+                <p style="margin:0 0 10px 0;color:var(--color-texto-secundario);">
+                    Optimiza tu velocidad en mostrador y almacén sin necesidad de usar el ratón:
+                </p>
+                <div class="shortcuts-grid">
+                    <div class="shortcut-card">
+                        <span class="shortcut-kbd">F1 / ?</span>
+                        <div><strong>Ayuda / Atajos</strong><br><span class="fs-xs text-muted">Abre esta ventana de referencia</span></div>
+                    </div>
+                    <div class="shortcut-card">
+                        <span class="shortcut-kbd">F2</span>
+                        <div><strong>Escanear Código</strong><br><span class="fs-xs text-muted">Enfoca casilla de código de barras</span></div>
+                    </div>
+                    <div class="shortcut-card">
+                        <span class="shortcut-kbd">F4</span>
+                        <div><strong>Cámara Escáner</strong><br><span class="fs-xs text-muted">Abre escaneo visual con webcam</span></div>
+                    </div>
+                    <div class="shortcut-card">
+                        <span class="shortcut-kbd">Enter</span>
+                        <div><strong>Flujo Secuencial</strong><br><span class="fs-xs text-muted">Avanza: Código &rarr; Cajas &rarr; Costo &rarr; Agregar</span></div>
+                    </div>
+                    <div class="shortcut-card">
+                        <span class="shortcut-kbd">Espacio</span>
+                        <div><strong>Dividido / Entero</strong><br><span class="fs-xs text-muted">Alterna venta pastillas vs jarabe</span></div>
+                    </div>
+                    <div class="shortcut-card">
+                        <span class="shortcut-kbd">Esc</span>
+                        <div><strong>Cerrar / Cancelar</strong><br><span class="fs-xs text-muted">Cierra modales y paneles activos</span></div>
+                    </div>
+                </div>
+                <div style="margin-top:14px;padding:12px;border-radius:var(--radio-sm);background:var(--color-superficie-resaltada);border:1px solid var(--color-borde);">
+                    <div style="font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                        <svg class="ico ico-sm"><use href="#i-info"/></svg>
+                        <span>Normativa Fiscal RD (DGII) & Estándar GS1</span>
+                    </div>
+                    <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--color-texto-secundario);">
+                        <li><strong>Medicamentos Humanos:</strong> 100% Exentos de ITBIS (Tasa 0% - Art. 343 Código Tributario).</li>
+                        <li><strong>Productos de Higiene / Cuidado:</strong> Gravados con ITBIS general del 18% (o 16% en lácteos específicos).</li>
+                        <li><strong>Leches Infantiles:</strong> Política comercial sugerida del 10% de ganancia directa sobre costo.</li>
+                        <li><strong>Códigos Soportados:</strong> EAN-13 (prefijo RD 746), UPC-A (12 dígitos), EAN-8 e ITF-14.</li>
+                    </ul>
+                </div>
+                <div style="margin-top:12px;font-size:11px;color:var(--color-texto-desactivado);text-align:center;">
+                    Sistema <strong>Croniris OS</strong> • Creado por <strong>reiNameless</strong> • Cero dependencias externas.
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top:var(--espacio-3);justify-content:flex-end;">
+                <button type="button" class="btn-primario" id="btnCerrarAtajosFooter">Entendido</button>
+            </div>
+        </dialog>
 
         <!-- Diálogos Modales Nativos Accesibles (UX-01) -->
         <dialog id="modalConfirmacion" class="farmacia-modal">

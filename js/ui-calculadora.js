@@ -193,11 +193,13 @@
         // Validación según estándar oficial GS1 (EAN-13, UPC-A, EAN-8, ITF-14)
         const valEstandar = Dominio.validarCodigoBarrasEstandar(codigo);
         if (!valEstandar.esValido) {
+            Dominio.emitirBipError?.();
             if (mostrarNotificacion) {
                 UI.Notificaciones.mostrarMensaje(valEstandar.error, 'error');
             }
             return;
         }
+        Dominio.emitirBipExito?.();
 
         const aprendido = Almacenamiento.buscarProductoPorCodigo(codigo);
         if (aprendido) {
@@ -384,6 +386,33 @@
 
     function configurarAtajosTeclado() {
         const seccionCalc = el('seccionCalculadora');
+
+        // Atajos Globales de Mostrador y Operaciones (F1, F2, F4)
+        window.addEventListener('keydown', e => {
+            if (e.key === 'F1' || (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName))) {
+                e.preventDefault();
+                const modal = el('modalAtajosAyuda');
+                if (modal && typeof modal.showModal === 'function') {
+                    if (modal.open) modal.close();
+                    else modal.showModal();
+                }
+                return;
+            }
+            if (e.key === 'F2') {
+                e.preventDefault();
+                const inputCod = el('calcCodigoBarras');
+                if (inputCod) {
+                    inputCod.focus();
+                    if (inputCod.select) inputCod.select();
+                }
+                return;
+            }
+            if (e.key === 'F4') {
+                e.preventDefault();
+                iniciarEscaneoCamara('producto');
+                return;
+            }
+        });
 
         seccionCalc.addEventListener('keydown', e => {
             const esCampoTexto = e.target.id === 'calcNombre' || e.target.id === 'calcCodigoBarras';

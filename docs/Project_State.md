@@ -1,14 +1,15 @@
 # ESTADO DEL PROYECTO: Calculadora de Farmacia (Cockpit de Operaciones e Inventario)
 > **Fuente de Verdad Técnica e Historial de Sesiones**  
-> *Última auditoría y consolidación: 2026-11-06 (Implementación de Opciones 1, 2 y 3)*
+> *Última auditoría y consolidación: 2026-11-06 (Arquitectura Semántica HTML5, Atajos F1-F4, Web Audio API y Marca Croniris)*
 
 ---
 
 ## 1. RESUMEN EJECUTIVO Y ARQUITECTURA GENERAL
 - **Naturaleza del Sistema:** Aplicación Web Progresiva (PWA) de alto rendimiento, cero dependencias de servidor (Local-First), diseñada para farmacias y droguerías en mostrador y dispositivos móviles.
+- **Marca y Titularidad:** Plataforma desarrollada bajo la marca **Croniris**, creada y desarrollada por **reiNameless**. Todos los derechos reservados.
 - **Dominio Fiscal:** República Dominicana (DGII Art. 343: medicamentos exentos 0% ITBIS; bienes gravados al 18% / 16%; comprobantes e-CF/NCF B01, B02, E31, etc.; costo fiscal unitario exacto a 8 decimales; tolerancia de cuadre ±0.05).
-- **Motor de Datos Local:** Híbrido `IndexedDB` (`CalculadoraFarmaciaDB` v1) estructurado en 4 Object Stores con réplica reactiva síncrona en memoria (`Map` a 0ms) y fallback de resiliencia en `localStorage`. Sembrado automático de catálogo dominicano (`catalogo_rd_inicial.json`). Credenciales de API de Google Gemini resguardadas exclusivamente en `sessionStorage` (memoria volátil).
-- **Estándar de Códigos:** GS1 Checksum (Módulo 10) para EAN-13 (prefijo RD 746), UPC-A (12 dígitos importados), EAN-8 (ampollas/gotas) e ITF-14 (cajas maestras). Decodificación con cámara vía `BarcodeDetector` nativo con fallback universal a `ZXing` embebido.
+- **Motor de Datos Local:** Híbrido `IndexedDB` (`CalculadoraFarmaciaDB` v1) estructurado en 4 Object Stores con réplica reactiva síncrona en memoria (`Map` a 0ms), solicitud de almacenamiento persistente (`navigator.storage.persist()`), sembrado de catálogo dominicano (`catalogo_rd_inicial.json`) y fallback en `localStorage`. Credenciales de Google Gemini en `sessionStorage` (Zero-Trust).
+- **Estándar de Códigos:** GS1 Checksum (Módulo 10) para EAN-13 (prefijo RD 746), UPC-A (12 dígitos importados), EAN-8 (ampollas/gotas) e ITF-14 (cajas maestras). Decodificación con cámara vía `BarcodeDetector` nativo con fallback a `ZXing` embebido y sintetizador sonoro Web Audio API (bips de confirmación acústica en hardware).
 
 ---
 
@@ -28,9 +29,9 @@ Calculadora-Farmacia/
 │       └── rd-pharmacy-audit/SKILL.md         # Skill de auditoría fiscal RD y matemáticas farmacéuticas
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                             # CI: node -c, auditoría de 178 IDs y pruebas unitarias
+│       └── ci.yml                             # CI: node -c, auditoría de 187 IDs y pruebas unitarias
 ├── css/
-│   └── estilos.css                            # Sistema de diseño Ultra-Dark, variables CSS, accesibilidad y print
+│   └── estilos.css                            # Sistema de diseño Ultra-Dark, variables CSS, accesibilidad, print y footer Croniris
 ├── docs/
 │   └── Project_State.md                       # [ESTE ARCHIVO] Tracker vivo de estado del proyecto
 ├── icons/
@@ -38,14 +39,14 @@ Calculadora-Farmacia/
 │   ├── icon-512.png                           # Ícono PWA alta resolución
 │   └── icon.svg                               # Vectorial SVG
 ├── js/
-│   ├── almacenamiento.js                      # IndexedDB + localStorage + caché Map en memoria + sembrado de catálogo
+│   ├── almacenamiento.js                      # IndexedDB + localStorage + caché Map + persistencia navigator.storage.persist
 │   ├── configuracion.js                       # Constantes inmutables, estrategias y perfiles de margen
-│   ├── dominio.js                             # Cálculos fiscales puros (Strategy Pattern), GS1, RNC, e-CF y redondeo exponencial
-│   ├── interfaz.js                            # Orquestador del estado central, PWA service worker y navegación protegida
+│   ├── dominio.js                             # Cálculos fiscales (Strategy Pattern), GS1, RNC, e-CF, redondeo exponencial y Web Audio bips
+│   ├── interfaz.js                            # Orquestador del estado central, PWA service worker, modal de atajos y navegación
 │   ├── pruebas.js                             # Suite de pruebas unitarias automatizadas (16 suites de prueba)
 │   ├── servicio-catalogo.js                   # Consulta online en Open Food Facts (con timeout y offline-safe)
 │   ├── servicio-ia.js                         # Procesador multimodal de facturas con Google Gemini (Vision)
-│   ├── ui-calculadora.js                      # Cockpit de cálculo en vivo, debounce, atajos y escáner de cámara
+│   ├── ui-calculadora.js                      # Cockpit de cálculo en vivo, atajos F1-F4, enter secuencial y audio feedback
 │   ├── ui-diccionario.js                      # CRUD y vista del diccionario de códigos con botón de sembrado RD
 │   ├── ui-factura.js                          # Cabecera, tabla reactiva, edición inline y cuadre unificado DRY
 │   ├── ui-historial.js                        # Historial 7 días con alertas de expiración e impresión de reportes
@@ -53,7 +54,7 @@ Calculadora-Farmacia/
 │   └── zxing.min.js                           # Librería cliente ZXing (336 KB) para escaneo universal
 ├── catalogo_farmacia_extenso.json             # Respaldo JSON con 77 medicamentos y productos de RD
 ├── catalogo_rd_inicial.json                   # Respaldo JSON de diccionario de productos RD precacheado en PWA
-├── index.html                                 # Estructura semántica HTML5 (178 IDs verificados en CI)
+├── index.html                                 # Estructura semántica HTML5 (<header>, <main>, <footer>, 187 IDs verificados en CI)
 ├── manifest.json                              # Web App Manifest para instalación PWA
 ├── optimizacion_universal.py                  # Script de orquestación de auditoría multi-agente
 ├── README.md                                  # Documentación técnica general (actualizada a Caché v19)
@@ -85,34 +86,23 @@ Calculadora-Farmacia/
 
 ---
 
-## 4. HISTORIAL DE MEJORAS IMPLEMENTADAS EN ESTA SESIÓN
+## 4. HISTORIAL DE MEJORAS Y ARQUITECTURA SEMÁNTICA
 
-### Opción 1 — Blindaje de Persistencia y Sembrado de Catálogo
-1. **Redondeo Exponencial Simétrico:** `Dominio.redondearDecimalExacto` refactorizado usando notación exponencial de base 10 (`split('e')`), eliminando el sesgo de punto flotante IEEE 754 de `Number.EPSILON` en números mayores a 1,000.
-2. **Sembrado Automático y Manual del Catálogo Dominicano:** `Almacenamiento.sembrarCatalogoInicial` precarga los 77 fármacos de `catalogo_rd_inicial.json` en `IndexedDB` en instalaciones limpias. Se añadió el botón `#btnSembrarCatalogoRd` en la interfaz para siembra manual en cualquier momento.
-3. **Mitigación de Condición de Carrera en Hidratación:** En `interfaz.js`, se implementó una guarda de interacción temprana (`interaccionUsuarioIniciada`). Si el cajero comienza a interactuar antes de que `IndexedDB` resuelva su promesa, la sesión activa en memoria no se sobreescribe, protegiendo los datos ingresados.
-4. **PWA Caché v19:** Se añadió `catalogo_rd_inicial.json` a `ARCHIVOS_ESTATICOS` en `sw.js` y se incrementó la versión a `v19`.
-
-### Opción 2 — Unificación DRY y Desglose Fiscal Canónico
-1. **Desglose Fiscal Consolidado:** `Dominio.calcularResumenCuadreFactura` calcula y expone de forma canónica:
-   - `totalBrutoAcumulado`
-   - `totalDescuentoAcumulado`
-   - `totalExentoAcumulado`
-   - `totalGravadoAcumulado`
-   - `totalItbisAcumulado`
-   - `subtotalBaseAcumulado`
-   - `sumaAcumulada` (total calculado)
-   - `totalFisico`, `diferencia` y `cuadreExacto`.
-2. **Consumo DRY en UI:** `ui-factura.js` (`actualizarDesgloseFiscalGlobal`) consume directamente el resultado de `Dominio.calcularResumenCuadreFactura`, eliminando más de 30 líneas de ciclos y lógica duplicada.
-3. **Ampliación de Pruebas Unitarias:** Se añadieron 3 nuevas suites en `js/pruebas.js` que validan el desglose DRY y el redondeo exacto en montos altos sin pérdida de precisión.
-
-### Opción 3 — Consolidación y Verificación Integral
-- Verificación de CI superada al 100%: sintaxis en todos los archivos, paridad de 178 IDs y todas las pruebas de dominio y GS1.
-- Cambios desplegados al repositorio de producción (`origin/main`), preservando el repositorio público (`public/main`) intacto.
+### Mejoras de Arquitectura Web y Ergonomía de Mostrador (Sesión Actual)
+1. **Estructura Semántica HTML5 Canónica:**
+   - Adición del landmark `<main id="contenidoPrincipal">` envolviendo todas las secciones operativas del cockpit.
+   - Creación del landmark `<footer class="pie-pagina-farmacia" role="contentinfo">` con información de versión, copyright legal de **Croniris**, desarrollo por **reiNameless** y botones de acción rápida.
+   - Metadatos optimizados en `<head>`: `<meta name="description">` y `<meta name="author" content="Croniris / reiNameless">`.
+2. **Modal Accesible de Atajos de Teclado e Información (`#modalAtajosAyuda`):**
+   - Diálogo modal HTML5 accesible con teclado (`F1` o `?`), listando las teclas rápidas de operación (`F1`, `F2`, `F4`, `Enter`, `Espacio`, `Esc`), resumen de la normativa tributaria DGII (Art. 343) y especificaciones GS1.
+3. **Feedback Acústico con Web Audio API (Cero Dependencias):**
+   - `Dominio.emitirBipExito()` (880 Hz) y `Dominio.emitirBipError()` (240 Hz con vibración háptica), permitiendo al farmacéutico recibir mercancía con pistolas lectoras con confirmación auditiva inmediata.
+4. **Blindaje contra Purga de Almacenamiento:**
+   - Invocación de `navigator.storage.persist()` en `Almacenamiento.solicitarPersistenciaAlmacenamiento()`.
 
 ---
 
 ## 5. ESTADO DE PRUEBAS Y CI
 - **Sintaxis JS:** Verificada con `node -c` en 14 archivos (`sw.js` + 13 en `js/`). Estado: **100% PASS**.
-- **Paridad de IDs:** 178 IDs en `index.html` auditados contra los IDs críticos obligatorios. Estado: **100% PASS**.
+- **Paridad de IDs:** 187 IDs en `index.html` auditados contra los 23 IDs críticos obligatorios. Estado: **100% PASS**.
 - **Suite de Pruebas Unitarias (`js/pruebas.js`):** 16 suites automatizadas. Estado: **100% PASS**.

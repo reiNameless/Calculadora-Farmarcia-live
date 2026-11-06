@@ -163,9 +163,24 @@
             return { sembrado: false, error: error.message, totalProductos: 0 };
         }
     }
+    // --- BLINDAJE DE PERSISTENCIA CONTRA PURGA AUTOMÁTICA DEL NAVEGADOR ---
+    async function solicitarPersistenciaAlmacenamiento() {
+        if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.persist === "function") {
+            try {
+                const persistente = await navigator.storage.persist();
+                console.info("[Almacenamiento] Persistencia de almacenamiento:", persistente ? "BLINDADA (PROTEGIDA)" : "ESTÁNDAR");
+                return persistente;
+            } catch (_) {
+                return false;
+            }
+        }
+        return false;
+    }
+
     // --- INICIALIZACIÓN ASÍNCRONA Y MIGRACIÓN AUTOMÁTICA ---
     async function inicializarPersistencia() {
         const db = await abrirBaseDatos();
+        solicitarPersistenciaAlmacenamiento();
         if (!db) {
             console.info('[Almacenamiento] IndexedDB no soportada; operando con almacenamiento estándar.');
             return false;
@@ -650,6 +665,7 @@
         invalidarCacheStorage,
         inicializarPersistencia,
         sembrarCatalogoInicial,
+        solicitarPersistenciaAlmacenamiento,
         obtenerReglasNegocio,
         guardarReglasNegocio,
         obtenerDiccionarioCodigos,

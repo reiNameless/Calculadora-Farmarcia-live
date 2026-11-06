@@ -337,10 +337,41 @@
                 });
             });
 
-            // Tecla Escape para cerrar drawer
+            // 4. Modal de Atajos de Teclado e Información del Sistema (Croniris)
+            const modalAtajos = el('modalAtajosAyuda');
+            const btnModalAtajos = el('btnModalAtajos');
+            const btnAtajosFooter = el('btnAtajosFooter');
+            const btnAcercaDeFooter = el('btnAcercaDeFooter');
+            const btnCerrarModalAtajos = el('btnCerrarModalAtajos');
+            const btnCerrarAtajosFooter = el('btnCerrarAtajosFooter');
+
+            function abrirModalAtajos() {
+                if (modalAtajos && typeof modalAtajos.showModal === 'function') {
+                    modalAtajos.showModal();
+                }
+            }
+
+            function cerrarModalAtajos() {
+                if (modalAtajos && typeof modalAtajos.close === 'function') {
+                    modalAtajos.close();
+                }
+            }
+
+            if (btnModalAtajos) btnModalAtajos.addEventListener('click', abrirModalAtajos);
+            if (btnAtajosFooter) btnAtajosFooter.addEventListener('click', abrirModalAtajos);
+            if (btnAcercaDeFooter) btnAcercaDeFooter.addEventListener('click', abrirModalAtajos);
+            if (btnCerrarModalAtajos) btnCerrarModalAtajos.addEventListener('click', cerrarModalAtajos);
+            if (btnCerrarAtajosFooter) btnCerrarAtajosFooter.addEventListener('click', cerrarModalAtajos);
+
+            // Tecla Escape para cerrar drawer o modal de atajos
             window.addEventListener('keydown', e => {
-                if (e.key === 'Escape' && drawerBoveda && drawerBoveda.classList.contains('abierto')) {
-                    cerrarBoveda();
+                if (e.key === 'Escape') {
+                    if (drawerBoveda && drawerBoveda.classList.contains('abierto')) {
+                        cerrarBoveda();
+                    }
+                    if (modalAtajos && modalAtajos.open) {
+                        cerrarModalAtajos();
+                    }
                 }
             });
 

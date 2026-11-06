@@ -497,7 +497,16 @@
         setTimeout(() => URL.revokeObjectURL(url), CONSTANTES.TIEMPO_REVOCAR_URL_MS);
     }
 
-    function leerArchivoJsonSubido(archivo) {
+    async function leerArchivoJsonSubido(archivo) {
+        if (!archivo) {
+            throw new Error('No se seleccionó ningún archivo.');
+        }
+        if (Dominio && typeof Dominio.validarArchivoSeguro === 'function') {
+            const validacion = await Dominio.validarArchivoSeguro(archivo, { tipoPermitido: 'json' });
+            if (!validacion.valido) {
+                throw new Error(validacion.error);
+            }
+        }
         return new Promise((resolve, reject) => {
             if (!archivo) {
                 reject(new Error('No se seleccionó ningún archivo.'));

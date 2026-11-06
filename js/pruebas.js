@@ -267,6 +267,63 @@
         afirmarIgualdad(Dominio.redondearDecimalExacto(-1000.005, 2), -1000.01, "Redondeo: -1000.005 simétrico exacto");
         afirmarIgualdad(Dominio.redondearDecimalExacto(15840.505, 2), 15840.51, "Redondeo: Factura alta $15,840.505");
 
+        // 13. Seguridad de Archivos y Mitigación de Amenazas (Magic Bytes, Path Traversal, PDF Exploits, Bomba Descompresión)
+        // 13.1 Sanitización de nombres y detección de doble extensión (CWE-434, CWE-22)
+        afirmarIgualdad(Dominio.sanitizarNombreArchivo('../../facturas/factura_marzo.pdf'), 'factura_marzo.pdf', 'Seguridad: Elimina Path Traversal (../../)');
+        afirmarIgualdad(Dominio.sanitizarNombreArchivo('factura_legal.PDF'), 'factura_legal.PDF', 'Seguridad: Preserva nombre legítimo');
+        
+        let dobleExtBloqueada = false;
+        try {
+            Dominio.sanitizarNombreArchivo('factura.php.pdf');
+        } catch (_) {
+            dobleExtBloqueada = true;
+        }
+        afirmarIgualdad(dobleExtBloqueada, true, 'Seguridad: Bloquea doble extensión ejecutable (.php.pdf)');
+
+        // 13.2 Inspección de firmas binarias (Magic Numbers)
+        const bytesPdfValidos = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37]); // %PDF-1.7
+        afirmarIgualdad(Dominio.detectarFirmaMagica(bytesPdfValidos)?.mime, 'application/pdf', 'Seguridad: Detecta firma mágica legítima de PDF');
+
+        const bytesExeDisfrazado = new Uint8Array([0x4D, 0x5A, 0x90, 0x00]); // MZ
+        afirmarIgualdad(Dominio.detectarFirmaMagica(bytesExeDisfrazado), null, 'Seguridad: Rechaza ejecutable MZ disfrazado de documento');
+
+        const bytesJpgValidos = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]);
+        afirmarIgualdad(Dominio.detectarFirmaMagica(bytesJpgValidos)?.mime, 'image/jpeg', 'Seguridad: Detecta firma mágica de JPEG');
+
+        const bytesPngValidos = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        afirmarIgualdad(Dominio.detectarFirmaMagica(bytesPngValidos)?.mime, 'image/png', 'Seguridad: Detecta firma mágica de PNG');
+
+        // 13.3 Auditoría profunda de estructura PDF y vectores de ataque activos
+        const pdfGenuinoStr = '%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF';
+        const bytesPdfGenuino = new Uint8Array(pdfGenuinoStr.split('').map(ch => ch.charCodeAt(0)));
+        const resPdfGenuino = Dominio.auditarEstructuraPdf(bytesPdfGenuino);
+        afirmarIgualdad(resPdfGenuino.valido, true, 'Seguridad: Aprueba PDF estructuralmente íntegro y limpio');
+
+        const pdfMaliciosoJsStr = '%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Names << /JavaScript 2 0 R >> >>\nendobj\ntrailer\n%%EOF';
+        const bytesPdfMaliciosoJs = new Uint8Array(pdfMaliciosoJsStr.split('').map(ch => ch.charCodeAt(0)));
+        const resPdfMaliciosoJs = Dominio.auditarEstructuraPdf(bytesPdfMaliciosoJs);
+        afirmarIgualdad(resPdfMaliciosoJs.valido, false, 'Seguridad: Bloquea PDF con payload /JavaScript activo');
+
+        const pdfMaliciosoLaunchStr = '%PDF-1.7\n1 0 obj\n<< /Action << /S /Launch /F (calc.exe) >> >>\nendobj\ntrailer\n%%EOF';
+        const bytesPdfMaliciosoLaunch = new Uint8Array(pdfMaliciosoLaunchStr.split('').map(ch => ch.charCodeAt(0)));
+        const resPdfMaliciosoLaunch = Dominio.auditarEstructuraPdf(bytesPdfMaliciosoLaunch);
+        afirmarIgualdad(resPdfMaliciosoLaunch.valido, false, 'Seguridad: Bloquea PDF con acción ejecutable /Launch');
+
+        const pdfTruncadoStr = '%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer';
+        const bytesPdfTruncado = new Uint8Array(pdfTruncadoStr.split('').map(ch => ch.charCodeAt(0)));
+        const resPdfTruncado = Dominio.auditarEstructuraPdf(bytesPdfTruncado);
+        afirmarIgualdad(resPdfTruncado.valido, false, 'Seguridad: Bloquea PDF incompleto sin marcador %%EOF');
+
+        // 13.4 Detección de bomba de descompresión (Pixel Flood) en imágenes
+        const pngBombBytes = new Uint8Array(32);
+        pngBombBytes.set([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], 0);
+        pngBombBytes.set([0x00, 0x00, 0x00, 0x0D], 8);
+        pngBombBytes.set([0x49, 0x48, 0x44, 0x52], 12);
+        pngBombBytes[18] = 0x75; pngBombBytes[19] = 0x30;
+        pngBombBytes[22] = 0x75; pngBombBytes[23] = 0x30;
+        const resPngBomb = Dominio.auditarDimensionesImagen(pngBombBytes, 'image/png');
+        afirmarIgualdad(resPngBomb.valido, false, 'Seguridad: Detecta bomba de descompresión PNG (30,000 x 30,000 px)');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

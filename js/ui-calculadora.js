@@ -1174,6 +1174,18 @@
     async function procesarArchivoImagenEscaneo(archivo, modo = modoEscaneoActual) {
         if (!archivo) return;
         try {
+            // 0. Auditoría previa y validación de seguridad de imagen
+            if (Dominio && typeof Dominio.validarArchivoSeguro === 'function') {
+                const resVal = await Dominio.validarArchivoSeguro(archivo, { tipoPermitido: 'imagen' });
+                if (!resVal.valido) {
+                    UI.Notificaciones.mostrarMensaje('Archivo de imagen rechazado por seguridad: ' + resVal.error, 'error');
+                    if (Dominio.emitirBipError) Dominio.emitirBipError();
+                    const inputArchivo = el('inputArchivoEscaneoLocal');
+                    if (inputArchivo) inputArchivo.value = '';
+                    return;
+                }
+            }
+
             UI.Notificaciones.mostrarMensaje('Analizando imagen en busca de códigos...', 'info');
 
             const img = new Image();

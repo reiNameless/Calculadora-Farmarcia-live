@@ -99,10 +99,16 @@ Calculadora-Farmacia/
    - `Dominio.emitirBipExito()` (880 Hz) y `Dominio.emitirBipError()` (240 Hz con vibración háptica), permitiendo al farmacéutico recibir mercancía con pistolas lectoras con confirmación auditiva inmediata.
 4. **Blindaje contra Purga de Almacenamiento:**
    - Invocación de `navigator.storage.persist()` en `Almacenamiento.solicitarPersistenciaAlmacenamiento()`.
+5. **Auditoría y Validación de Seguridad de Archivos (Defensa en Profundidad):**
+   - **Firma Binaria Real (Magic Numbers):** Validación obligatoria de los primeros bytes del archivo (`ArrayBuffer` / `Uint8Array`) para impedir la suplantación de formato (CWE-434). Valida firmas binarias canónicas de PDF (`%PDF-`), JPEG (`0xFF, 0xD8, 0xFF`), PNG (`\x89PNG\r\n\x1a\n`), WebP (`RIFF...WEBP`) y JSON.
+   - **Inspección Profunda de Amenazas en PDFs:** Análisis de cabecera ISO 32000-1 (`%PDF-1.x`), presencia de marcador de cierre (`%%EOF`) y escaneo exhaustivo de objetos ejecutables activos (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFiles`, `/RichMedia`, `/SubmitForm`, `/ImportData`, `/URI javascript:`).
+   - **Protección contra Bombas de Descompresión (Pixel Flood / Zip Bomb):** Decodificación preventiva en binario de bloques IHDR (PNG) y SOF (JPEG) para rechazar imágenes con dimensiones excesivas (> 64 Megapíxeles) antes de asignar memoria en lienzos Canvas.
+   - **Sanitización de Nombres de Archivo:** Neutralización de Path Traversal (CWE-22) eliminando secuencias `../`, eliminación de bytes nulos (`\0`) y bloqueo estricto de dobles extensiones ejecutables (`.php.pdf`, `.exe.jpg`).
+   - **Invalidación de Caché PWA:** Actualización de Service Worker a `farmacia-pwa-v20`.
 
 ---
 
 ## 5. ESTADO DE PRUEBAS Y CI
 - **Sintaxis JS:** Verificada con `node -c` en 14 archivos (`sw.js` + 13 en `js/`). Estado: **100% PASS**.
 - **Paridad de IDs:** 187 IDs en `index.html` auditados contra los 23 IDs críticos obligatorios. Estado: **100% PASS**.
-- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 16 suites automatizadas. Estado: **100% PASS**.
+- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 17 suites automatizadas (incluye suite de mitigación de amenazas y seguridad de archivos). Estado: **100% PASS**.

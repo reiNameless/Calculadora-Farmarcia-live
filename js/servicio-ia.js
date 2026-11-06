@@ -98,6 +98,16 @@
             throw new Error('Selecciona al menos una foto de factura válida.');
         }
 
+        // Auditoría previa y validación de seguridad de cada archivo (Magic Numbers, Decompression Bomb, XSS, PDF Threats)
+        if (Dominio && typeof Dominio.validarArchivoSeguro === 'function') {
+            for (const arch of archivosValidos) {
+                const resVal = await Dominio.validarArchivoSeguro(arch, { tipoPermitido: 'factura' });
+                if (!resVal.valido) {
+                    throw new Error('Archivo rechazado por seguridad [' + (arch.name || 'documento') + ']: ' + resVal.error);
+                }
+            }
+        }
+
         // Optimizar todas las imágenes en paralelo (Canvas rescale a 1600px + JPEG 0.85)
         const partesImagenes = await Promise.all(archivosValidos.map(optimizarImagenParaIA));
 

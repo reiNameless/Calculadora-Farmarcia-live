@@ -41,6 +41,27 @@
         DEBOUNCE_CALCULO_MS: 80,
         MODELO_IA_POR_DEFECTO: 'gemini-2.5-flash',
         URL_GEMINI_API_BASE: 'https://generativelanguage.googleapis.com/v1beta/models/',
+        SEGURIDAD_ARCHIVOS: Object.freeze({
+            MAX_BYTES_FACTURA: 15 * 1024 * 1024,
+            MAX_BYTES_JSON: 5 * 1024 * 1024,
+            MAX_PIXELES_IMAGEN: 64000000,
+            EXTENSIONES_PERMITIDAS_FACTURAS: Object.freeze(['pdf', 'jpg', 'jpeg', 'png', 'webp']),
+            EXTENSIONES_PERMITIDAS_IMAGENES: Object.freeze(['jpg', 'jpeg', 'png', 'webp']),
+            EXTENSIONES_PELIGROSAS_DOBLES: Object.freeze([
+                'exe', 'bat', 'cmd', 'sh', 'php', 'phtml', 'php3', 'php4', 'php5',
+                'js', 'vbs', 'ps1', 'jar', 'jsp', 'asp', 'aspx', 'cgi', 'pl', 'py', 'dll', 'so'
+            ]),
+            PATRONES_PDF_MALICIOSOS: Object.freeze([
+                { regex: /\/JavaScript\b/i, motivo: 'Código JavaScript embebido no permitido en PDF (/JavaScript).' },
+                { regex: /\/JS\s*(?:<<|\/|\()/i, motivo: 'Objeto ejecutable JS embebido (/JS).' },
+                { regex: /\/Launch\b/i, motivo: 'Acción de ejecución de comandos externos (/Launch).' },
+                { regex: /\/EmbeddedFiles\b/i, motivo: 'Archivos ejecutables o adjuntos embebidos (/EmbeddedFiles).' },
+                { regex: /\/RichMedia\b/i, motivo: 'Contenido multimedia ejecutable (/RichMedia).' },
+                { regex: /\/SubmitForm\b/i, motivo: 'Envío no controlado de formularios externos (/SubmitForm).' },
+                { regex: /\/ImportData\b/i, motivo: 'Importación externa de datos (/ImportData).' },
+                { regex: /\/URI\s*\([^)]*javascript\s*:/i, motivo: 'Enlace URI a pseudo-protocolo javascript:.' }
+            ])
+        }),
         CATEGORIAS: Object.freeze({
             DIVISIBLE: 'divisible',
             ENTERO: 'entero'

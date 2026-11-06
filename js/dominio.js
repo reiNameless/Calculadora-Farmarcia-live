@@ -698,6 +698,355 @@
         emitirBip(880, 80, "sine");
     }
 
+    // --- FASE 6: AUDITORÍA Y VALIDACIÓN DE SEGURIDAD DE ARCHIVOS (DEFENSA EN PROFUNDIDAD) ---
+
+    const FIRMAS_MAGICAS_ESTANDAR = Object.freeze([
+        {
+            mime: 'application/pdf',
+            extension: 'pdf',
+            verificar: (bytes) => (
+                bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2D // %PDF-
+            )
+        },
+        {
+            mime: 'image/jpeg',
+            extension: 'jpg',
+            verificar: (bytes) => (
+                bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF
+            )
+        },
+        {
+            mime: 'image/png',
+            extension: 'png',
+            verificar: (bytes) => (
+                bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
+                bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A
+            )
+        },
+        {
+            mime: 'image/webp',
+            extension: 'webp',
+            verificar: (bytes) => (
+                bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && // RIFF
+                bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50    // WEBP
+            )
+        },
+        {
+            mime: 'image/gif',
+            extension: 'gif',
+            verificar: (bytes) => (
+                bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38 &&
+                (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61
+            )
+        }
+    ]);
+
+    const EXTENSIONES_PELIGROSAS_DEFAULT = new Set([
+        'exe', 'bat', 'cmd', 'sh', 'php', 'phtml', 'php3', 'php4', 'php5',
+        'js', 'vbs', 'ps1', 'jar', 'jsp', 'asp', 'aspx', 'cgi', 'pl', 'py', 'dll', 'so'
+    ]);
+
+    const PATRONES_PDF_MALICIOSOS_DEFAULT = Object.freeze([
+        { regex: /\/JavaScript\b/i, motivo: 'Código JavaScript embebido no permitido en PDF (/JavaScript).' },
+        { regex: /\/JS\s*(?:<<|\/|\()/i, motivo: 'Objeto ejecutable JS embebido (/JS).' },
+        { regex: /\/Launch\b/i, motivo: 'Acción de ejecución de comandos externos (/Launch).' },
+        { regex: /\/EmbeddedFiles\b/i, motivo: 'Archivos ejecutables o adjuntos embebidos (/EmbeddedFiles).' },
+        { regex: /\/RichMedia\b/i, motivo: 'Contenido multimedia ejecutable (/RichMedia).' },
+        { regex: /\/SubmitForm\b/i, motivo: 'Envío no controlado de formularios externos (/SubmitForm).' },
+        { regex: /\/ImportData\b/i, motivo: 'Importación externa de datos (/ImportData).' },
+        { regex: /\/URI\s*\([^)]*javascript\s*:/i, motivo: 'Enlace URI a pseudo-protocolo javascript:.' }
+    ]);
+
+    function sanitizarNombreArchivo(nombreOriginal) {
+        if (typeof nombreOriginal !== 'string') return 'archivo_sin_nombre';
+        let nombre = nombreOriginal.trim();
+        nombre = nombre.replace(/[\x00-\x1F\x7F]/g, '');
+        nombre = nombre.replace(/^.*[\\\/]/, '');
+        const partes = nombre.split('.');
+        if (partes.length > 2) {
+            for (let i = 1; i < partes.length - 1; i++) {
+                const extIntermedia = partes[i].toLowerCase();
+                if (EXTENSIONES_PELIGROSAS_DEFAULT.has(extIntermedia)) {
+                    throw new Error('Nombre de archivo sospechoso con doble extensión ejecutable (.' + extIntermedia + ').');
+                }
+            }
+        }
+        if (nombre.length > 255) {
+            const ext = partes.length > 1 ? '.' + partes[partes.length - 1] : '';
+            nombre = nombre.slice(0, 255 - ext.length) + ext;
+        }
+        return nombre || 'archivo_sanitizado';
+    }
+
+    function detectarFirmaMagica(bytes) {
+        if (!bytes || bytes.length < 4) return null;
+        for (const firma of FIRMAS_MAGICAS_ESTANDAR) {
+            if (firma.verificar(bytes)) {
+                return { mime: firma.mime, extension: firma.extension };
+            }
+        }
+        return null;
+    }
+
+    function auditarEstructuraPdf(bytes) {
+        if (!bytes || bytes.length < 16) {
+            return { valido: false, error: 'El archivo es demasiado pequeño o está truncado para ser un PDF válido.' };
+        }
+        const limiteCabecera = Math.min(bytes.length, 1024);
+        let cabeceraValida = false;
+        let versionPdf = '';
+        for (let i = 0; i <= limiteCabecera - 5; i++) {
+            if (bytes[i] === 0x25 && bytes[i+1] === 0x50 && bytes[i+2] === 0x44 && bytes[i+3] === 0x46 && bytes[i+4] === 0x2D) {
+                cabeceraValida = true;
+                let vStr = '';
+                for (let j = i; j < Math.min(i + 12, bytes.length); j++) {
+                    const c = String.fromCharCode(bytes[j]);
+                    if (c === '\r' || c === '\n' || c === ' ') break;
+                    vStr += c;
+                }
+                versionPdf = vStr;
+                break;
+            }
+        }
+        if (!cabeceraValida) {
+            return { valido: false, error: 'Cabecera de archivo PDF corrupta o ausente (%PDF- no encontrado).' };
+        }
+
+        const inicioTrailer = Math.max(0, bytes.length - 2048);
+        let tieneEof = false;
+        for (let i = inicioTrailer; i <= bytes.length - 5; i++) {
+            if (bytes[i] === 0x25 && bytes[i+1] === 0x25 && bytes[i+2] === 0x45 && bytes[i+3] === 0x4F && bytes[i+4] === 0x46) {
+                tieneEof = true;
+                break;
+            }
+        }
+        if (!tieneEof) {
+            return { valido: false, error: 'Estructura PDF incompleta o truncada (marcador %%EOF no encontrado en el pie).' };
+        }
+
+        let textoPdf = '';
+        const tamanoLectura = bytes.length;
+        const bloque = 8192;
+        for (let i = 0; i < tamanoLectura; i += bloque) {
+            const sub = bytes.subarray(i, Math.min(i + bloque, tamanoLectura));
+            textoPdf += String.fromCharCode.apply(null, sub);
+        }
+
+        for (const patron of PATRONES_PDF_MALICIOSOS_DEFAULT) {
+            if (patron.regex.test(textoPdf)) {
+                return { valido: false, error: 'Amenaza de seguridad detectada en PDF: ' + patron.motivo };
+            }
+        }
+
+        return { valido: true, versionPdf };
+    }
+
+    function auditarDimensionesImagen(bytes, mime) {
+        const MAX_PIXELES = 64000000;
+        if (mime === 'image/png') {
+            if (bytes.length < 24) return { valido: false, error: 'Imagen PNG truncada.' };
+            const ancho = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+            const alto = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+            if (ancho <= 0 || alto <= 0) return { valido: false, error: 'Dimensiones de imagen PNG inválidas.' };
+            if (ancho * alto > MAX_PIXELES) {
+                return { valido: false, error: 'Dimensiones de imagen excesivas (' + ancho + 'x' + alto + '). Riesgo de agotamiento de memoria (Decompression Bomb).' };
+            }
+            return { valido: true, ancho, alto };
+        }
+        if (mime === 'image/jpeg') {
+            let i = 2;
+            while (i < bytes.length - 8) {
+                if (bytes[i] === 0xFF) {
+                    const marker = bytes[i + 1];
+                    if (marker === 0xC0 || marker === 0xC1 || marker === 0xC2) {
+                        const alto = (bytes[i + 5] << 8) | bytes[i + 6];
+                        const ancho = (bytes[i + 7] << 8) | bytes[i + 8];
+                        if (ancho * alto > MAX_PIXELES) {
+                            return { valido: false, error: 'Dimensiones de imagen excesivas (' + ancho + 'x' + alto + '). Riesgo de agotamiento de memoria.' };
+                        }
+                        return { valido: true, ancho, alto };
+                    }
+                    const length = (bytes[i + 2] << 8) | bytes[i + 3];
+                    i += 2 + length;
+                } else {
+                    i++;
+                }
+            }
+        }
+        return { valido: true };
+    }
+
+    async function extraerBytesDeArchivo(archivo, inicio = 0, fin = null) {
+        if (!archivo) return new Uint8Array(0);
+        if (archivo instanceof Uint8Array || (typeof Buffer !== 'undefined' && Buffer.isBuffer(archivo))) {
+            const u8 = new Uint8Array(archivo);
+            return fin !== null ? u8.subarray(inicio, fin) : u8.subarray(inicio);
+        }
+        if (archivo.buffer) {
+            if (typeof Buffer !== 'undefined' && Buffer.isBuffer(archivo.buffer)) {
+                const u8 = new Uint8Array(archivo.buffer);
+                return fin !== null ? u8.subarray(inicio, fin) : u8.subarray(inicio);
+            }
+            if (archivo.buffer instanceof ArrayBuffer) {
+                const u8 = new Uint8Array(archivo.buffer);
+                return fin !== null ? u8.subarray(inicio, fin) : u8.subarray(inicio);
+            }
+            if (archivo.buffer instanceof Uint8Array) {
+                return fin !== null ? archivo.buffer.subarray(inicio, fin) : archivo.buffer.subarray(inicio);
+            }
+        }
+        if (typeof archivo.slice === 'function') {
+            const sub = fin !== null ? archivo.slice(inicio, fin) : archivo.slice(inicio);
+            if (typeof sub.arrayBuffer === 'function') {
+                const ab = await sub.arrayBuffer();
+                return new Uint8Array(ab);
+            }
+        }
+        if (typeof FileReader !== 'undefined') {
+            return new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(new Uint8Array(r.result));
+                r.onerror = () => reject(new Error('No se pudieron extraer los bytes del archivo.'));
+                const sub = fin !== null ? archivo.slice(inicio, fin) : archivo.slice(inicio);
+                r.readAsArrayBuffer(sub);
+            });
+        }
+        return new Uint8Array(0);
+    }
+
+    async function validarArchivoSeguro(archivo, opciones = {}) {
+        const configSeg = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.SEGURIDAD_ARCHIVOS)
+            ? AppFarmacia.Configuracion.CONSTANTES.SEGURIDAD_ARCHIVOS
+            : null;
+
+        const {
+            tipoPermitido = 'factura',
+            maxBytes = configSeg
+                ? (tipoPermitido === 'json' ? configSeg.MAX_BYTES_JSON : configSeg.MAX_BYTES_FACTURA)
+                : ((tipoPermitido === 'json' ? 5 : 15) * 1024 * 1024),
+            nombreForzado = null
+        } = opciones;
+
+        if (!archivo) {
+            return { valido: false, error: 'No se suministró ningún archivo para validación.', codigo: 'ARCHIVO_NULO' };
+        }
+
+        const tamano = archivo.size !== undefined ? archivo.size : (archivo.length || 0);
+        if (tamano <= 0) {
+            return { valido: false, error: 'El archivo está vacío (0 bytes).', codigo: 'ARCHIVO_VACIO' };
+        }
+
+        if (tamano > maxBytes) {
+            const mbLimite = (maxBytes / (1024 * 1024)).toFixed(0);
+            return {
+                valido: false,
+                error: 'El archivo supera el tamaño máximo permitido de seguridad (' + mbLimite + ' MB).',
+                codigo: 'LIMITE_TAMANO_EXCEDIDO'
+            };
+        }
+
+        const nombreOriginal = nombreForzado || archivo.name || 'archivo_desconocido';
+        let nombreSanitizado;
+        try {
+            nombreSanitizado = sanitizarNombreArchivo(nombreOriginal);
+        } catch (e) {
+            return { valido: false, error: e.message, codigo: 'NOMBRE_SOSPECHOSO' };
+        }
+
+        const partes = nombreSanitizado.split('.');
+        const extension = partes.length > 1 ? partes.pop().toLowerCase() : '';
+
+        if (tipoPermitido === 'json') {
+            if (extension !== 'json') {
+                return { valido: false, error: 'La extensión del archivo debe ser .json.', codigo: 'EXTENSION_INVALIDA' };
+            }
+            const cabecera = await extraerBytesDeArchivo(archivo, 0, Math.min(tamano, 1024));
+            for (let i = 0; i < cabecera.length; i++) {
+                if (cabecera[i] === 0x00) {
+                    return { valido: false, error: 'El archivo JSON contiene bytes nulos binarios no válidos.', codigo: 'JSON_BINARIO' };
+                }
+            }
+            return { valido: true, nombreSanitizado, extension: 'json', mimeDetectado: 'application/json', tamanoBytes: tamano };
+        }
+
+        const extensionesPermitidas = tipoPermitido === 'imagen'
+            ? ['jpg', 'jpeg', 'png', 'webp']
+            : ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+
+        if (!extensionesPermitidas.includes(extension)) {
+            return {
+                valido: false,
+                error: 'Extensión .' + extension + ' no permitida. Formatos válidos: ' + extensionesPermitidas.join(', ') + '.',
+                codigo: 'EXTENSION_NO_PERMITIDA'
+            };
+        }
+
+        const cabecera = await extraerBytesDeArchivo(archivo, 0, Math.min(tamano, 1024));
+        const firma = detectarFirmaMagica(cabecera);
+
+        if (!firma) {
+            return {
+                valido: false,
+                error: 'Firma binaria del archivo no reconocida o corrupta. El contenido no coincide con un formato seguro.',
+                codigo: 'FIRMA_DESCONOCIDA'
+            };
+        }
+
+        if (extension === 'pdf' && firma.mime !== 'application/pdf') {
+            return {
+                valido: false,
+                error: 'Suplantación de formato detectada: el archivo tiene extensión .pdf pero su contenido real es ' + firma.mime + '.',
+                codigo: 'SUPLANTACION_MIME'
+            };
+        }
+
+        if ((extension === 'jpg' || extension === 'jpeg') && firma.mime !== 'image/jpeg') {
+            return {
+                valido: false,
+                error: 'Suplantación de formato detectada: el archivo tiene extensión .' + extension + ' pero su firma es ' + firma.mime + '.',
+                codigo: 'SUPLANTACION_MIME'
+            };
+        }
+
+        if (extension === 'png' && firma.mime !== 'image/png') {
+            return {
+                valido: false,
+                error: 'Suplantación de formato detectada: el archivo tiene extensión .png pero su firma es ' + firma.mime + '.',
+                codigo: 'SUPLANTACION_MIME'
+            };
+        }
+
+        if (extension === 'webp' && firma.mime !== 'image/webp') {
+            return {
+                valido: false,
+                error: 'Suplantación de formato detectada: el archivo tiene extensión .webp pero su firma es ' + firma.mime + '.',
+                codigo: 'SUPLANTACION_MIME'
+            };
+        }
+
+        if (firma.mime === 'application/pdf') {
+            const bytesCompletos = await extraerBytesDeArchivo(archivo, 0, tamano);
+            const resPdf = auditarEstructuraPdf(bytesCompletos);
+            if (!resPdf.valido) {
+                return { valido: false, error: resPdf.error, codigo: 'PDF_ESTRUCTURA_INVALIDA' };
+            }
+        } else if (firma.mime.startsWith('image/')) {
+            const bytesAnalisis = await extraerBytesDeArchivo(archivo, 0, Math.min(tamano, 65536));
+            const resImg = auditarDimensionesImagen(bytesAnalisis, firma.mime);
+            if (!resImg.valido) {
+                return { valido: false, error: resImg.error, codigo: 'IMAGEN_PELIGROSA' };
+            }
+        }
+
+        return {
+            valido: true,
+            nombreSanitizado,
+            extension,
+            mimeDetectado: firma.mime,
+            tamanoBytes: tamano
+        };
+    }
+
     function emitirBipError() {
         emitirBip(240, 100, "sawtooth");
         setTimeout(() => emitirBip(180, 140, "sawtooth"), 120);
@@ -728,6 +1077,12 @@
         sanitizarReglasNegocio,
         calcularDesglosePrecios,
         crearLineaProductoInmutable,
-        calcularResumenCuadreFactura
+        calcularResumenCuadreFactura,
+        sanitizarNombreArchivo,
+        detectarFirmaMagica,
+        auditarEstructuraPdf,
+        auditarDimensionesImagen,
+        extraerBytesDeArchivo,
+        validarArchivoSeguro
     });
 })(window);

@@ -233,6 +233,40 @@
         const vacioDgii = Dominio.parsearQrFacturaDgii('');
         afirmarIgualdad(vacioDgii.esValido, false, 'QR-DGII: Manejo resiliente de entrada vacía');
 
+        // 11. Desglose canónico unificado en calcularResumenCuadreFactura (DRY)
+        const productosDesglosePrueba = [
+            {
+                cajasCompradas: 2,
+                precioCajaBase: 500,
+                descuentoTotalLinea: 50,
+                aplicaItbis: false,
+                tasaItbis: 0,
+                subtotalFactura: 950
+            },
+            {
+                cajasCompradas: 1,
+                precioCajaBase: 1000,
+                descuentoTotalLinea: 0,
+                aplicaItbis: true,
+                tasaItbis: 18,
+                montoItbisLinea: 180,
+                subtotalFactura: 1180
+            }
+        ];
+        const resumenDesglose = Dominio.calcularResumenCuadreFactura(productosDesglosePrueba, 2130);
+        afirmarIgualdad(resumenDesglose.totalBrutoAcumulado, 2000, "Cuadre DRY: Total bruto acumulado");
+        afirmarIgualdad(resumenDesglose.totalDescuentoAcumulado, 50, "Cuadre DRY: Total descuento acumulado");
+        afirmarIgualdad(resumenDesglose.totalExentoAcumulado, 950, "Cuadre DRY: Total exento (500*2 - 50)");
+        afirmarIgualdad(resumenDesglose.totalGravadoAcumulado, 1000, "Cuadre DRY: Total gravado (1000)");
+        afirmarIgualdad(resumenDesglose.totalItbisAcumulado, 180, "Cuadre DRY: Total ITBIS acumulado");
+        afirmarIgualdad(resumenDesglose.sumaAcumulada, 2130, "Cuadre DRY: Suma acumulada exacta");
+        afirmarIgualdad(resumenDesglose.cuadreExacto, true, "Cuadre DRY: Cuadre exacto con total físico");
+
+        // 12. Redondeo exponencial exacto en montos elevados (Anti-sesgo IEEE 754)
+        afirmarIgualdad(Dominio.redondearDecimalExacto(1000.005, 2), 1000.01, "Redondeo: 1000.005 exacto");
+        afirmarIgualdad(Dominio.redondearDecimalExacto(-1000.005, 2), -1000.01, "Redondeo: -1000.005 simétrico exacto");
+        afirmarIgualdad(Dominio.redondearDecimalExacto(15840.505, 2), 15840.51, "Redondeo: Factura alta $15,840.505");
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

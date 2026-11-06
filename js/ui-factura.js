@@ -182,38 +182,16 @@
         const productos = Estado.sesionActual.productos || [];
         const totalFisico = parseFloat(el('facTotalFisico') ? el('facTotalFisico').value : 0) || 0;
 
-        let totalBruto = 0;
-        let totalDescuento = 0;
-        let totalExento = 0;
-        let totalGravado = 0;
-        let totalItbis = 0;
-
-        productos.forEach(p => {
-            const cajas = Number(p.cajasCompradas) || 1;
-            const precioBase = Number(p.precioCajaBase) || 0;
-            const desc = Number(p.descuentoTotalLinea) || 0;
-            const brutoLinea = cajas * precioBase;
-            const netoLinea = Math.max(0, brutoLinea - desc);
-
-            totalBruto += brutoLinea;
-            totalDescuento += desc;
-
-            if (!p.aplicaItbis || p.tasaItbis === 0) {
-                totalExento += netoLinea;
-            } else {
-                totalGravado += netoLinea;
-            }
-
-            const itbisLinea = p.montoItbisLinea !== undefined
-                ? Number(p.montoItbisLinea)
-                : (p.aplicaItbis ? netoLinea * ((p.tasaItbis || 18) / 100) : 0);
-            totalItbis += itbisLinea;
-        });
-
-        const totalCalculado = totalExento + totalGravado + totalItbis;
-        const diferencia = Dominio.redondearDecimalExacto(totalCalculado - totalFisico, CONSTANTES.DECIMALES_MONEDA);
+        const resumen = Dominio.calcularResumenCuadreFactura(productos, totalFisico);
+        const totalBruto = resumen.totalBrutoAcumulado;
+        const totalDescuento = resumen.totalDescuentoAcumulado;
+        const totalExento = resumen.totalExentoAcumulado;
+        const totalGravado = resumen.totalGravadoAcumulado;
+        const totalItbis = resumen.totalItbisAcumulado;
+        const totalCalculado = resumen.sumaAcumulada;
+        const diferencia = resumen.diferencia;
         const tieneFisico = totalFisico > 0;
-        const cuadre = tieneFisico && Math.abs(diferencia) <= CONSTANTES.TOLERANCIA_CUADRE_FACTURA;
+        const cuadre = resumen.cuadreExacto;
 
         if (el('resumenFiscalBruto')) el('resumenFiscalBruto').textContent = '$' + totalBruto.toFixed(2);
         if (el('resumenFiscalDescuento')) el('resumenFiscalDescuento').textContent = '-$' + totalDescuento.toFixed(2);

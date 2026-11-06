@@ -386,22 +386,46 @@
 
     function calcularResumenCuadreFactura(listaProductos, totalFisicoEsperado) {
         const productos = listaProductos || [];
-        const sumaAcumulada = redondearDecimalExacto(
-            productos.reduce((acumulado, prod) => acumulado + (Number(prod.subtotalFactura) || 0), 0),
-            CONSTANTES.DECIMALES_MONEDA
-        );
-        const totalItbisAcumulado = redondearDecimalExacto(
-            productos.reduce((acumulado, prod) => {
-                if (prod.montoItbisLinea !== undefined) return acumulado + Number(prod.montoItbisLinea);
-                if (prod.aplicaItbis && prod.precioCajaBase && prod.cajasCompradas) {
-                    return acumulado + (prod.precioCajaBase * 0.18 * prod.cajasCompradas);
-                }
-                return acumulado;
-            }, 0),
-            CONSTANTES.DECIMALES_MONEDA
-        );
+        let totalBrutoAcumulado = 0;
+        let totalDescuentoAcumulado = 0;
+        let totalExentoAcumulado = 0;
+        let totalGravadoAcumulado = 0;
+        let totalItbisAcumulado = 0;
+        let sumaAcumulada = 0;
+
+        productos.forEach(prod => {
+            const cajas = Math.max(1, Number(prod.cajasCompradas) || 1);
+            const precioBase = Math.max(0, Number(prod.precioCajaBase) || 0);
+            const descLinea = Math.max(0, Number(prod.descuentoTotalLinea) || 0);
+            const brutoLinea = redondearDecimalExacto(cajas * precioBase, CONSTANTES.DECIMALES_MONEDA);
+            const netoLinea = Math.max(0, redondearDecimalExacto(brutoLinea - descLinea, CONSTANTES.DECIMALES_MONEDA));
+
+            totalBrutoAcumulado = redondearDecimalExacto(totalBrutoAcumulado + brutoLinea, CONSTANTES.DECIMALES_MONEDA);
+            totalDescuentoAcumulado = redondearDecimalExacto(totalDescuentoAcumulado + descLinea, CONSTANTES.DECIMALES_MONEDA);
+
+            const aplicaItbis = Boolean(prod.aplicaItbis);
+            const tasa = (prod.tasaItbis !== undefined) ? Number(prod.tasaItbis) : (aplicaItbis ? 18 : 0);
+            if (!aplicaItbis || tasa === 0) {
+                totalExentoAcumulado = redondearDecimalExacto(totalExentoAcumulado + netoLinea, CONSTANTES.DECIMALES_MONEDA);
+            } else {
+                totalGravadoAcumulado = redondearDecimalExacto(totalGravadoAcumulado + netoLinea, CONSTANTES.DECIMALES_MONEDA);
+            }
+
+            const itbisLinea = (prod.montoItbisLinea !== undefined)
+                ? Number(prod.montoItbisLinea)
+                : (aplicaItbis ? redondearDecimalExacto(netoLinea * (tasa / 100), CONSTANTES.DECIMALES_MONEDA) : 0);
+
+            totalItbisAcumulado = redondearDecimalExacto(totalItbisAcumulado + itbisLinea, CONSTANTES.DECIMALES_MONEDA);
+
+            const subtotalLinea = (prod.subtotalFactura !== undefined)
+                ? Number(prod.subtotalFactura)
+                : redondearDecimalExacto(netoLinea + itbisLinea, CONSTANTES.DECIMALES_MONEDA);
+
+            sumaAcumulada = redondearDecimalExacto(sumaAcumulada + subtotalLinea, CONSTANTES.DECIMALES_MONEDA);
+        });
+
         const subtotalBaseAcumulado = redondearDecimalExacto(
-            sumaAcumulada - totalItbisAcumulado,
+            totalExentoAcumulado + totalGravadoAcumulado,
             CONSTANTES.DECIMALES_MONEDA
         );
         const totalFisico = Number(totalFisicoEsperado) || 0;
@@ -409,9 +433,13 @@
         const cuadreExacto = totalFisico > 0 && Math.abs(diferencia) <= CONSTANTES.TOLERANCIA_CUADRE_FACTURA;
 
         return Object.freeze({
-            sumaAcumulada,
+            totalBrutoAcumulado,
+            totalDescuentoAcumulado,
+            totalExentoAcumulado,
+            totalGravadoAcumulado,
             totalItbisAcumulado,
             subtotalBaseAcumulado,
+            sumaAcumulada,
             totalFisico,
             diferencia,
             cuadreExacto

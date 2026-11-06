@@ -239,8 +239,13 @@
                 const nombreMostrar = (aprendido.nombre && !aprendido.nombre.startsWith('Producto #') && aprendido.nombre !== 'Producto sin nombre')
                     ? `"${aprendido.nombre}"`
                     : `código ${codigo}`;
-                const textoCosto = aprendido.ultimoPrecioCaja ? ` | Costo: $${Number(aprendido.ultimoPrecioCaja).toFixed(2)}` : '';
-                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}${textoCosto}). Ingresa Cajas.`, 'success');
+                const textoCosto = aprendido.ultimoPrecioCaja ? ` | Costo: ${Number(aprendido.ultimoPrecioCaja).toFixed(2)}` : '';
+                let textoRadar = '';
+                if (aprendido.variacionCosto && Number(aprendido.variacionCosto) !== 0) {
+                    const v = Number(aprendido.variacionCosto);
+                    textoRadar = v > 0 ? ` [Alza previa: +${v}%]` : ` [Baja previa: ${v}%]`;
+                }
+                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}${textoCosto}${textoRadar}). Ingresa Cajas.`, 'success');
             }
             calcularEnVivo();
             el('calcCajasCompradas').focus();
@@ -351,7 +356,7 @@
             tipoDescuento: tipoDescuentoSeleccionado
         }, reglasEfectivas);
 
-        const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea);
+        const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea, sesionActual);
         Estado.agregarProductoASesion(nuevaLinea);
 
         // Reset completo de todos los campos de entrada al default solicitado
@@ -757,6 +762,58 @@
         if (btnItbis0) btnItbis0.addEventListener('click', () => fijarItbis(0));
         if (btnItbis18) btnItbis18.addEventListener('click', () => fijarItbis(18));
         if (btnItbis16) btnItbis16.addEventListener('click', () => fijarItbis(16));
+
+        // Autocompletado fonético difuso farmacológico para Nombre de Producto
+        const inputNombre = el('calcNombre');
+        const datalistSugerencias = el('listaSugerenciasProductos');
+        if (inputNombre && datalistSugerencias) {
+            inputNombre.addEventListener('input', () => {
+                const val = inputNombre.value.trim();
+                if (val.length < 2) {
+                    datalistSugerencias.innerHTML = '';
+                    return;
+                }
+                const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
+                const coincidencias = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
+                    ? Dominio.buscarEnCatalogoFuzzy(val, diccionario, 6)
+                    : [];
+
+                datalistSugerencias.innerHTML = coincidencias.map(p => {
+                    const descCosto = p.ultimoPrecioCaja ? ` - ${Number(p.ultimoPrecioCaja).toFixed(2)}` : '';
+                    const nom = Dominio.escaparHtml(p.nombre || p.nombreComercial || '');
+                    const cod = Dominio.escaparHtml(p.codigoBarras || '');
+                    return `<option value="${nom}" label="${nom} [${cod}]${descCosto}"></option>`;
+                }).join('');
+            });
+
+            inputNombre.addEventListener('change', () => {
+                const val = inputNombre.value.trim();
+                if (!val) return;
+                const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
+                const encontrado = Object.values(diccionario || {}).find(p => p && (p.nombre === val || p.nombreComercial === val));
+                if (encontrado) {
+                    if (el('calcCodigoBarras') && !el('calcCodigoBarras').value && encontrado.codigoBarras) {
+                        el('calcCodigoBarras').value = encontrado.codigoBarras;
+                    }
+                    if (el('calcPrecioCaja') && !el('calcPrecioCaja').value && encontrado.ultimoPrecioCaja) {
+                        el('calcPrecioCaja').value = Number(encontrado.ultimoPrecioCaja).toFixed(2);
+                    }
+                    if (encontrado.tipo && el('calcTipo')) {
+                        el('calcTipo').value = encontrado.tipo;
+                        actualizarVisibilidadCategoria();
+                    }
+                    if (encontrado.unidadesPorCaja && el('calcUnidadesCaja')) {
+                        el('calcUnidadesCaja').value = encontrado.unidadesPorCaja;
+                    }
+                    if (encontrado.esLeche && el('calcEsLeche')) {
+                        el('calcEsLeche').checked = true;
+                    }
+                    const tasa = encontrado.tasaItbis !== undefined ? Number(encontrado.tasaItbis) : (encontrado.aplicaItbis ? 18 : 0);
+                    fijarItbis(tasa);
+                    calcularEnVivo();
+                }
+            });
+        }
 
         // Selector y eventos de Descuento ($ vs %)
         const btnDescMonto = el('btnDescMonto');

@@ -8,7 +8,7 @@
 - **Naturaleza del Sistema:** Aplicación Web Progresiva (PWA) de alto rendimiento, cero dependencias de servidor (Local-First), diseñada para farmacias y droguerías en mostrador y dispositivos móviles.
 - **Marca y Titularidad:** Plataforma desarrollada bajo la marca **Chroniris**, creada y desarrollada por **reiNameless**. Todos los derechos reservados.
 - **Dominio Fiscal:** República Dominicana (DGII Art. 343: medicamentos exentos 0% ITBIS; bienes gravados al 18% / 16%; comprobantes e-CF/NCF B01, B02, E31, etc.; costo fiscal unitario exacto a 8 decimales; tolerancia de cuadre ±0.05).
-- **Motor de Datos Local:** Híbrido `IndexedDB` (`CalculadoraFarmaciaDB` v1) estructurado en 4 Object Stores con réplica reactiva síncrona en memoria (`Map` a 0ms), solicitud de almacenamiento persistente (`navigator.storage.persist()`), sembrado de catálogo dominicano (`catalogo_rd_inicial.json`) y fallback en `localStorage`. Credenciales de Google Gemini en `sessionStorage` (Zero-Trust).
+- **Motor de Datos Local:** Híbrido `IndexedDB` (`CalculadoraFarmaciaDB` v2) estructurado en 4 Object Stores con réplica reactiva síncrona en memoria (`Map` a 0ms), solicitud de almacenamiento persistente (`navigator.storage.persist()`), sembrado de catálogo dominicano (`catalogo_rd_inicial.json`) y fallback en `localStorage`. Credenciales de Google Gemini en `sessionStorage` (Zero-Trust).
 - **Estándar de Códigos:** GS1 Checksum (Módulo 10) para EAN-13 (prefijo RD 746), UPC-A (12 dígitos importados), EAN-8 (ampollas/gotas) e ITF-14 (cajas maestras). Decodificación con cámara vía `BarcodeDetector` nativo con fallback a `ZXing` embebido y sintetizador sonoro Web Audio API (bips de confirmación acústica en hardware).
 
 ---
@@ -67,12 +67,12 @@ Calculadora-Farmacia/
 
 ## 3. ESQUEMA DE PERSISTENCIA Y BASE DE DATOS LOCAL
 
-### IndexedDB: `CalculadoraFarmaciaDB` (Versión 1)
+### IndexedDB: `CalculadoraFarmaciaDB` (Versión 2)
 | Object Store | KeyPath / Clave | Índices Configurados | Propósito |
 | :--- | :--- | :--- | :--- |
 | `borrador` | Clave out-of-line (`'activo'`) | Ninguno | Almacena la factura en curso de edición para evitar pérdidas ante recargas o cierres. |
 | `historial_facturas` | `id` | `fechaEmision`, `proveedor`, `numeroFactura`, `timestampGuardado` | Facturas cerradas durante la ventana de 7 días de retención. |
-| `diccionario_productos` | `codigoBarras` | `nombre`, `ultimoPrecioCaja`, `actualizadoEn` | Catálogo de productos aprendidos con costos y configuraciones de ITBIS/Leche. |
+| `diccionario_productos` | `codigoBarras` | `nombre`, `ultimoPrecioCaja`, `actualizadoEn`, `principioActivo`, `laboratorio`, `proveedorHabitual`, `categoria` | Catálogo maestro de productos para futuro ERP con trazabilidad histórica de costos, taxonomía farmacéutica y precios de venta calculados. |
 | `configuracion_reglas` | Clave out-of-line (`'reglas_activas'`) | Ninguno | Parámetros de margen fiscal, estrategia activa y perfiles. |
 
 ### Fallback en LocalStorage / SessionStorage
@@ -122,5 +122,5 @@ Calculadora-Farmacia/
 
 ## 5. ESTADO DE PRUEBAS Y CI
 - **Sintaxis JS:** Verificada con `node -c` en 14 archivos (`sw.js` + 13 en `js/`). Estado: **100% PASS**.
-- **Paridad de IDs:** 187 IDs en `index.html` auditados contra los 23 IDs críticos obligatorios. Estado: **100% PASS**.
-- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 19 suites automatizadas (incluye suite de sellos criptográficos HMAC-SHA256 y blindaje de campos) (incluye suite de mitigación de amenazas y seguridad de archivos). Estado: **100% PASS**.
+- **Paridad de IDs:** 190 IDs en `index.html` auditados contra los IDs críticos obligatorios. Estado: **100% PASS**.
+- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 22 suites automatizadas (incluye Búsqueda Fonética Difusa, Radar de Costos y Catálogo Maestro CSV para ERP). Estado: **100% PASS**.

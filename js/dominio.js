@@ -1304,7 +1304,214 @@
         }
     }
 
+    
+    // --- MOTOR DE BÚSQUEDA FONÉTICA DIFUSA FARMACÉUTICA (FUZZY SEARCH & LEVENSHTEIN) ---
+    function normalizarTextoFoneticoFarmacia(texto) {
+        if (!texto || typeof texto !== 'string') return '';
+        let t = texto.toLowerCase().trim();
+        // 1. Quitar tildes y diacríticos
+        t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        // 2. Fonética farmacológica hispana
+        t = t.replace(/ph/g, 'f');
+        t = t.replace(/v/g, 'b');
+        t = t.replace(/z/g, 's');
+        t = t.replace(/c(?=[ei])/g, 's');
+        t = t.replace(/k/g, 'c');
+        t = t.replace(/qu(?=[ei])/g, 'c');
+        t = t.replace(/h/g, ''); // H muda en español
+        t = t.replace(/y(?=[aeiou]|$)/g, 'i');
+        // 3. Reducir consonantes duplicadas
+        t = t.replace(/([a-z])\1+/g, '$1');
+        // 4. Limpiar caracteres especiales
+        t = t.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        return t;
+    }
+
+    function distanciaLevenshtein(a, b) {
+        if (a === b) return 0;
+        if (!a || a.length === 0) return b ? b.length : 0;
+        if (!b || b.length === 0) return a ? a.length : 0;
+
+        let v0 = new Int32Array(b.length + 1);
+        let v1 = new Int32Array(b.length + 1);
+
+        for (let i = 0; i <= b.length; i++) v0[i] = i;
+
+        for (let i = 0; i < a.length; i++) {
+            v1[0] = i + 1;
+            for (let j = 0; j < b.length; j++) {
+                const cost = a[i] === b[j] ? 0 : 1;
+                v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+            }
+            for (let j = 0; j <= b.length; j++) v0[j] = v1[j];
+        }
+        return v1[b.length];
+    }
+
+    function buscarEnCatalogoFuzzy(termino, catalogo, limiteResultados = 8) {
+        if (!termino || typeof termino !== 'string') return [];
+        const qRaw = termino.trim();
+        if (qRaw.length < 2) return [];
+
+        const qFonetico = normalizarTextoFoneticoFarmacia(qRaw);
+        const lista = Object.values(catalogo || {});
+        const resultados = [];
+
+        for (const prod of lista) {
+            if (!prod) continue;
+            let score = 0;
+            let coincidenciaEn = '';
+
+            // 1. Coincidencia exacta o parcial de código de barras
+            if (prod.codigoBarras && prod.codigoBarras.includes(qRaw)) {
+                score = prod.codigoBarras === qRaw ? 100 : 90;
+                coincidenciaEn = 'codigoBarras';
+            } else {
+                // 2. Coincidencia fonética en nombres, principio activo o laboratorio
+                const fNombre = normalizarTextoFoneticoFarmacia(prod.nombre || '');
+                const fComercial = normalizarTextoFoneticoFarmacia(prod.nombreComercial || '');
+                const fPrincipio = normalizarTextoFoneticoFarmacia(prod.principioActivo || '');
+                const fLab = normalizarTextoFoneticoFarmacia(prod.laboratorio || '');
+
+                if (fNombre === qFonetico || fComercial === qFonetico) {
+                    score = 95;
+                    coincidenciaEn = 'nombreExacto';
+                } else if (fNombre.includes(qFonetico) || fComercial.includes(qFonetico)) {
+                    score = 80;
+                    coincidenciaEn = 'nombreSubcadena';
+                } else if (fPrincipio.includes(qFonetico)) {
+                    score = 75;
+                    coincidenciaEn = 'principioActivo';
+                } else if (fLab.includes(qFonetico)) {
+                    score = 70;
+                    coincidenciaEn = 'laboratorio';
+                } else {
+                    // 3. Levenshtein difuso por palabras clave
+                    const palabrasQuery = qFonetico.split(' ');
+                    const palabrasProd = (fNombre + ' ' + fPrincipio).split(' ');
+                    let menorDistancia = 999;
+
+                    for (const qw of palabrasQuery) {
+                        if (qw.length < 4) continue;
+                        for (const pw of palabrasProd) {
+                            if (pw.length < 4) continue;
+                            const dist = distanciaLevenshtein(qw, pw);
+                            if (dist < menorDistancia) menorDistancia = dist;
+                        }
+                    }
+
+                    if (menorDistancia <= 1) {
+                        score = 65;
+                        coincidenciaEn = 'fuzzyCercano';
+                    } else if (menorDistancia === 2 && qFonetico.length >= 6) {
+                        score = 50;
+                        coincidenciaEn = 'fuzzyMedio';
+                    }
+                }
+            }
+
+            if (score > 0) {
+                resultados.push({ producto: prod, score, coincidenciaEn });
+            }
+        }
+
+        resultados.sort((a, b) => b.score - a.score);
+        return resultados.slice(0, limiteResultados).map(r => r.producto);
+    }
+
+    // --- RADAR DE VARIACIÓN DE COSTOS Y ANÁLISIS DE PRECIOS ---
+    function calcularVariacionCostoPorcentaje(precioNuevo, precioAnterior) {
+        const nuevo = Number(precioNuevo) || 0;
+        const anterior = Number(precioAnterior) || 0;
+        if (anterior <= 0 || nuevo <= 0) return 0;
+        const variacion = ((nuevo - anterior) / anterior) * 100;
+        return Math.round(variacion * 100) / 100; // 2 decimales exactos
+    }
+
+    // --- EXPORTADOR RELACIONAL DE CATÁLOGO MAESTRO PARA ERP (26 COLUMNAS) ---
+    function generarCsvCatalogoMaestro(diccionario) {
+        const columnas = [
+            'codigo_barras',
+            'nombre',
+            'nombre_comercial',
+            'principio_activo',
+            'concentracion',
+            'forma_farmaceutica',
+            'presentacion',
+            'laboratorio',
+            'proveedor_habitual',
+            'rnc_proveedor',
+            'tipo',
+            'unidades_por_caja',
+            'costo_caja_actual',
+            'costo_caja_anterior',
+            'variacion_costo_porc',
+            'costo_unitario_fiscal',
+            'precio_p1_detalle',
+            'precio_p2_farmacia',
+            'precio_p3_mayorista',
+            'aplica_itbis',
+            'tasa_itbis',
+            'es_leche',
+            'condicion_venta',
+            'registro_sanitario',
+            'ubicacion',
+            'actualizado_en'
+        ];
+
+        const escapeCsv = (val) => {
+            if (val === null || val === undefined) return '""';
+            const str = String(val).replace(/"/g, '""');
+            return `"${str}"`;
+        };
+
+        const filas = [columnas.join(',')];
+        const items = Object.values(diccionario || {});
+
+        items.forEach(p => {
+            if (!p) return;
+            const pVenta = p.preciosVenta || {};
+            const fila = [
+                escapeCsv(p.codigoBarras),
+                escapeCsv(p.nombre),
+                escapeCsv(p.nombreComercial || p.nombre),
+                escapeCsv(p.principioActivo || ''),
+                escapeCsv(p.concentracion || ''),
+                escapeCsv(p.formaFarmaceutica || ''),
+                escapeCsv(p.presentacion || ''),
+                escapeCsv(p.laboratorio || ''),
+                escapeCsv(p.proveedorHabitual || ''),
+                escapeCsv(p.rncProveedor || ''),
+                escapeCsv(p.tipo || 'divisible'),
+                escapeCsv(p.unidadesPorCaja || 1),
+                escapeCsv((Number(p.ultimoPrecioCaja) || 0).toFixed(2)),
+                escapeCsv((Number(p.costoAnteriorCaja) || 0).toFixed(2)),
+                escapeCsv((Number(p.variacionCosto) || 0).toFixed(2) + '%'),
+                escapeCsv(p.costoUnitarioFiscal || (p.ultimoPrecioCaja / (p.unidadesPorCaja || 1)).toFixed(8)),
+                escapeCsv(pVenta.p1Exacto || ''),
+                escapeCsv(pVenta.p2Exacto || ''),
+                escapeCsv(pVenta.p3Exacto || ''),
+                escapeCsv(p.aplicaItbis ? 'SÍ' : 'NO'),
+                escapeCsv(p.tasaItbis || 0),
+                escapeCsv(p.esLeche ? 'SÍ' : 'NO'),
+                escapeCsv(p.condicionVenta || 'OTC'),
+                escapeCsv(p.registroSanitario || ''),
+                escapeCsv(p.ubicacion || ''),
+                escapeCsv(p.actualizadoEn || new Date().toISOString())
+            ];
+            filas.push(fila.join(','));
+        });
+
+        return filas.join('\r\n');
+    }
+
     AppFarmacia.Dominio = Object.freeze({
+        normalizarTextoFoneticoFarmacia,
+        distanciaLevenshtein,
+        buscarEnCatalogoFuzzy,
+        calcularVariacionCostoPorcentaje,
+        generarCsvCatalogoMaestro,
+
         validarRnc,
         emitirBipExito,
         emitirBipError,

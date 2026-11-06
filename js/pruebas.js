@@ -368,7 +368,98 @@
         afirmarIgualdad(textoLimpio.includes('\x00'), false, 'Campos: Elimina bytes nulos');
         afirmarIgualdad(textoLimpio.length <= 30, true, 'Campos: Respeta longitud máxima del campo');
 
-        console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
+        // 16. Búsqueda Fonética Difusa Farmacéutica (Fuzzy Search & Levenshtein)
+        const mockCatalogoFuzzy = {
+            '746001': {
+                codigoBarras: '746001',
+                nombre: 'Amoxicilina 500mg Comprimidos',
+                nombreComercial: 'Amoxil',
+                principioActivo: 'Amoxicilina',
+                laboratorio: 'GlaxoSmithKline',
+                ultimoPrecioCaja: 320
+            },
+            '746002': {
+                codigoBarras: '746002',
+                nombre: 'Acetaminofén 500mg Tabletas',
+                nombreComercial: 'Tylenol',
+                principioActivo: 'Paracetamol',
+                laboratorio: 'Johnson & Johnson',
+                ultimoPrecioCaja: 150
+            },
+            '746003': {
+                codigoBarras: '746003',
+                nombre: 'Losartán Potásico 50mg',
+                nombreComercial: 'Losartán 50mg',
+                principioActivo: 'Losartán Potásico',
+                laboratorio: 'Sued Farmacéutica',
+                ultimoPrecioCaja: 285
+            }
+        };
+
+        // 16.1 Tolerancia a errores tipográficos fonéticos ("amoxisilina" -> Amoxicilina)
+        const resFuzzy1 = Dominio.buscarEnCatalogoFuzzy('amoxisilina', mockCatalogoFuzzy);
+        afirmarIgualdad(resFuzzy1.length > 0, true, 'Fuzzy: Encuentra medicamento con falta ortográfica típica');
+        afirmarIgualdad(resFuzzy1[0].codigoBarras, '746001', 'Fuzzy: Resuelve código correcto para Amoxicilina');
+
+        // 16.2 Búsqueda por Principio Activo ("paracetamol" -> Acetaminofén)
+        const resFuzzy2 = Dominio.buscarEnCatalogoFuzzy('paracetamol', mockCatalogoFuzzy);
+        afirmarIgualdad(resFuzzy2.length > 0, true, 'Fuzzy: Encuentra producto por Principio Activo cruzado');
+        afirmarIgualdad(resFuzzy2[0].codigoBarras, '746002', 'Fuzzy: Resuelve Acetaminofén desde Paracetamol');
+
+        // 16.3 Búsqueda por Laboratorio ("sued" -> Losartán de Sued)
+        const resFuzzy3 = Dominio.buscarEnCatalogoFuzzy('sued', mockCatalogoFuzzy);
+        afirmarIgualdad(resFuzzy3.length > 0, true, 'Fuzzy: Encuentra producto por fabricante/laboratorio');
+        afirmarIgualdad(resFuzzy3[0].codigoBarras, '746003', 'Fuzzy: Resuelve producto de Sued');
+
+        // 17. Radar de Variación de Costos y Alzas de Precios
+        const alza20 = Dominio.calcularVariacionCostoPorcentaje(360, 300);
+        afirmarIgualdad(alza20, 20, 'Radar: Calcula alza de costo del +20% con exactitud');
+
+        const baja5 = Dominio.calcularVariacionCostoPorcentaje(285, 300);
+        afirmarIgualdad(baja5, -5, 'Radar: Calcula reducción de costo del -5% con exactitud');
+
+        const primerIngreso = Dominio.calcularVariacionCostoPorcentaje(300, 0);
+        afirmarIgualdad(primerIngreso, 0, 'Radar: Sin variación en primer ingreso sin costo previo');
+
+        // 18. Exportador de Catálogo Maestro para ERP (CSV Relacional de 26 Columnas)
+        const mockDictCsv = {
+            '746001': {
+                codigoBarras: '746001',
+                nombre: 'Amoxil 500mg',
+                nombreComercial: 'Amoxil',
+                principioActivo: 'Amoxicilina',
+                concentracion: '500mg',
+                formaFarmaceutica: 'Cápsulas',
+                presentacion: 'Caja x 30',
+                laboratorio: 'GlaxoSmithKline',
+                proveedorHabitual: 'Droguería Betances',
+                rncProveedor: '101023456',
+                tipo: 'divisible',
+                unidadesPorCaja: 30,
+                ultimoPrecioCaja: 360,
+                costoAnteriorCaja: 300,
+                variacionCosto: 20,
+                costoUnitarioFiscal: '12.00000000',
+                preciosVenta: { p1Exacto: '15.60', p2Exacto: '14.80', p3Exacto: '14.00' },
+                aplicaItbis: false,
+                tasaItbis: 0,
+                esLeche: false,
+                condicionVenta: 'Receta Médica',
+                registroSanitario: 'RD-12345',
+                ubicacion: 'Tramo A-2'
+            }
+        };
+
+        const csvGenerado = Dominio.generarCsvCatalogoMaestro(mockDictCsv);
+        afirmarIgualdad(csvGenerado.includes('codigo_barras,nombre,nombre_comercial,principio_activo'), true, 'CSV ERP: Encabezados relacionales normalizados');
+        afirmarIgualdad(csvGenerado.includes('"Amoxil 500mg"'), true, 'CSV ERP: Fila de producto con escape seguro');
+        afirmarIgualdad(csvGenerado.includes('"GlaxoSmithKline"'), true, 'CSV ERP: Preservación de laboratorio');
+        afirmarIgualdad(csvGenerado.includes('"Droguería Betances"'), true, 'CSV ERP: Preservación de proveedor');
+        afirmarIgualdad(csvGenerado.includes('"12.00000000"'), true, 'CSV ERP: Costo unitario fiscal a 8 decimales');
+        afirmarIgualdad(csvGenerado.includes('"20.00%"'), true, 'CSV ERP: Porcentaje de variación de costo reflejado');
+
+
+                console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;
     }

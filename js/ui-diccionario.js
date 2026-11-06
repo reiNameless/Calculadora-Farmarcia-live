@@ -11,13 +11,22 @@
     const escaparHtml = texto => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const iconoSvg = nombre => `<svg class="ico" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
 
-    function renderizarDiccionarioUI() {
+    function renderizarDiccionarioUI(filtroTermino = '') {
         const contenedor = el('contenedorDiccionario');
+        if (!contenedor) return;
         const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
-        const codigos = Object.keys(diccionario);
+        let listaItems = Object.values(diccionario || {});
 
-        if (!codigos.length) {
-            contenedor.innerHTML = `<div class="text-center p-18 text-muted">Aún no hay códigos de barra memorizados. Escanea un producto en la calculadora y agrégalo para aprenderlo.</div>`;
+        if (filtroTermino && filtroTermino.trim().length >= 2) {
+            listaItems = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
+                ? Dominio.buscarEnCatalogoFuzzy(filtroTermino.trim(), diccionario, 100)
+                : listaItems.filter(p => (p.nombre && p.nombre.toLowerCase().includes(filtroTermino.toLowerCase())) || (p.codigoBarras && p.codigoBarras.includes(filtroTermino)));
+        }
+
+        if (!listaItems.length) {
+            contenedor.innerHTML = filtroTermino
+                ? `<div class="text-center p-18 text-muted">No se encontraron productos coincidentes con "${escaparHtml(filtroTermino)}".</div>`
+                : `<div class="text-center p-18 text-muted">Aún no hay códigos de barra memorizados. Escanea un producto en la calculadora y agrégalo para aprenderlo.</div>`;
             return;
         }
 
@@ -27,7 +36,7 @@
                     <thead>
                         <tr>
                             <th>Código de Barras</th>
-                            <th>Producto Memorizado</th>
+                            <th>Producto / Laboratorio</th>
                             <th>Categoría</th>
                             <th>Trae x Caja</th>
                             <th>Último Costo Caja</th>
@@ -35,8 +44,8 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${codigos.map(cod => {
-                            const item = diccionario[cod];
+                        ${listaItems.map(item => {
+                            const cod = item.codigoBarras || '';
                             const codEscapado = escaparHtml(cod);
                             const badges = [];
                             if (item.esLeche) {
@@ -47,12 +56,25 @@
                                 badges.push(`<span class="badge" style="font-size:10px;background:var(--color-alerta-fondo);color:var(--color-alerta);padding:1px 5px;border-radius:3px;margin-left:4px;">+${tasa}% ITBIS</span>`);
                             }
                             const nombreTexto = item.nombre || 'Producto sin nombre';
+                            const subtitulo = [item.principioActivo, item.laboratorio].filter(Boolean).join(' • ');
+
+                            let badgeVariacion = '';
+                            if (item.variacionCosto && Number(item.variacionCosto) !== 0) {
+                                const varNum = Number(item.variacionCosto);
+                                const bg = varNum > 0 ? '#fee2e2' : '#dcfce7';
+                                const color = varNum > 0 ? '#dc2626' : '#16a34a';
+                                badgeVariacion = `<span class="badge" style="font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;" title="Variación respecto a la compra anterior">${varNum > 0 ? '+' : ''}${varNum}%</span>`;
+                            }
+
                             return `<tr>
-                                <td class="mono">${escaparHtml(item.codigoBarras)}</td>
-                                <td><strong>${escaparHtml(nombreTexto)}</strong>${badges.join('')}</td>
+                                <td class="mono">${escaparHtml(cod)}</td>
+                                <td>
+                                    <strong>${escaparHtml(nombreTexto)}</strong>${badges.join('')}
+                                    ${subtitulo ? `<div style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(subtitulo)}</div>` : ''}
+                                </td>
                                 <td>${item.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}</td>
                                 <td class="mono">${item.unidadesPorCaja}</td>
-                                <td class="mono">$${Number(item.ultimoPrecioCaja || 0).toFixed(2)}</td>
+                                <td class="mono">${Number(item.ultimoPrecioCaja || 0).toFixed(2)}${badgeVariacion}</td>
                                 <td>
                                     <button type="button" class="action-icon-btn" data-usar-codigo="${codEscapado}" aria-label="Cargar ${escaparHtml(nombreTexto)} en calculadora">Cargar en Calculadora</button>
                                     <button type="button" class="action-icon-btn text-danger" data-borrar-codigo="${codEscapado}" aria-label="Eliminar código ${codEscapado}">${iconoSvg('trash')}</button>
@@ -190,6 +212,21 @@
                         UI.Notificaciones.mostrarMensaje(res.motivo || res.error || 'El catálogo ya está actualizado.', 'info');
                     }
                 }
+            });
+        }
+
+        const btnExportCsv = el('btnExportarCatalogoCsv');
+        if (btnExportCsv) {
+            btnExportCsv.addEventListener('click', () => {
+                const res = Almacenamiento.exportarCatalogoMaestroCsv();
+                UI.Notificaciones.mostrarMensaje(`Catálogo Maestro (${res.totalProductos} productos) exportado en CSV relacional para ERP.`, 'success');
+            });
+        }
+
+        const inputFiltro = el('filtroBuscadorDiccionario');
+        if (inputFiltro) {
+            inputFiltro.addEventListener('input', () => {
+                renderizarDiccionarioUI(inputFiltro.value.trim());
             });
         }
 

@@ -172,7 +172,8 @@
                         </div>
                         <div class="campo">
                             <label class="campo-label">Nombre del Producto</label>
-                            <input type="text" class="input-control" id="calcNombre" placeholder="Ej. Amoxicilina 500mg">
+                            <input type="text" class="input-control" id="calcNombre" placeholder="Ej. Amoxicilina 500mg" list="listaSugerenciasProductos" autocomplete="off">
+                            <datalist id="listaSugerenciasProductos"></datalist>
                         </div>
                         <div class="campo">
                             <label class="campo-label">1. Cant. Cajas</label>
@@ -751,7 +752,7 @@
                             <span>Diccionario de Códigos y Respaldo de Archivos</span>
                         </div>
                         <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
-                            <button class="btn-icono" id="btnDescargarDiccionario">
+                            <button type="button" class="btn-icono" id="btnDescargarDiccionario">
                                 <svg class="ico ico-sm"><use href="#i-down"/></svg>
                                 <span>Descargar Diccionario (.json)</span>
                             </button>
@@ -760,6 +761,10 @@
                                 <span>Cargar Diccionario (.json)</span>
                                 <input type="file" id="inputRestaurarDiccionario" accept=".json,application/json" style="display:none">
                             </label>
+                            <button type="button" class="btn-icono" id="btnExportarCatalogoCsv" title="Exportar Catálogo Maestro para ERP o Excel (.csv)">
+                                <svg class="ico ico-sm"><use href="#i-doc"/></svg>
+                                <span>Exportar para ERP (.csv)</span>
+                            </button>
                             <button type="button" class="btn-icono" id="btnSembrarCatalogoRd" title="Cargar base de datos inicial con 77 fármacos dominicanos">
                                 <svg class="ico ico-sm"><use href="#i-sync"/></svg>
                                 <span>Sembrar Catálogo RD (77 productos)</span>
@@ -796,6 +801,9 @@
                         </div>
                     </div>
 
+                    <div style="margin-bottom:var(--espacio-2);">
+                        <input type="text" id="filtroBuscadorDiccionario" class="input-control" placeholder="Buscar medicamento por nombre, código, principio activo o laboratorio..." autocomplete="off">
+                    </div>
                     <div id="contenedorDiccionario">
                         <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
                     </div>

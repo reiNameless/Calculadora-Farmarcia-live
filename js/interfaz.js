@@ -47,7 +47,7 @@
         const idx = sesionActual.productos.findIndex(p => String(p.idLinea) === String(idLinea));
         if (idx < 0) return;
         sesionActual.productos[idx] = nuevoProducto;
-        Almacenamiento.aprenderProductoEnDiccionario(nuevoProducto);
+        Almacenamiento.aprenderProductoEnDiccionario(nuevoProducto, sesionActual);
         sincronizarYGuardarSesion();
         sincronizarYRenderizarProductos();
     }

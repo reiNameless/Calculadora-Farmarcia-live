@@ -11,7 +11,7 @@
         : (global.indexedDB || null);
 
     const DB_NOMBRE = 'CalculadoraFarmaciaDB';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const STORES = Object.freeze({
         BORRADOR: 'borrador',
         HISTORIAL: 'historial_facturas',
@@ -53,11 +53,30 @@
                     }
 
                     // 3. Diccionario permanente de productos
+                    let storeDic;
                     if (!db.objectStoreNames.contains(STORES.DICCIONARIO)) {
-                        const storeDic = db.createObjectStore(STORES.DICCIONARIO, { keyPath: 'codigoBarras' });
+                        storeDic = db.createObjectStore(STORES.DICCIONARIO, { keyPath: 'codigoBarras' });
                         storeDic.createIndex('nombre', 'nombre', { unique: false });
                         storeDic.createIndex('ultimoPrecioCaja', 'ultimoPrecioCaja', { unique: false });
                         storeDic.createIndex('actualizadoEn', 'actualizadoEn', { unique: false });
+                    } else if (event.target.transaction) {
+                        storeDic = event.target.transaction.objectStore(STORES.DICCIONARIO);
+                    }
+
+                    // Versión 2: Índices para catálogo maestro y futuro ERP
+                    if (storeDic) {
+                        if (!storeDic.indexNames.contains('principioActivo')) {
+                            storeDic.createIndex('principioActivo', 'principioActivo', { unique: false });
+                        }
+                        if (!storeDic.indexNames.contains('laboratorio')) {
+                            storeDic.createIndex('laboratorio', 'laboratorio', { unique: false });
+                        }
+                        if (!storeDic.indexNames.contains('proveedorHabitual')) {
+                            storeDic.createIndex('proveedorHabitual', 'proveedorHabitual', { unique: false });
+                        }
+                        if (!storeDic.indexNames.contains('categoria')) {
+                            storeDic.createIndex('categoria', 'categoria', { unique: false });
+                        }
                     }
 
                     // 4. Configuración y reglas fiscales
@@ -322,7 +341,7 @@
         return diccionario[codigo] || null;
     }
 
-    function aprenderProductoEnDiccionario(lineaProducto) {
+    function aprenderProductoEnDiccionario(lineaProducto, contextoFactura = {}) {
         const codigo = Dominio.normalizarCodigoBarras(lineaProducto.codigoBarras);
         const nombreCandidato = String(lineaProducto.nombre || '').trim();
         const esNombreGenerico = !nombreCandidato || /^Producto #\d+$/i.test(nombreCandidato) || nombreCandidato === 'Producto IA' || nombreCandidato === 'Producto';
@@ -343,11 +362,53 @@
             ? Number(lineaProducto.tasaItbis)
             : (lineaProducto.aplicaItbis ? 18 : 0);
 
+        const precioCajaActual = Number(lineaProducto.precioCajaBase) || 0;
+        const costoAnteriorCaja = (existente && existente.ultimoPrecioCaja && Number(existente.ultimoPrecioCaja) > 0)
+            ? Number(existente.ultimoPrecioCaja)
+            : 0;
+
+        let variacionCosto = 0;
+        if (costoAnteriorCaja > 0 && precioCajaActual > 0) {
+            variacionCosto = (Dominio && typeof Dominio.calcularVariacionCostoPorcentaje === 'function')
+                ? Dominio.calcularVariacionCostoPorcentaje(precioCajaActual, costoAnteriorCaja)
+                : Math.round(((precioCajaActual - costoAnteriorCaja) / costoAnteriorCaja) * 10000) / 100;
+        } else if (existente && existente.variacionCosto !== undefined) {
+            variacionCosto = existente.variacionCosto;
+        }
+
+        const proveedor = (contextoFactura && contextoFactura.proveedor) || lineaProducto.proveedor || (existente && existente.proveedorHabitual) || '';
+        const rncProveedor = (contextoFactura && contextoFactura.rnc) || lineaProducto.rncProveedor || (existente && existente.rncProveedor) || '';
+        const numeroFactura = (contextoFactura && contextoFactura.numeroFactura) || lineaProducto.numeroFactura || '';
+
+        // Trazabilidad de costos históricos (hasta 20 registros)
+        const historialCostos = Array.isArray(existente && existente.historialCostos)
+            ? [...existente.historialCostos]
+            : [];
+
+        if (precioCajaActual > 0) {
+            historialCostos.unshift({
+                fecha: (contextoFactura && contextoFactura.fechaEmision) || (Dominio ? Dominio.obtenerFechaLocalISO() : new Date().toISOString().slice(0, 10)),
+                precioCaja: precioCajaActual,
+                costoUnitarioFiscal: lineaProducto.costoUnitario || (Dominio && Dominio.formatearCostoFiscalOchoDecimales
+                    ? Dominio.formatearCostoFiscalOchoDecimales(precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1)))
+                    : (precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1))).toFixed(8)),
+                proveedor,
+                rnc: rncProveedor,
+                numeroFactura,
+                descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+                tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
+                aplicaItbis: tasaItbis > 0
+            });
+            if (historialCostos.length > 20) {
+                historialCostos.length = 20;
+            }
+        }
+
         const fichaActualizada = {
             ...(existente || {}),
             codigoBarras: codigo,
             nombre: nombreFinal,
-            nombreComercial: lineaProducto.nombreComercial || nombreFinal,
+            nombreComercial: lineaProducto.nombreComercial || (existente && existente.nombreComercial) || nombreFinal,
             principioActivo: lineaProducto.principioActivo || (existente && existente.principioActivo) || '',
             laboratorio: lineaProducto.laboratorio || (existente && existente.laboratorio) || '',
             concentracion: lineaProducto.concentracion || (existente && existente.concentracion) || '',
@@ -357,9 +418,25 @@
             registroSanitario: lineaProducto.registroSanitario || (existente && existente.registroSanitario) || '',
             condicionVenta: lineaProducto.condicionVenta || (existente && existente.condicionVenta) || 'OTC',
             ubicacion: lineaProducto.ubicacion || (existente && existente.ubicacion) || '',
+            proveedorHabitual: proveedor,
+            rncProveedor: rncProveedor,
             tipo,
             unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Number(lineaProducto.unidadesPorCaja) || 1,
-            ultimoPrecioCaja: Number(lineaProducto.precioCajaBase) || 0,
+            ultimoPrecioCaja: precioCajaActual,
+            costoAnteriorCaja: costoAnteriorCaja,
+            variacionCosto: variacionCosto,
+            costoUnitarioFiscal: lineaProducto.costoUnitario || (existente && existente.costoUnitarioFiscal) || (Dominio && Dominio.formatearCostoFiscalOchoDecimales
+                ? Dominio.formatearCostoFiscalOchoDecimales(precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1)))
+                : (precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1))).toFixed(8)),
+            preciosVenta: lineaProducto.precios ? {
+                p1Exacto: lineaProducto.precios.p1Exacto,
+                p1Redondeado: lineaProducto.precios.p1Redondeado,
+                p2Exacto: lineaProducto.precios.p2Exacto,
+                p2Redondeado: lineaProducto.precios.p2Redondeado,
+                p3Exacto: lineaProducto.precios.p3Exacto,
+                p3Redondeado: lineaProducto.precios.p3Redondeado
+            } : (existente && existente.preciosVenta ? existente.preciosVenta : null),
+            historialCostos,
             aplicaItbis: tasaItbis > 0,
             tasaItbis,
             esLeche: Boolean(lineaProducto.esLeche),
@@ -681,7 +758,35 @@
         ) || null;
     }
 
+    
+    function descargarTextoComoArchivo(contenidoTexto, nombreArchivo, mimeType = 'text/csv;charset=utf-8;') {
+        if (typeof document === 'undefined' || typeof Blob === 'undefined') return;
+        const blob = new Blob([contenidoTexto], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = nombreArchivo;
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+        setTimeout(() => URL.revokeObjectURL(url), CONSTANTES.TIEMPO_REVOCAR_URL_MS);
+    }
+
+    function exportarCatalogoMaestroCsv() {
+        const diccionario = obtenerDiccionarioCodigos();
+        const csvContenido = Dominio.generarCsvCatalogoMaestro(diccionario);
+        const fechaIso = Dominio.obtenerFechaLocalISO();
+        descargarTextoComoArchivo(csvContenido, `catalogo-maestro-farmacia-${fechaIso}.csv`, 'text/csv;charset=utf-8;');
+        return {
+            exito: true,
+            totalProductos: Object.keys(diccionario || {}).length
+        };
+    }
+
     AppFarmacia.Almacenamiento = Object.freeze({
+        descargarTextoComoArchivo,
+        exportarCatalogoMaestroCsv,
+
         obtenerDirectorioProveedores,
         guardarProveedorEnDirectorio,
         buscarProveedorPorRnc,

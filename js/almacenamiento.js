@@ -350,17 +350,35 @@
         const diccionario = obtenerDiccionarioCodigos();
         const existente = diccionario[codigo];
 
+        // PROTECCIÓN DE INTEGRIDAD DE CATÁLOGO MAESTRO:
+        // Si el producto ya está registrado en el catálogo, su nombre y configuración taxonómica
+        // quedan blindados para impedir sobreescritura accidental desde el cockpit de cálculo.
         let nombreFinal = nombreCandidato;
-        if (esNombreGenerico && existente && existente.nombre && !/^Producto #\d+$/i.test(existente.nombre)) {
+        let tipo = lineaProducto.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
+        let tasaItbis = (lineaProducto.tasaItbis !== undefined && Number.isFinite(Number(lineaProducto.tasaItbis)))
+            ? Number(lineaProducto.tasaItbis)
+            : (lineaProducto.aplicaItbis ? 18 : 0);
+        let unidadesPorCaja = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Number(lineaProducto.unidadesPorCaja) || 1;
+        let esLeche = Boolean(lineaProducto.esLeche);
+
+        if (existente && existente.nombre && !lineaProducto._esEdicionCatalogo) {
+            // Producto preexistente en catálogo: preservar nombre oficial y atributos de empaque
+            nombreFinal = existente.nombre;
+            if (existente.tipo) tipo = existente.tipo;
+            if (existente.unidadesPorCaja && existente.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
+                unidadesPorCaja = Number(existente.unidadesPorCaja) || 1;
+            }
+            if (existente.tasaItbis !== undefined) {
+                tasaItbis = Number(existente.tasaItbis);
+            }
+            if (existente.esLeche !== undefined) {
+                esLeche = Boolean(existente.esLeche);
+            }
+        } else if (esNombreGenerico && existente && existente.nombre && !/^Producto #\d+$/i.test(existente.nombre)) {
             nombreFinal = existente.nombre;
         } else if (!nombreFinal) {
             nombreFinal = 'Producto sin nombre';
         }
-
-        const tipo = lineaProducto.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
-        const tasaItbis = (lineaProducto.tasaItbis !== undefined && Number.isFinite(Number(lineaProducto.tasaItbis)))
-            ? Number(lineaProducto.tasaItbis)
-            : (lineaProducto.aplicaItbis ? 18 : 0);
 
         const precioCajaActual = Number(lineaProducto.precioCajaBase) || 0;
         const costoAnteriorCaja = (existente && existente.ultimoPrecioCaja && Number(existente.ultimoPrecioCaja) > 0)
@@ -421,7 +439,7 @@
             proveedorHabitual: proveedor,
             rncProveedor: rncProveedor,
             tipo,
-            unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Number(lineaProducto.unidadesPorCaja) || 1,
+            unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : unidadesPorCaja,
             ultimoPrecioCaja: precioCajaActual,
             costoAnteriorCaja: costoAnteriorCaja,
             variacionCosto: variacionCosto,
@@ -439,7 +457,7 @@
             historialCostos,
             aplicaItbis: tasaItbis > 0,
             tasaItbis,
-            esLeche: Boolean(lineaProducto.esLeche),
+            esLeche,
             descuentoValor: Number(lineaProducto.descuentoValor) || 0,
             tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
             actualizadoEn: new Date().toISOString()
@@ -783,7 +801,60 @@
         };
     }
 
+        // --- EDICIÓN DELIBERADA DE FICHA MAESTRA EN CATÁLOGO / AJUSTES ---
+    function guardarFichaProductoCatalogo(ficha) {
+        if (!ficha || !ficha.codigoBarras) return { exito: false, error: 'Código de barras no proporcionado.' };
+        const codigo = Dominio.normalizarCodigoBarras(ficha.codigoBarras);
+        if (!codigo) return { exito: false, error: 'Código de barras no válido.' };
+
+        const diccionario = obtenerDiccionarioCodigos();
+        const existente = diccionario[codigo] || {};
+
+        const tipo = ficha.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
+        const unidadesPorCaja = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Math.max(1, parseInt(ficha.unidadesPorCaja, 10) || 1);
+        const tasaItbis = Number(ficha.tasaItbis) || (ficha.aplicaItbis ? 18 : 0);
+
+        const fichaActualizada = {
+            ...existente,
+            codigoBarras: codigo,
+            nombre: String(ficha.nombre || existente.nombre || 'Producto sin nombre').trim(),
+            nombreComercial: String(ficha.nombreComercial || ficha.nombre || existente.nombreComercial || '').trim(),
+            principioActivo: String(ficha.principioActivo || '').trim(),
+            laboratorio: String(ficha.laboratorio || '').trim(),
+            concentracion: String(ficha.concentracion || '').trim(),
+            categoria: String(ficha.categoria || 'General / Otros').trim(),
+            presentacion: String(ficha.presentacion || '').trim(),
+            formaFarmaceutica: String(ficha.formaFarmaceutica || '').trim(),
+            registroSanitario: String(ficha.registroSanitario || '').trim(),
+            condicionVenta: String(ficha.condicionVenta || 'OTC').trim(),
+            ubicacion: String(ficha.ubicacion || '').trim(),
+            tipo,
+            unidadesPorCaja,
+            aplicaItbis: tasaItbis > 0,
+            tasaItbis,
+            esLeche: Boolean(ficha.esLeche),
+            ultimoPrecioCaja: Number(ficha.ultimoPrecioCaja !== undefined ? ficha.ultimoPrecioCaja : (existente.ultimoPrecioCaja || 0)),
+            actualizadoEn: new Date().toISOString()
+        };
+
+        diccionario[codigo] = fichaActualizada;
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
+
+        abrirBaseDatos().then(db => {
+            if (!db) return;
+            try {
+                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                tx.objectStore(STORES.DICCIONARIO).put(fichaActualizada);
+            } catch (e) {
+                console.warn('[IndexedDB] Error guardando ficha en catálogo:', e);
+            }
+        });
+
+        return { exito: true, producto: fichaActualizada };
+    }
+
     AppFarmacia.Almacenamiento = Object.freeze({
+        guardarFichaProductoCatalogo,
         descargarTextoComoArchivo,
         exportarCatalogoMaestroCsv,
 

@@ -203,8 +203,26 @@
 
         const aprendido = Almacenamiento.buscarProductoPorCodigo(codigo);
         if (aprendido) {
-            // 1. Nombre
-            el('calcNombre').value = (aprendido.nombre && !aprendido.nombre.startsWith('Producto sin nombre')) ? aprendido.nombre : '';
+            // 1. Nombre y Blindaje de Catálogo Maestro
+            const tieneNombreOficial = Boolean(aprendido.nombre && !aprendido.nombre.startsWith('Producto sin nombre') && !/^Producto #\d+$/i.test(aprendido.nombre));
+            const inputNombre = el('calcNombre');
+            const badgeCat = el('badgeEstadoProducto');
+            inputNombre.value = tieneNombreOficial ? aprendido.nombre : '';
+
+            if (tieneNombreOficial) {
+                inputNombre.readOnly = true;
+                inputNombre.style.backgroundColor = 'var(--color-superficie-resaltada)';
+                if (badgeCat) {
+                    badgeCat.style.display = 'inline-block';
+                    badgeCat.style.background = 'var(--color-exito-fondo)';
+                    badgeCat.style.color = 'var(--color-exito)';
+                    badgeCat.textContent = 'Catálogo Maestro (Protegido)';
+                }
+            } else {
+                inputNombre.readOnly = false;
+                inputNombre.style.backgroundColor = '';
+                if (badgeCat) badgeCat.style.display = 'none';
+            }
 
             // 2. Costo Caja Base (autocompletado solicitado expresamente)
             if (aprendido.ultimoPrecioCaja && Number(aprendido.ultimoPrecioCaja) > 0) {
@@ -251,6 +269,16 @@
             el('calcCajasCompradas').focus();
             el('calcCajasCompradas').select();
         } else {
+            const inputNombre = el('calcNombre');
+            const badgeCat = el('badgeEstadoProducto');
+            inputNombre.readOnly = false;
+            inputNombre.style.backgroundColor = '';
+            if (badgeCat) {
+                badgeCat.style.display = 'inline-block';
+                badgeCat.style.background = 'var(--color-primario-fondo)';
+                badgeCat.style.color = 'var(--color-primario)';
+                badgeCat.textContent = 'Nuevo Producto';
+            }
             if (mostrarNotificacion) {
                 UI.Notificaciones.mostrarMensaje(`Código ${valEstandar.tipo} válido (${codigo}). Ingresa los datos; se memorizará al agregar a la factura.`, 'info');
             }
@@ -363,6 +391,11 @@
         ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas', 'calcDescuento', 'calcUnidadesCaja'].forEach(id => {
             if (el(id)) el(id).value = '';
         });
+        if (el('calcNombre')) {
+            el('calcNombre').readOnly = false;
+            el('calcNombre').style.backgroundColor = '';
+        }
+        if (el('badgeEstadoProducto')) el('badgeEstadoProducto').style.display = 'none';
         if (el('calcCodigoBarras')) el('calcCodigoBarras').style.borderColor = '';
         if (el('calcEsLeche')) el('calcEsLeche').checked = false;
 
@@ -714,6 +747,13 @@
             inputCodigo.setAttribute('pattern', '[0-9]*');
             inputCodigo.addEventListener('input', e => {
                 // Solo números
+                if (!e.target.value.trim()) {
+                    if (el('calcNombre')) {
+                        el('calcNombre').readOnly = false;
+                        el('calcNombre').style.backgroundColor = '';
+                    }
+                    if (el('badgeEstadoProducto')) el('badgeEstadoProducto').style.display = 'none';
+                }
                 const soloDigitos = e.target.value.replace(/\D/g, '');
                 if (e.target.value !== soloDigitos) {
                     e.target.value = soloDigitos;
@@ -794,6 +834,16 @@
                 if (encontrado) {
                     if (el('calcCodigoBarras') && !el('calcCodigoBarras').value && encontrado.codigoBarras) {
                         el('calcCodigoBarras').value = encontrado.codigoBarras;
+                    }
+                    if (encontrado.nombre && !encontrado.nombre.startsWith('Producto sin nombre') && !/^Producto #\d+$/i.test(encontrado.nombre)) {
+                        inputNombre.readOnly = true;
+                        inputNombre.style.backgroundColor = 'var(--color-superficie-resaltada)';
+                        if (el('badgeEstadoProducto')) {
+                            el('badgeEstadoProducto').style.display = 'inline-block';
+                            el('badgeEstadoProducto').style.background = 'var(--color-exito-fondo)';
+                            el('badgeEstadoProducto').style.color = 'var(--color-exito)';
+                            el('badgeEstadoProducto').textContent = 'Catálogo Maestro (Protegido)';
+                        }
                     }
                     if (el('calcPrecioCaja') && !el('calcPrecioCaja').value && encontrado.ultimoPrecioCaja) {
                         el('calcPrecioCaja').value = Number(encontrado.ultimoPrecioCaja).toFixed(2);

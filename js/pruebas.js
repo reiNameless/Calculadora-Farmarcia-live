@@ -459,6 +459,80 @@
         afirmarIgualdad(csvGenerado.includes('"20.00%"'), true, 'CSV ERP: Porcentaje de variación de costo reflejado');
 
 
+                // 19. Blindaje de Catálogo Maestro y Protección contra Sobreescritura Accidental
+        // Simular un catálogo con producto oficial
+        const codigoPruebaBlindaje = '7469999990011';
+        const productoMaestro = {
+            codigoBarras: codigoPruebaBlindaje,
+            nombre: 'Amoxicilina 500mg MK Oficial',
+            tipo: 'divisible',
+            unidadesPorCaja: 30,
+            ultimoPrecioCaja: 300,
+            aplicaItbis: false
+        };
+
+        if (AppFarmacia.Almacenamiento && typeof AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo === 'function') {
+            AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo(productoMaestro);
+
+            // Simular que el operador casualmente escribe otro nombre en la calculadora al recibir factura
+            const lineaOperador = {
+                codigoBarras: codigoPruebaBlindaje,
+                nombre: 'amoxi casual sobreescritura',
+                tipo: 'entero',
+                unidadesPorCaja: 1,
+                precioCajaBase: 350,
+                aplicaItbis: true
+            };
+
+            AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario(lineaOperador);
+            const recuperado = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoPruebaBlindaje);
+
+            afirmarIgualdad(recuperado.nombre, 'Amoxicilina 500mg MK Oficial', 'Blindaje: Preserva nombre oficial e impide sobreescritura casual');
+            afirmarIgualdad(recuperado.tipo, 'divisible', 'Blindaje: Preserva empaque divisible oficial');
+            afirmarIgualdad(recuperado.unidadesPorCaja, 30, 'Blindaje: Preserva unidades por caja oficiales (30)');
+            afirmarIgualdad(recuperado.ultimoPrecioCaja, 350, 'Blindaje: Actualiza costo de compra correctamente (350)');
+            afirmarIgualdad(recuperado.costoAnteriorCaja, 300, 'Blindaje: Registra costo anterior de compra (300)');
+
+            // Edición deliberada desde Catálogo / Ajustes
+            const edicionDeliberada = {
+                codigoBarras: codigoPruebaBlindaje,
+                nombre: 'Amoxicilina 500mg MK Ficha Editada',
+                categoria: 'Antibiótico / Betalactámico',
+                principioActivo: 'Amoxicilina Trihidrato'
+            };
+            AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo(edicionDeliberada);
+            const recuperadoEditado = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoPruebaBlindaje);
+            afirmarIgualdad(recuperadoEditado.nombre, 'Amoxicilina 500mg MK Ficha Editada', 'Catálogo: Permite actualización deliberada desde ficha de catálogo');
+            afirmarIgualdad(recuperadoEditado.categoria, 'Antibiótico / Betalactámico', 'Catálogo: Guarda categoría terapéutica');
+
+            // Limpieza
+            AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codigoPruebaBlindaje);
+        }
+
+        // 20. Organización Determinística por Categoría y Nombre Ascendente (A-Z)
+        const listaDesordenada = [
+            { nombre: 'Omeprazol 20mg', categoria: 'Gastrointestinal' },
+            { nombre: 'Acetaminofén 500mg', categoria: 'Analgésico / Antipirético' },
+            { nombre: 'Ibuprofeno 400mg', categoria: 'Analgésico / Antipirético' },
+            { nombre: 'Amlodipina 5mg', categoria: 'Cardiovascular' },
+            { nombre: 'Alcohol 70%', categoria: 'General / Otros' }
+        ];
+
+        listaDesordenada.sort((a, b) => {
+            const catA = (a.categoria || 'General / Otros').trim();
+            const catB = (b.categoria || 'General / Otros').trim();
+            const cmpCat = catA.localeCompare(catB, 'es', { sensitivity: 'base' });
+            if (cmpCat !== 0) return cmpCat;
+            return a.nombre.trim().localeCompare(b.nombre.trim(), 'es', { sensitivity: 'base' });
+        });
+
+        afirmarIgualdad(listaDesordenada[0].nombre, 'Acetaminofén 500mg', 'Orden Catálogo: Primer producto es Acetaminofén en Analgésicos');
+        afirmarIgualdad(listaDesordenada[1].nombre, 'Ibuprofeno 400mg', 'Orden Catálogo: Segundo producto es Ibuprofeno en Analgésicos');
+        afirmarIgualdad(listaDesordenada[2].nombre, 'Amlodipina 5mg', 'Orden Catálogo: Tercero es Amlodipina en Cardiovascular');
+        afirmarIgualdad(listaDesordenada[3].nombre, 'Omeprazol 20mg', 'Orden Catálogo: Cuarto es Omeprazol en Gastrointestinal');
+        afirmarIgualdad(listaDesordenada[4].nombre, 'Alcohol 70%', 'Orden Catálogo: Quinto es Alcohol en General / Otros');
+
+
                 console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

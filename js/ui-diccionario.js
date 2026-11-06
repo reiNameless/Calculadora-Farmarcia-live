@@ -11,24 +11,126 @@
     const escaparHtml = texto => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const iconoSvg = nombre => `<svg class="ico" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
 
-    function renderizarDiccionarioUI(filtroTermino = '') {
+    function renderizarDiccionarioUI(filtroTermino = '', filtroCategoria = '') {
         const contenedor = el('contenedorDiccionario');
         if (!contenedor) return;
         const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
-        let listaItems = Object.values(diccionario || {});
+        const todosLosItems = Object.values(diccionario || {});
 
+        // 1. Actualizar dinámicamente el selector de categorías si está presente
+        const selCat = el('filtroCategoriaDiccionario');
+        if (selCat) {
+            const catActualSeleccionada = filtroCategoria || selCat.value || '';
+            const categoriasSet = new Map();
+            todosLosItems.forEach(p => {
+                const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+                categoriasSet.set(c, (categoriasSet.get(c) || 0) + 1);
+            });
+            const catsOrdenadas = Array.from(categoriasSet.keys()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+
+            let optionsHtml = `<option value="">Todas las categorías (${todosLosItems.length} productos)</option>`;
+            catsOrdenadas.forEach(c => {
+                const selected = c === catActualSeleccionada ? ' selected' : '';
+                optionsHtml += `<option value="${escaparHtml(c)}"${selected}>${escaparHtml(c)} (${categoriasSet.get(c)})</option>`;
+            });
+            selCat.innerHTML = optionsHtml;
+        }
+
+        let listaItems = [...todosLosItems];
+
+        // 2. Filtro por categoría seleccionada
+        const catFiltro = filtroCategoria || (selCat ? selCat.value : '');
+        if (catFiltro) {
+            listaItems = listaItems.filter(p => {
+                const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+                return c.toLowerCase() === catFiltro.toLowerCase();
+            });
+        }
+
+        // 3. Filtro difuso o por texto
         if (filtroTermino && filtroTermino.trim().length >= 2) {
             listaItems = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
-                ? Dominio.buscarEnCatalogoFuzzy(filtroTermino.trim(), diccionario, 100)
+                ? Dominio.buscarEnCatalogoFuzzy(filtroTermino.trim(), Object.fromEntries(listaItems.map(p => [p.codigoBarras, p])), 100)
                 : listaItems.filter(p => (p.nombre && p.nombre.toLowerCase().includes(filtroTermino.toLowerCase())) || (p.codigoBarras && p.codigoBarras.includes(filtroTermino)));
         }
 
         if (!listaItems.length) {
-            contenedor.innerHTML = filtroTermino
-                ? `<div class="text-center p-18 text-muted">No se encontraron productos coincidentes con "${escaparHtml(filtroTermino)}".</div>`
+            contenedor.innerHTML = (filtroTermino || catFiltro)
+                ? `<div class="text-center p-18 text-muted">No se encontraron productos coincidentes en el catálogo.</div>`
                 : `<div class="text-center p-18 text-muted">Aún no hay códigos de barra memorizados. Escanea un producto en la calculadora y agrégalo para aprenderlo.</div>`;
             return;
         }
+
+        // 4. ORGANIZACIÓN DETERMINÍSTICA: Categoría (A-Z) y dentro de cada categoría, Nombre Ascendente (A-Z)
+        listaItems.sort((a, b) => {
+            const catA = (a.categoria && a.categoria.trim()) ? a.categoria.trim() : 'General / Otros';
+            const catB = (b.categoria && b.categoria.trim()) ? b.categoria.trim() : 'General / Otros';
+            const cmpCat = catA.localeCompare(catB, 'es', { sensitivity: 'base' });
+            if (cmpCat !== 0) return cmpCat;
+
+            const nomA = (a.nombre || a.nombreComercial || '').trim();
+            const nomB = (b.nombre || b.nombreComercial || '').trim();
+            return nomA.localeCompare(nomB, 'es', { sensitivity: 'base' });
+        });
+
+        // 5. Renderizado en cuadrícula con cabeceras de categoría si no hay término difuso específico
+        let filasHtml = '';
+        let ultimaCategoria = null;
+
+        listaItems.forEach(item => {
+            const cod = item.codigoBarras || '';
+            const codEscapado = escaparHtml(cod);
+            const categoriaActual = (item.categoria && item.categoria.trim()) ? item.categoria.trim() : 'General / Otros';
+
+            // Insertar separador de categoría si cambia
+            if (!filtroTermino && categoriaActual !== ultimaCategoria) {
+                ultimaCategoria = categoriaActual;
+                filasHtml += `<tr class="fila-grupo-categoria">
+                    <td colspan="6" style="background:var(--color-fondo-panel);font-weight:700;font-size:12px;color:var(--color-primario);padding:8px 12px;border-top:1.5px solid var(--color-borde);border-bottom:1px solid var(--color-borde);">
+                        ${escaparHtml(categoriaActual)}
+                    </td>
+                </tr>`;
+            }
+
+            const badges = [];
+            if (item.esLeche) {
+                badges.push('<span class="badge" style="font-size:10px;background:var(--color-primario-fondo);color:var(--color-primario);padding:1px 5px;border-radius:3px;margin-left:4px;">Leche 10%</span>');
+            }
+            if (item.tasaItbis > 0 || item.aplicaItbis) {
+                const tasa = item.tasaItbis || 18;
+                badges.push(`<span class="badge" style="font-size:10px;background:var(--color-alerta-fondo);color:var(--color-alerta);padding:1px 5px;border-radius:3px;margin-left:4px;">+${tasa}% ITBIS</span>`);
+            }
+            const nombreTexto = item.nombre || 'Producto sin nombre';
+            const subtitulo = [item.principioActivo, item.laboratorio].filter(Boolean).join(' • ');
+
+            let badgeVariacion = '';
+            if (item.variacionCosto && Number(item.variacionCosto) !== 0) {
+                const varNum = Number(item.variacionCosto);
+                const bg = varNum > 0 ? '#fee2e2' : '#dcfce7';
+                const color = varNum > 0 ? '#dc2626' : '#16a34a';
+                badgeVariacion = `<span class="badge" style="font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;" title="Variación respecto a la compra anterior">${varNum > 0 ? '+' : ''}${varNum}%</span>`;
+            }
+
+            filasHtml += `<tr>
+                <td class="mono">${escaparHtml(cod)}</td>
+                <td>
+                    <strong>${escaparHtml(nombreTexto)}</strong>${badges.join('')}
+                    ${subtitulo ? `<div style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(subtitulo)}</div>` : ''}
+                </td>
+                <td><span style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(categoriaActual)}</span><br><span style="font-size:10px;">${item.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}</span></td>
+                <td class="mono">${item.unidadesPorCaja}</td>
+                <td class="mono">$${Number(item.ultimoPrecioCaja || 0).toFixed(2)}${badgeVariacion}</td>
+                <td style="white-space:nowrap;">
+                    <div style="display:flex;gap:4px;align-items:center;">
+                        <button type="button" class="action-icon-btn" data-usar-codigo="${codEscapado}" aria-label="Cargar ${escaparHtml(nombreTexto)} en calculadora">Cargar</button>
+                        <button type="button" class="action-icon-btn" data-editar-ficha="${codEscapado}" aria-label="Editar ficha de ${escaparHtml(nombreTexto)}" title="Editar Ficha en Catálogo">
+                            ${iconoSvg('edit')} Editar
+                        </button>
+                        <button type="button" class="action-icon-btn text-danger" data-borrar-codigo="${codEscapado}" aria-label="Eliminar código ${codEscapado}">${iconoSvg('trash')}</button>
+                    </div>
+                </td>
+            </tr>`;
+        });
 
         contenedor.innerHTML = `
             <div class="table-responsive">
@@ -37,50 +139,14 @@
                         <tr>
                             <th>Código de Barras</th>
                             <th>Producto / Laboratorio</th>
-                            <th>Categoría</th>
+                            <th>Categoría / Tipo</th>
                             <th>Trae x Caja</th>
                             <th>Último Costo Caja</th>
-                            <th>Acción</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${listaItems.map(item => {
-                            const cod = item.codigoBarras || '';
-                            const codEscapado = escaparHtml(cod);
-                            const badges = [];
-                            if (item.esLeche) {
-                                badges.push('<span class="badge" style="font-size:10px;background:var(--color-primario-fondo);color:var(--color-primario);padding:1px 5px;border-radius:3px;margin-left:4px;">Leche 10%</span>');
-                            }
-                            if (item.tasaItbis > 0 || item.aplicaItbis) {
-                                const tasa = item.tasaItbis || 18;
-                                badges.push(`<span class="badge" style="font-size:10px;background:var(--color-alerta-fondo);color:var(--color-alerta);padding:1px 5px;border-radius:3px;margin-left:4px;">+${tasa}% ITBIS</span>`);
-                            }
-                            const nombreTexto = item.nombre || 'Producto sin nombre';
-                            const subtitulo = [item.principioActivo, item.laboratorio].filter(Boolean).join(' • ');
-
-                            let badgeVariacion = '';
-                            if (item.variacionCosto && Number(item.variacionCosto) !== 0) {
-                                const varNum = Number(item.variacionCosto);
-                                const bg = varNum > 0 ? '#fee2e2' : '#dcfce7';
-                                const color = varNum > 0 ? '#dc2626' : '#16a34a';
-                                badgeVariacion = `<span class="badge" style="font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;" title="Variación respecto a la compra anterior">${varNum > 0 ? '+' : ''}${varNum}%</span>`;
-                            }
-
-                            return `<tr>
-                                <td class="mono">${escaparHtml(cod)}</td>
-                                <td>
-                                    <strong>${escaparHtml(nombreTexto)}</strong>${badges.join('')}
-                                    ${subtitulo ? `<div style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(subtitulo)}</div>` : ''}
-                                </td>
-                                <td>${item.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}</td>
-                                <td class="mono">${item.unidadesPorCaja}</td>
-                                <td class="mono">${Number(item.ultimoPrecioCaja || 0).toFixed(2)}${badgeVariacion}</td>
-                                <td>
-                                    <button type="button" class="action-icon-btn" data-usar-codigo="${codEscapado}" aria-label="Cargar ${escaparHtml(nombreTexto)} en calculadora">Cargar en Calculadora</button>
-                                    <button type="button" class="action-icon-btn text-danger" data-borrar-codigo="${codEscapado}" aria-label="Eliminar código ${codEscapado}">${iconoSvg('trash')}</button>
-                                </td>
-                            </tr>`;
-                        }).join('')}
+                        ${filasHtml}
                     </tbody>
                 </table>
             </div>`;
@@ -224,9 +290,57 @@
         }
 
         const inputFiltro = el('filtroBuscadorDiccionario');
-        if (inputFiltro) {
-            inputFiltro.addEventListener('input', () => {
-                renderizarDiccionarioUI(inputFiltro.value.trim());
+        const selCat = el('filtroCategoriaDiccionario');
+
+        const aplicarFiltrosDiccionario = () => {
+            const termino = inputFiltro ? inputFiltro.value.trim() : '';
+            const cat = selCat ? selCat.value : '';
+            renderizarDiccionarioUI(termino, cat);
+        };
+
+        if (inputFiltro) inputFiltro.addEventListener('input', aplicarFiltrosDiccionario);
+        if (selCat) selCat.addEventListener('change', aplicarFiltrosDiccionario);
+
+        // Diálogo Modal de Edición de Ficha Maestra
+        const modalEdit = el('modalEditarProductoDiccionario');
+        const btnCerrarEdit = el('btnCerrarModalEditarProducto');
+        const btnCancelarEdit = el('btnCancelarEditarProducto');
+        const formEdit = el('formEditarFichaProducto');
+
+        const cerrarModalEdit = () => {
+            if (modalEdit && typeof modalEdit.close === 'function') modalEdit.close();
+        };
+
+        if (btnCerrarEdit) btnCerrarEdit.addEventListener('click', cerrarModalEdit);
+        if (btnCancelarEdit) btnCancelarEdit.addEventListener('click', cerrarModalEdit);
+
+        if (formEdit) {
+            formEdit.addEventListener('submit', e => {
+                e.preventDefault();
+                const codigo = el('editProdCodigo').value;
+                const ficha = {
+                    codigoBarras: codigo,
+                    nombre: el('editProdNombre').value,
+                    categoria: el('editProdCategoria').value,
+                    principioActivo: el('editProdPrincipioActivo').value,
+                    laboratorio: el('editProdLaboratorio').value,
+                    tipo: el('editProdTipo').value,
+                    unidadesPorCaja: el('editProdUnidades').value,
+                    tasaItbis: el('editProdTasaItbis').value,
+                    aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
+                    esLeche: Boolean(el('editProdEsLeche') && el('editProdEsLeche').checked),
+                    registroSanitario: el('editProdRegistroSanitario').value,
+                    ubicacion: el('editProdUbicacion').value
+                };
+
+                const res = Almacenamiento.guardarFichaProductoCatalogo(ficha);
+                if (res.exito) {
+                    cerrarModalEdit();
+                    aplicarFiltrosDiccionario();
+                    UI.Notificaciones.mostrarMensaje(`Ficha de "${ficha.nombre}" actualizada en el Catálogo Maestro.`, 'success');
+                } else {
+                    UI.Notificaciones.mostrarMensaje(res.error || 'Error al guardar ficha.', 'error');
+                }
             });
         }
 
@@ -275,6 +389,27 @@
                 el('calcCodigoBarras').value = btnUsar.dataset.usarCodigo;
                 UI.Calculadora.procesarEscaneoCodigoBarras();
                 el('seccionCalculadora').scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+            const btnEditar = e.target.closest('[data-editar-ficha]');
+            if (btnEditar) {
+                const cod = btnEditar.dataset.editarFicha;
+                const dic = Almacenamiento.obtenerDiccionarioCodigos();
+                const prod = dic[cod];
+                if (prod && el('modalEditarProductoDiccionario')) {
+                    el('editProdCodigo').value = prod.codigoBarras || cod;
+                    el('editProdNombre').value = prod.nombre || '';
+                    el('editProdCategoria').value = prod.categoria || '';
+                    el('editProdPrincipioActivo').value = prod.principioActivo || '';
+                    el('editProdLaboratorio').value = prod.laboratorio || '';
+                    el('editProdTipo').value = prod.tipo || 'divisible';
+                    el('editProdUnidades').value = prod.unidadesPorCaja || 1;
+                    el('editProdTasaItbis').value = String(prod.tasaItbis !== undefined ? prod.tasaItbis : (prod.aplicaItbis ? 18 : 0));
+                    if (el('editProdEsLeche')) el('editProdEsLeche').checked = Boolean(prod.esLeche);
+                    el('editProdRegistroSanitario').value = prod.registroSanitario || '';
+                    el('editProdUbicacion').value = prod.ubicacion || '';
+                    el('modalEditarProductoDiccionario').showModal();
+                }
                 return;
             }
             const btnBorrar = e.target.closest('[data-borrar-codigo]');

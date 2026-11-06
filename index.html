@@ -171,7 +171,10 @@
                             </div>
                         </div>
                         <div class="campo">
-                            <label class="campo-label">Nombre del Producto</label>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                                <label class="campo-label" for="calcNombre" style="margin:0;">Nombre del Producto</label>
+                                <span id="badgeEstadoProducto" class="badge" style="display:none;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--color-exito-fondo);color:var(--color-exito);" title="Nombre protegido desde el Catálogo Maestro">Catálogo Maestro (Protegido)</span>
+                            </div>
                             <input type="text" class="input-control" id="calcNombre" placeholder="Ej. Amoxicilina 500mg" list="listaSugerenciasProductos" autocomplete="off">
                             <datalist id="listaSugerenciasProductos"></datalist>
                         </div>
@@ -801,14 +804,112 @@
                         </div>
                     </div>
 
-                    <div style="margin-bottom:var(--espacio-2);">
-                        <input type="text" id="filtroBuscadorDiccionario" class="input-control" placeholder="Buscar medicamento por nombre, código, principio activo o laboratorio..." autocomplete="off">
+                    <div style="display:flex;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
+                        <div style="flex:1;min-width:220px;">
+                            <input type="text" id="filtroBuscadorDiccionario" class="input-control" placeholder="Buscar medicamento por nombre, código, principio activo o laboratorio..." autocomplete="off">
+                        </div>
+                        <div style="min-width:180px;">
+                            <select id="filtroCategoriaDiccionario" class="input-control" aria-label="Filtrar por categoría">
+                                <option value="">Todas las categorías (A-Z)</option>
+                            </select>
+                        </div>
                     </div>
                     <div id="contenedorDiccionario">
                         <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
                     </div>
                 </section>
             </div>
+        </dialog>
+
+        <!-- Modal: Edición de Ficha Maestra de Producto en Catálogo -->
+        <dialog id="modalEditarProductoDiccionario" class="farmacia-modal" style="max-width:560px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
+                    <svg class="ico"><use href="#i-edit"/></svg>
+                    <span>Editar Ficha de Producto en Catálogo</span>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarModalEditarProducto" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
+                </button>
+            </div>
+            <form id="formEditarFichaProducto" style="display:flex;flex-direction:column;gap:var(--espacio-2);">
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdCodigo">Código de Barras</label>
+                        <input type="text" id="editProdCodigo" class="input-control input-mono" readonly style="background:var(--color-fondo-panel);">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdCategoria">Categoría Terapéutica</label>
+                        <input type="text" id="editProdCategoria" class="input-control" placeholder="Ej. Analgésico / Antipirético">
+                    </div>
+                </div>
+
+                <div class="campo">
+                    <label class="campo-label" for="editProdNombre">Nombre del Producto *</label>
+                    <input type="text" id="editProdNombre" class="input-control" required placeholder="Nombre oficial y presentación">
+                </div>
+
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdPrincipioActivo">Principio Activo</label>
+                        <input type="text" id="editProdPrincipioActivo" class="input-control" placeholder="Ej. Paracetamol, Amoxicilina">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdLaboratorio">Laboratorio / Marca</label>
+                        <input type="text" id="editProdLaboratorio" class="input-control" placeholder="Ej. Rowe, Betances, Pfizer">
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdTipo">Forma de Venta</label>
+                        <select id="editProdTipo" class="input-control">
+                            <option value="divisible">Divisible (se vende por pastillas/blister)</option>
+                            <option value="entero">Entero (se vende solo caja/frasco)</option>
+                        </select>
+                    </div>
+                    <div class="campo" style="flex:1;min-width:100px;" id="boxEditProdUnidades">
+                        <label class="campo-label" for="editProdUnidades">Unidades x Caja</label>
+                        <input type="number" id="editProdUnidades" class="input-control input-mono" min="1" value="1">
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdTasaItbis">Régimen ITBIS (DGII)</label>
+                        <select id="editProdTasaItbis" class="input-control">
+                            <option value="0">Exento (0% - Medicamento DGII)</option>
+                            <option value="18">Gravado 18% General</option>
+                            <option value="16">Gravado 16% Derivados</option>
+                        </select>
+                    </div>
+                    <div class="campo" style="flex:1;min-width:140px;display:flex;align-items:flex-end;padding-bottom:8px;">
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                            <input type="checkbox" id="editProdEsLeche">
+                            <span>Es Leche / Fórmula (10% Margen)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdRegistroSanitario">Registro Sanitario</label>
+                        <input type="text" id="editProdRegistroSanitario" class="input-control" placeholder="Ej. RD-FAR-2020-0123">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdUbicacion">Ubicación / Anaquel</label>
+                        <input type="text" id="editProdUbicacion" class="input-control" placeholder="Ej. Tramo A-2, Nevera">
+                    </div>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:var(--espacio-2);margin-top:var(--espacio-2);">
+                    <button type="button" class="btn-icono" id="btnCancelarEditarProducto">Cancelar</button>
+                    <button type="submit" class="btn-icono" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                        <svg class="ico ico-sm"><use href="#i-check"/></svg>
+                        <span>Guardar en Catálogo</span>
+                    </button>
+                </div>
+            </form>
         </dialog>
 
         <!-- Elemento de compatibilidad con barra de navegación del código original -->

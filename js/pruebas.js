@@ -324,6 +324,50 @@
         const resPngBomb = Dominio.auditarDimensionesImagen(pngBombBytes, 'image/png');
         afirmarIgualdad(resPngBomb.valido, false, 'Seguridad: Detecta bomba de descompresión PNG (30,000 x 30,000 px)');
 
+        // 14. Sellos Criptográficos de Integridad y Autenticidad (HMAC-SHA256 Digital Envelope)
+        const datosPruebaRespaldo = {
+            medicamentos: [
+                { codigo: '7461234567890', nombre: 'Amoxicilina 500mg', precio: 350.50 }
+            ],
+            total: 350.50
+        };
+        const sobreFirmado = Dominio.firmarSobreDatos(datosPruebaRespaldo, 'respaldo-farmacia-completo');
+        const verifLegitima = Dominio.verificarSobreDatos(sobreFirmado, 'respaldo-farmacia-completo');
+        afirmarIgualdad(verifLegitima.esValido, true, 'Cripto: Verifica sobre sellado legítimo de Chroniris OS');
+        afirmarIgualdad(verifLegitima.datos.total, 350.50, 'Cripto: Recupera datos íntegros del payload');
+
+        // 14.1 Detección de adulteración (Tampering)
+        const sobreAlterado = JSON.parse(JSON.stringify(sobreFirmado));
+        sobreAlterado.datos.total = 50.00;
+        const verifAlterada = Dominio.verificarSobreDatos(sobreAlterado);
+        afirmarIgualdad(verifAlterada.esValido, false, 'Cripto: Detecta manipulación en los datos del respaldo');
+        afirmarIgualdad(verifAlterada.codigo, 'INTEGRIDAD_COMPROMETIDA', 'Cripto: Código INTEGRIDAD_COMPROMETIDA por huella rota');
+
+        // 14.2 Detección de firma falsa
+        const sobreFirmaFalsa = JSON.parse(JSON.stringify(sobreFirmado));
+        sobreFirmaFalsa._chroniris_sello.firmaHmac = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+        const verifFirmaFalsa = Dominio.verificarSobreDatos(sobreFirmaFalsa);
+        afirmarIgualdad(verifFirmaFalsa.esValido, false, 'Cripto: Rechaza firma HMAC espuria');
+        afirmarIgualdad(verifFirmaFalsa.codigo, 'FIRMA_INVALIDA', 'Cripto: Código FIRMA_INVALIDA');
+
+        // 14.3 Detección de archivo no firmado
+        const archivoSinFirma = { medicamentos: [] };
+        const verifSinFirma = Dominio.verificarSobreDatos(archivoSinFirma);
+        afirmarIgualdad(verifSinFirma.esValido, false, 'Cripto: Rechaza archivo sin sello criptográfico');
+        afirmarIgualdad(verifSinFirma.codigo, 'SOBRE_NO_FIRMADO', 'Cripto: Código SOBRE_NO_FIRMADO');
+
+        // 15. Blindaje de Límites de Campos y Sanitización contra Inyecciones
+        const vPrecioAstronomico = Dominio.validarPrecioCompra('60000000');
+        afirmarIgualdad(vPrecioAstronomico.esValido, false, 'Campos: Rechaza precio astronómico que excede límite ($50M)');
+
+        const vCajasAstronomico = Dominio.validarCantidadEnteraPositiva('200000', 'cajas');
+        afirmarIgualdad(vCajasAstronomico.esValido, false, 'Campos: Rechaza cantidad que excede límite (100k cajas)');
+
+        const textoConXss = 'Medicamento <script>alert(1)</script>\x00\x1F';
+        const textoLimpio = Dominio.sanitizarEntradaTexto(textoConXss, 30);
+        afirmarIgualdad(textoLimpio.includes('\x00'), false, 'Campos: Elimina bytes nulos');
+        afirmarIgualdad(textoLimpio.length <= 30, true, 'Campos: Respeta longitud máxima del campo');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

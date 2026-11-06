@@ -108,9 +108,12 @@
 
     function actualizarCabeceraFacturaDesdeUI() {
         const Estado = AppFarmacia.Estado;
-        Estado.sesionActual.proveedor = el('facProveedor').value.trim();
-        if (el('facRnc')) Estado.sesionActual.rnc = el('facRnc').value.trim();
-        Estado.sesionActual.numeroFactura = el('facNumero').value.trim();
+        const san = (Dominio && typeof Dominio.sanitizarEntradaTexto === 'function')
+            ? Dominio.sanitizarEntradaTexto
+            : (x) => String(x || '').trim();
+        Estado.sesionActual.proveedor = san(el('facProveedor').value, 120);
+        if (el('facRnc')) Estado.sesionActual.rnc = san(el('facRnc').value, 20);
+        Estado.sesionActual.numeroFactura = san(el('facNumero').value, 50);
         Estado.sesionActual.fechaEmision = el('facFechaEmision').value;
         if (!el('facFechaVencimiento').value && el('facFechaEmision').value) {
             el('facFechaVencimiento').value = Dominio.sumarDiasAFechaISO(el('facFechaEmision').value, 30);

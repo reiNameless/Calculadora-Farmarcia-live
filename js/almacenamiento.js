@@ -484,8 +484,12 @@
     }
 
     // --- UTILIDADES DRY PARA EXPORTAR E IMPORTAR ARCHIVOS JSON ---
-    function descargarObjetoComoJson(objetoDatos, nombreArchivo) {
-        const contenido = JSON.stringify(objetoDatos, null, 2);
+    function descargarObjetoComoJson(objetoDatos, nombreArchivo, tipoArchivo = null) {
+        let objetoFinal = objetoDatos;
+        if (tipoArchivo && Dominio && typeof Dominio.firmarSobreDatos === 'function') {
+            objetoFinal = Dominio.firmarSobreDatos(objetoDatos, tipoArchivo);
+        }
+        const contenido = JSON.stringify(objetoFinal, null, 2);
         const blob = new Blob([contenido], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const enlace = document.createElement('a');
@@ -558,12 +562,25 @@
             }
         };
 
-        descargarObjetoComoJson(objetoRespaldo, `respaldo-completo-farmacia-${fechaIso}.json`);
+        descargarObjetoComoJson(objetoRespaldo, `respaldo-completo-farmacia-${fechaIso}.json`, CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO);
     }
 
-    function restaurarBaseCompleta(objetoRespaldo) {
-        if (!objetoRespaldo || typeof objetoRespaldo !== 'object') {
+    function restaurarBaseCompleta(objetoCandidato) {
+        if (!objetoCandidato || typeof objetoCandidato !== 'object') {
             return { exito: false, error: 'El archivo de respaldo no es válido.' };
+        }
+        let objetoRespaldo = objetoCandidato;
+        if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
+            const verif = Dominio.verificarSobreDatos(objetoCandidato, CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO);
+            if (!verif.esValido) {
+                if (verif.esLegacy && objetoCandidato.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
+                    objetoRespaldo = objetoCandidato;
+                } else {
+                    return { exito: false, error: verif.error, codigo: verif.codigo };
+                }
+            } else {
+                objetoRespaldo = verif.datos;
+            }
         }
         if (objetoRespaldo.tipo !== CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
             if (objetoRespaldo.tipo === CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS) {

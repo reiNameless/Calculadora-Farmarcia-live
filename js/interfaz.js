@@ -150,6 +150,17 @@
     // --- COD-11: INICIALIZACIÓN PROTEGIDA CON TRY/CATCH ---
     window.addEventListener('DOMContentLoaded', () => {
         try {
+            // SEG-02: Detección de Falsificación de Dominio / Clonación no autorizada (Domain Spoofing Guard)
+            const dominiosValidos = (CONSTANTES.DOMINIOS_AUTORIZADOS || ['localhost', '127.0.0.1', 'reinameless.github.io']);
+            const hostActual = window.location.hostname;
+            const esLocalOValido = !hostActual || dominiosValidos.includes(hostActual) || hostActual.endsWith('.local') || window.location.protocol === 'file:';
+            if (!esLocalOValido) {
+                console.warn('[Chroniris OS] Copia de software ejecutándose en dominio no oficial:', hostActual);
+                UI.Notificaciones.mostrarMensaje(
+                    'Aviso de Seguridad: Esta aplicación se está ejecutando desde un dominio no verificado. El autor legítimo es reiNameless (Chroniris OS). Protege tus claves y datos.',
+                    'warning'
+                );
+            }
             Almacenamiento.limpiarHistorialExpirado7Dias();
             sesionActual = Almacenamiento.cargarBorradorActivo();
             reglasActivas = Almacenamiento.obtenerReglasNegocio();

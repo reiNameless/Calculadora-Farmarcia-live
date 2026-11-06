@@ -138,7 +138,7 @@
             fecha: new Date().toISOString(),
             historial,
             borrador: Estado.sesionActual
-        }, `respaldo-farmacia-${Dominio.obtenerFechaLocalISO()}.json`);
+        }, `respaldo-farmacia-${Dominio.obtenerFechaLocalISO()}.json`, CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS);
     }
 
     async function restaurarRespaldoFacturas(inputArchivo) {
@@ -148,7 +148,15 @@
         if (!archivo) return;
 
         try {
-            const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
+            let datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
+            if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
+                const resVerif = Dominio.verificarSobreDatos(datos, CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS);
+                if (resVerif.esValido) {
+                    datos = resVerif.datos;
+                } else if (!resVerif.esLegacy) {
+                    throw new Error(resVerif.error);
+                }
+            }
             if ((datos.tipo !== 'respaldo-farmacia' && datos.tipo !== CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) || !Array.isArray(datos.historial)) {
                 throw new Error('Archivo de respaldo de facturas no válido.');
             }

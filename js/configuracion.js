@@ -62,6 +62,24 @@
                 { regex: /\/URI\s*\([^)]*javascript\s*:/i, motivo: 'Enlace URI a pseudo-protocolo javascript:.' }
             ])
         }),
+        SEGURIDAD_CRIPTO: Object.freeze({
+            ALGORITMO_FIRMA: 'HMAC-SHA256',
+            CLAVE_SISTEMA_SEMILLA: 'Chroniris-OS::reiNameless::FiscalPharmacy::v1',
+            VERSION_SELLO: 1
+        }),
+        DOMINIOS_AUTORIZADOS: Object.freeze([
+            'localhost',
+            '127.0.0.1',
+            'reinameless.github.io'
+        ]),
+        LIMITES_CAMPOS: Object.freeze({
+            MAX_PRECIO_COMPRA: 50000000,
+            MAX_CAJAS: 100000,
+            MAX_UNIDADES_CAJA: 50000,
+            MAX_TOTAL_FISICO: 500000000,
+            MAX_LONGITUD_TEXTO_CORTO: 120,
+            MAX_LONGITUD_TEXTO_MEDIO: 255
+        }),
         CATEGORIAS: Object.freeze({
             DIVISIBLE: 'divisible',
             ENTERO: 'entero'

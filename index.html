@@ -7,7 +7,15 @@
     <meta name="author" content="Chroniris / reiNameless">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="light dark">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com; object-src 'none'; frame-ancestors 'none';">
+    <script>
+        // Anti-Clickjacking Framebusting Protection (Chroniris OS)
+        if (window.top !== window.self) {
+            try { window.top.location = window.self.location; } catch (_) {}
+            document.documentElement.style.display = 'none';
+            throw new Error('Chroniris OS: Bloqueado por seguridad contra incrustacion en marcos no autorizados (Anti-Clickjacking).');
+        }
+    </script>
     <title>Calculadora de Farmacia</title>
     <link rel="preconnect" href="https://generativelanguage.googleapis.com" crossorigin>
     <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com">

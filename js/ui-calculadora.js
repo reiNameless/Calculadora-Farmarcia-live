@@ -337,7 +337,9 @@
 
         const nuevaLinea = Dominio.crearLineaProductoInmutable({
             codigoBarras: el('calcCodigoBarras').value,
-            nombre: el('calcNombre').value.trim() || `Producto #${sesionActual.productos.length + 1}`,
+            nombre: (Dominio && typeof Dominio.sanitizarEntradaTexto === 'function')
+                ? (Dominio.sanitizarEntradaTexto(el('calcNombre').value, 120) || `Producto #${sesionActual.productos.length + 1}`)
+                : (el('calcNombre').value.trim() || `Producto #${sesionActual.productos.length + 1}`),
             tipo,
             precioCajaBase: vPrecio.valor,
             unidadesPorCaja: vUnidades.valor,

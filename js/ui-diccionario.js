@@ -74,7 +74,7 @@
             version: CONSTANTES.VERSION_ESQUEMA_RESPALDO,
             fecha: new Date().toISOString(),
             diccionario
-        }, `diccionario-codigos-farmacia-${Dominio.obtenerFechaLocalISO()}.json`);
+        }, `diccionario-codigos-farmacia-${Dominio.obtenerFechaLocalISO()}.json`, CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS);
     }
 
     async function restaurarDiccionarioJson(inputArchivo) {
@@ -83,7 +83,15 @@
         if (!archivo) return;
 
         try {
-            const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
+            let datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
+            if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
+                const resVerif = Dominio.verificarSobreDatos(datos, CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS);
+                if (resVerif.esValido) {
+                    datos = resVerif.datos;
+                } else if (!resVerif.esLegacy) {
+                    throw new Error(resVerif.error);
+                }
+            }
             if (!datos || typeof datos !== 'object') {
                 throw new Error('El archivo no contiene un objeto JSON válido.');
             }

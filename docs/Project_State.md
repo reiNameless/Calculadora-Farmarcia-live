@@ -105,10 +105,22 @@ Calculadora-Farmacia/
    - **Protección contra Bombas de Descompresión (Pixel Flood / Zip Bomb):** Decodificación preventiva en binario de bloques IHDR (PNG) y SOF (JPEG) para rechazar imágenes con dimensiones excesivas (> 64 Megapíxeles) antes de asignar memoria en lienzos Canvas.
    - **Sanitización de Nombres de Archivo:** Neutralización de Path Traversal (CWE-22) eliminando secuencias `../`, eliminación de bytes nulos (`\0`) y bloqueo estricto de dobles extensiones ejecutables (`.php.pdf`, `.exe.jpg`).
    - **Invalidación de Caché PWA:** Actualización de Service Worker a `farmacia-pwa-v20`.
+6. **Sellos Criptográficos Digitales y Protección Anti-Tampering (Chroniris Seal):**
+   - **Firma Digital HMAC-SHA256 en Archivos:** Toda exportación de datos (Respaldo Completo, Diccionario de Códigos o Historial) se encapsula en un sobre criptográfico inmutable (`_chroniris_sello`) con huella canónica SHA-256 y firma HMAC calculada con semilla de la aplicación.
+   - **Rechazo Inmediato de Adulteraciones:** Si un atacante o usuario externo altera un solo centavo, letra o balance en un archivo JSON descargado, el sistema detecta la rotura de huella y aborta la restauración (`INTEGRIDAD_COMPROMETIDA`).
+   - **Bloqueo de Archivos Foráneos:** Archivos generados externamente sin firma digital de Chroniris OS son rechazados por seguridad.
+7. **Protección contra Clickjacking y Falsificación de Dominio en GitHub Pages:**
+   - **Framebusting en `<head>`:** Inmunización activa contra Clickjacking (`window.top !== window.self`), bloqueando la incrustación de la aplicación en `<iframe>` maliciosos.
+   - **Detección de Dominio No Autorizado:** El sistema verifica el origen (`window.location.hostname`). Si se ejecuta en un clon no autorizado fuera de `localhost` o `reinameless.github.io`, despliega una advertencia de seguridad para proteger a los usuarios de sitios piratas.
+8. **Blindaje Riguroso Campo por Campo:**
+   - Límites superiores físicos en precios (máximo RD$ 50,000,000.00) y cantidades (máximo 100,000 cajas) evitando desbordamientos de punto flotante IEEE 754.
+   - Sanitización de entradas de texto contra caracteres de control, bytes nulos e inyecciones XSS en nombres de fármacos, números de factura y proveedores.
+   - Actualización de Service Worker a `farmacia-pwa-v21`.
+
 
 ---
 
 ## 5. ESTADO DE PRUEBAS Y CI
 - **Sintaxis JS:** Verificada con `node -c` en 14 archivos (`sw.js` + 13 en `js/`). Estado: **100% PASS**.
 - **Paridad de IDs:** 187 IDs en `index.html` auditados contra los 23 IDs críticos obligatorios. Estado: **100% PASS**.
-- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 17 suites automatizadas (incluye suite de mitigación de amenazas y seguridad de archivos). Estado: **100% PASS**.
+- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 19 suites automatizadas (incluye suite de sellos criptográficos HMAC-SHA256 y blindaje de campos) (incluye suite de mitigación de amenazas y seguridad de archivos). Estado: **100% PASS**.

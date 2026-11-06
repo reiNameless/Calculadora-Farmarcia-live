@@ -95,8 +95,14 @@
             return { esValido: false, error: 'Escribe el precio de compra de 1 caja o frasco.' };
         }
         const numero = Number(textoLimpio);
+        const maxPrecio = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS)
+            ? AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS.MAX_PRECIO_COMPRA
+            : 50000000;
         if (!Number.isFinite(numero) || numero <= 0) {
             return { esValido: false, error: 'El precio de compra debe ser un número mayor que 0.' };
+        }
+        if (numero > maxPrecio) {
+            return { esValido: false, error: 'El precio de compra no puede superar RD$ ' + maxPrecio.toLocaleString() + '.' };
         }
         return { esValido: true, valor: numero };
     }
@@ -104,14 +110,20 @@
     function validarCantidadEnteraPositiva(entradaCruda, descripcionCampo) {
         const textoLimpio = String(entradaCruda ?? '').trim();
         if (textoLimpio === '') {
-            return { esValido: false, error: `Escribe ${descripcionCampo}.` };
+            return { esValido: false, error: 'Escribe ' + descripcionCampo + '.' };
         }
         const numero = Number(textoLimpio);
+        const maxCantidad = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS)
+            ? AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS.MAX_CAJAS
+            : 100000;
         if (!Number.isFinite(numero) || !Number.isInteger(numero) || textoLimpio.includes('.') || textoLimpio.includes(',')) {
-            return { esValido: false, error: `Revisa ${descripcionCampo}: debe ser un número entero sin decimales.` };
+            return { esValido: false, error: 'Revisa ' + descripcionCampo + ': debe ser un número entero sin decimales.' };
         }
         if (numero < 1) {
-            return { esValido: false, error: `Revisa ${descripcionCampo}: debe ser de 1 en adelante.` };
+            return { esValido: false, error: 'Revisa ' + descripcionCampo + ': debe ser de 1 en adelante.' };
+        }
+        if (numero > maxCantidad) {
+            return { esValido: false, error: 'Revisa ' + descripcionCampo + ': el valor máximo permitido es ' + maxCantidad.toLocaleString() + '.' };
         }
         return { esValido: true, valor: numero };
     }
@@ -674,6 +686,243 @@
     }
 
     // --- SINTETIZADOR DE TONOS WEB AUDIO API PARA LECTURAS GS1 (CERO DEPENDENCIAS) ---
+
+    // --- FASE 7: MOTOR CRIPTOGRÁFICO DE INTEGRIDAD Y SELLOS DIGITALES (CHRONIRIS SEAL) ---
+
+    function sanitizarEntradaTexto(texto, maxLongitud = 120) {
+        if (typeof texto !== 'string') return '';
+        let limpio = texto.trim();
+        limpio = limpio.replace(/[\x00-\x1F\x7F]/g, '');
+        if (limpio.length > maxLongitud) {
+            limpio = limpio.slice(0, maxLongitud);
+        }
+        return limpio;
+    }
+
+    function sha256Pure(asciiOrBytes) {
+        let bytes;
+        if (typeof asciiOrBytes === 'string') {
+            const str = unescape(encodeURIComponent(asciiOrBytes));
+            bytes = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
+        } else {
+            bytes = new Uint8Array(asciiOrBytes);
+        }
+
+        const K = [
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+        ];
+
+        let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+        let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+
+        const bitLen = bytes.length * 8;
+        const padLen = (bytes.length % 64 < 56) ? (56 - (bytes.length % 64)) : (120 - (bytes.length % 64));
+        const totalLen = bytes.length + padLen + 8;
+        const msg = new Uint8Array(totalLen);
+        msg.set(bytes, 0);
+        msg[bytes.length] = 0x80;
+
+        const highBits = Math.floor(bitLen / 0x100000000);
+        const lowBits = bitLen >>> 0;
+        msg[totalLen - 8] = (highBits >>> 24) & 0xff;
+        msg[totalLen - 7] = (highBits >>> 16) & 0xff;
+        msg[totalLen - 6] = (highBits >>> 8) & 0xff;
+        msg[totalLen - 5] = highBits & 0xff;
+        msg[totalLen - 4] = (lowBits >>> 24) & 0xff;
+        msg[totalLen - 3] = (lowBits >>> 16) & 0xff;
+        msg[totalLen - 2] = (lowBits >>> 8) & 0xff;
+        msg[totalLen - 1] = lowBits & 0xff;
+
+        const W = new Int32Array(64);
+        for (let i = 0; i < totalLen; i += 64) {
+            for (let t = 0; t < 16; t++) {
+                const j = i + t * 4;
+                W[t] = ((msg[j] << 24) | (msg[j+1] << 16) | (msg[j+2] << 8) | (msg[j+3])) | 0;
+            }
+            for (let t = 16; t < 64; t++) {
+                const s0 = (((W[t-15] >>> 7) | (W[t-15] << 25)) ^ ((W[t-15] >>> 18) | (W[t-15] << 14)) ^ (W[t-15] >>> 3)) | 0;
+                const s1 = (((W[t-2] >>> 17) | (W[t-2] << 15)) ^ ((W[t-2] >>> 19) | (W[t-2] << 13)) ^ (W[t-2] >>> 10)) | 0;
+                W[t] = (W[t-16] + s0 + W[t-7] + s1) | 0;
+            }
+
+            let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+            for (let t = 0; t < 64; t++) {
+                const S1 = (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) | 0;
+                const ch = ((e & f) ^ ((~e) & g)) | 0;
+                const temp1 = (h + S1 + ch + K[t] + W[t]) | 0;
+                const S0 = (((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) | 0;
+                const maj = ((a & b) ^ (a & c) ^ (b & c)) | 0;
+                const temp2 = (S0 + maj) | 0;
+
+                h = g; g = f; f = e; e = (d + temp1) | 0;
+                d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+            }
+
+            h0 = (h0 + a) | 0;
+            h1 = (h1 + b) | 0;
+            h2 = (h2 + c) | 0;
+            h3 = (h3 + d) | 0;
+            h4 = (h4 + e) | 0;
+            h5 = (h5 + f) | 0;
+            h6 = (h6 + g) | 0;
+            h7 = (h7 + h) | 0;
+        }
+
+        const toHex = (n) => ('00000000' + (n >>> 0).toString(16)).slice(-8);
+        return toHex(h0) + toHex(h1) + toHex(h2) + toHex(h3) + toHex(h4) + toHex(h5) + toHex(h6) + toHex(h7);
+    }
+
+    function hmacSha256Pure(keyStr, messageStr) {
+        const blockSize = 64;
+        let keyBytes;
+        if (typeof keyStr === 'string') {
+            const str = unescape(encodeURIComponent(keyStr));
+            keyBytes = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) keyBytes[i] = str.charCodeAt(i);
+        } else {
+            keyBytes = new Uint8Array(keyStr);
+        }
+
+        if (keyBytes.length > blockSize) {
+            const hex = sha256Pure(keyBytes);
+            keyBytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+        }
+        const paddedKey = new Uint8Array(blockSize);
+        paddedKey.set(keyBytes, 0);
+
+        const oPad = new Uint8Array(blockSize);
+        const iPad = new Uint8Array(blockSize);
+        for (let i = 0; i < blockSize; i++) {
+            oPad[i] = paddedKey[i] ^ 0x5c;
+            iPad[i] = paddedKey[i] ^ 0x36;
+        }
+
+        let msgBytes;
+        if (typeof messageStr === 'string') {
+            const str = unescape(encodeURIComponent(messageStr));
+            msgBytes = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) msgBytes[i] = str.charCodeAt(i);
+        } else {
+            msgBytes = new Uint8Array(messageStr);
+        }
+
+        const inner = new Uint8Array(blockSize + msgBytes.length);
+        inner.set(iPad, 0);
+        inner.set(msgBytes, blockSize);
+        const innerHashHex = sha256Pure(inner);
+        const innerHashBytes = new Uint8Array(innerHashHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+        const outer = new Uint8Array(blockSize + innerHashBytes.length);
+        outer.set(oPad, 0);
+        outer.set(innerHashBytes, blockSize);
+        return sha256Pure(outer);
+    }
+
+    function serializarJsonCanonico(obj) {
+        if (obj === null || typeof obj !== 'object') {
+            return JSON.stringify(obj);
+        }
+        if (Array.isArray(obj)) {
+            return '[' + obj.map(serializarJsonCanonico).join(',') + ']';
+        }
+        const claves = Object.keys(obj).sort();
+        return '{' + claves.map(k => JSON.stringify(k) + ':' + serializarJsonCanonico(obj[k])).join(',') + '}';
+    }
+
+    function firmarSobreDatos(datos, tipoArchivo = 'respaldo-farmacia-completo') {
+        const semilla = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.SEGURIDAD_CRIPTO)
+            ? AppFarmacia.Configuracion.CONSTANTES.SEGURIDAD_CRIPTO.CLAVE_SISTEMA_SEMILLA
+            : 'Chroniris-OS::reiNameless::FiscalPharmacy::v1';
+
+        const timestamp = new Date().toISOString();
+        const canonico = serializarJsonCanonico(datos);
+        const huellaPayload = sha256Pure(canonico);
+        const mensajeFirma = tipoArchivo + ':' + timestamp + ':' + huellaPayload;
+        const firmaHmac = hmacSha256Pure(semilla, mensajeFirma);
+
+        return {
+            _chroniris_sello: {
+                version: 1,
+                emisor: 'Chroniris OS',
+                autor: 'reiNameless',
+                tipo: tipoArchivo,
+                timestamp,
+                huellaPayload,
+                firmaHmac
+            },
+            datos
+        };
+    }
+
+    function verificarSobreDatos(objetoCandidato, tipoEsperado = null) {
+        if (!objetoCandidato || typeof objetoCandidato !== 'object') {
+            return { esValido: false, codigo: 'PAYLOAD_INVALIDO', error: 'El archivo no contiene una estructura de datos válida.' };
+        }
+
+        const sello = objetoCandidato._chroniris_sello;
+        if (!sello || typeof sello !== 'object') {
+            return {
+                esValido: false,
+                codigo: 'SOBRE_NO_FIRMADO',
+                error: 'Archivo sin firma digital. Solo se admiten archivos generados legítimamente por Chroniris OS con sello criptográfico.',
+                esLegacy: true,
+                datos: objetoCandidato.datos || objetoCandidato
+            };
+        }
+
+        const { tipo, timestamp, huellaPayload, firmaHmac } = sello;
+        if (!tipo || !timestamp || !huellaPayload || !firmaHmac) {
+            return { esValido: false, codigo: 'SELLO_INCOMPLETO', error: 'El sello de seguridad del archivo está incompleto o dañado.' };
+        }
+
+        if (tipoEsperado && tipo !== tipoEsperado) {
+            return {
+                esValido: false,
+                codigo: 'TIPO_INCORRECTO',
+                error: 'El archivo corresponde a "' + tipo + '", pero se esperaba "' + tipoEsperado + '".'
+            };
+        }
+
+        const canonico = serializarJsonCanonico(objetoCandidato.datos);
+        const huellaCalculada = sha256Pure(canonico);
+        if (huellaCalculada !== huellaPayload) {
+            return {
+                esValido: false,
+                codigo: 'INTEGRIDAD_COMPROMETIDA',
+                error: 'Alerta de Ciberseguridad: El archivo fue modificado o adulterado externamente (Huella SHA-256 no coincide).'
+            };
+        }
+
+        const semilla = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.SEGURIDAD_CRIPTO)
+            ? AppFarmacia.Configuracion.CONSTANTES.SEGURIDAD_CRIPTO.CLAVE_SISTEMA_SEMILLA
+            : 'Chroniris-OS::reiNameless::FiscalPharmacy::v1';
+
+        const mensajeFirma = tipo + ':' + timestamp + ':' + huellaPayload;
+        const firmaCalculada = hmacSha256Pure(semilla, mensajeFirma);
+        if (firmaCalculada !== firmaHmac) {
+            return {
+                esValido: false,
+                codigo: 'FIRMA_INVALIDA',
+                error: 'Firma criptográfica inválida. El archivo no fue firmado por Chroniris OS o la firma es espuria.'
+            };
+        }
+
+        return {
+            esValido: true,
+            tipo,
+            timestamp,
+            datos: objetoCandidato.datos
+        };
+    }
+
     function emitirBip(frecuencia = 880, duracionMs = 80, tipo = "sine") {
         try {
             if (typeof window === "undefined") return;
@@ -1083,6 +1332,12 @@
         auditarEstructuraPdf,
         auditarDimensionesImagen,
         extraerBytesDeArchivo,
-        validarArchivoSeguro
+        validarArchivoSeguro,
+        sanitizarEntradaTexto,
+        sha256Pure,
+        hmacSha256Pure,
+        serializarJsonCanonico,
+        firmarSobreDatos,
+        verificarSobreDatos
     });
 })(window);

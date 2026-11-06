@@ -1,6 +1,6 @@
 # ESTADO DEL PROYECTO: Calculadora de Farmacia (Cockpit de Operaciones e Inventario)
 > **Fuente de Verdad Técnica e Historial de Sesiones**  
-> *Última auditoría y consolidación: 2026-11-06 (Arquitectura Semántica HTML5, Atajos F1-F4, Web Audio API y Marca Chroniris)*
+> *Última auditoría y consolidación: 2026-11-06 (Rediseño Cockpit Dual, Ergonomía Split-Screen con Cero Scroll, Cabecera Colapsable y Números Tabulares tnum)*
 
 ---
 
@@ -120,7 +120,20 @@ Calculadora-Farmacia/
 
 ---
 
+9. **Rediseño Arquitectónico: Cockpit Dual (Opción 1) y Ergonomía Split-Screen (ROL 02):**
+   - **Prioridad Operativa a Cálculos Inmediatos:** La calculadora rápida y los precios de venta (P1, P2, P3 y Costo Unitario Fiscal a 8 decimales) tienen prioridad visual absoluta para el mostrador.
+   - **Cabecera de Factura Colapsable y Bloqueable (`#seccionDatosFactura`):** La cabecera física puede colapsarse u ocultarse mediante `#btnToggleDatosFactura` (atajo `Alt + F`), liberando ~180px verticales y mostrando un chip resumen compacto `#resumenFacturaCompacta` (`[Proveedor: Rowe | Factura #: B0100012345 | Papel: $1,450.00] [Editar Datos]`). En caso de error de validación al guardar, la cabecera se auto-expande automáticamente.
+   - **Ergonomía de Pantalla Dividida (Split-Screen / POS) con Cero Scroll:** Al trabajar con la ventana minimizada o compartida con el ERP de la farmacia (< 1024px o modo forzado), se activa la barra de pestañas `#cockpitTabs` (`[Calculadora Rápida]` vs `[Factura & Cuadre]`), garantizando que la entrada de mercancía y los precios en vivo encajen en menos de 480px sin ningún scroll vertical.
+   - **Fila de 3 Campos Compacta (`.fila-tres-campos`):** Compactación de variables en 2 filas limpias: (Cant. Cajas | Costo Base | Trae x Caja) y (ITBIS | Descuento | Leche 10%).
+   - **Mini Strip de Cuadre en Vivo (`#miniCuadreStrip`):** Barra informativa en la vista de calculadora que muestra el acumulado y semáforo de cuadre en tiempo real sin salir de la pestaña.
+   - **Erradicación del Jitter Numérico (`font-feature-settings: "tnum"`):** Aplicación estricta de figuras tabulares (`tnum`) a todas las cifras monetarias y unitarias para que los números no bailen al recalcular.
+   - **Botón de Modo Compacto / Dual (`#btnModoCompacto`):** Permite forzar el modo de 1 columna o 2 columnas lado a lado en cualquier monitor con persistencia en `localStorage`.
+   - **Caché PWA Actualizado:** Incremento a `farmacia-pwa-v25`.
+
+---
+
 ## 5. ESTADO DE PRUEBAS Y CI
 - **Sintaxis JS:** Verificada con `node -c` en 14 archivos (`sw.js` + 13 en `js/`). Estado: **100% PASS**.
-- **Paridad de IDs:** 211 IDs en `index.html` auditados contra los IDs críticos obligatorios. Estado: **100% PASS**.
-- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 24 suites automatizadas (incluye Blindaje de Catálogo Maestro, Edición Deliberada y Organización Determinística por Categoría A-Z). Estado: **100% PASS**.
+- **Paridad de IDs:** 234 IDs en `index.html` auditados contra los IDs críticos obligatorios. Estado: **100% PASS**.
+- **Suite de Pruebas Unitarias (`js/pruebas.js`):** 24 suites automatizadas ejecutadas sin errores. Estado: **100% PASS**.
+- **Suite de Pruebas de Integración Cockpit Dual (`test_cockpit_dual_integration.js`):** Verificación al 100% de alternancia de pestañas, colapsado de cabecera, actualización de chips y semáforo mini. Estado: **100% PASS**.

@@ -127,6 +127,67 @@
         UI.Calculadora.calcularEnVivo();
     }
 
+    
+    function fijarCabeceraFacturaColapsada(colapsada) {
+        const grid = el('gridCamposFactura');
+        const resumen = el('resumenFacturaCompacta');
+        const btn = el('btnToggleDatosFactura');
+        const txt = el('txtToggleDatosFactura');
+        const ico = el('icoToggleDatosFactura');
+        if (!grid || !resumen) return;
+
+        if (colapsada) {
+            grid.style.display = 'none';
+            resumen.style.display = 'flex';
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+            if (txt) txt.textContent = 'Desplegar Cabecera';
+            if (ico) ico.innerHTML = '<use href="#i-unlock"/>';
+        } else {
+            grid.style.display = 'grid';
+            resumen.style.display = 'none';
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+            if (txt) txt.textContent = 'Ocultar Cabecera';
+            if (ico) ico.innerHTML = '<use href="#i-lock"/>';
+        }
+        try {
+            localStorage.setItem('calc_cabecera_factura_colapsada', colapsada ? '1' : '0');
+        } catch (_) {}
+    }
+
+    function activarTabCockpit(nombreTab) {
+        const colCalc = el('cockpitColumnaCalc');
+        const colFactura = el('cockpitColumnaFactura');
+        const tabCalc = el('tabCockpitCalc');
+        const tabFactura = el('tabCockpitFactura');
+        if (!colCalc || !colFactura) return;
+
+        if (nombreTab === 'calc') {
+            colCalc.classList.remove('cockpit-oculto');
+            colFactura.classList.add('cockpit-oculto');
+            if (tabCalc) {
+                tabCalc.classList.add('activo');
+                tabCalc.setAttribute('aria-selected', 'true');
+            }
+            if (tabFactura) {
+                tabFactura.classList.remove('activo');
+                tabFactura.setAttribute('aria-selected', 'false');
+            }
+            const inputCod = el('calcCodigoBarras');
+            if (inputCod) inputCod.focus();
+        } else {
+            colFactura.classList.remove('cockpit-oculto');
+            colCalc.classList.add('cockpit-oculto');
+            if (tabFactura) {
+                tabFactura.classList.add('activo');
+                tabFactura.setAttribute('aria-selected', 'true');
+            }
+            if (tabCalc) {
+                tabCalc.classList.remove('activo');
+                tabCalc.setAttribute('aria-selected', 'false');
+            }
+        }
+    }
+
     function actualizarBarraSuperior() {
         const Estado = AppFarmacia.Estado;
         const sesionActual = Estado.sesionActual;
@@ -177,6 +238,42 @@
             if (facBadge) facBadge.className = 'badge-cuadre cuadre-neutro';
             if (facTexto) facTexto.textContent = `Acumulado: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}${itbisTxt}`;
             if (facIco) facIco.innerHTML = '<use href="#i-wallet"/>';
+        }
+
+        if (el('chipFacProveedor')) {
+            el('chipFacProveedor').textContent = sesionActual.proveedor || 'Sin proveedor';
+        }
+        if (el('chipFacNumero')) {
+            el('chipFacNumero').textContent = sesionActual.numeroFactura ? (`#${sesionActual.numeroFactura}`) : 'Sin número';
+        }
+        if (el('chipFacTotalPapel')) {
+            el('chipFacTotalPapel').textContent = '$' + Dominio.formatearMonedaDosDecimales(sesionActual.totalFisico || 0);
+        }
+        if (el('badgeTabFacturaCount')) {
+            el('badgeTabFacturaCount').textContent = String(sesionActual.productos.length);
+        }
+
+        const miniTxt = el('miniCuadreTexto');
+        const miniBadge = el('miniCuadreBadge');
+        const miniIco = el('miniCuadreIco');
+        if (miniTxt && miniBadge) {
+            miniTxt.textContent = `Acum: $${Dominio.formatearMonedaDosDecimales(resumen.sumaAcumulada)}`;
+            if (resumen.totalFisico > 0) {
+                if (resumen.cuadreExacto) {
+                    miniBadge.className = 'badge-cuadre cuadre-exito';
+                    miniBadge.textContent = 'Cuadre Exacto';
+                    if (miniIco) miniIco.innerHTML = '<use href="#i-check"/>';
+                } else {
+                    const signo = resumen.diferencia > 0 ? '+' : '';
+                    miniBadge.className = 'badge-cuadre cuadre-alerta';
+                    miniBadge.textContent = `Dif: ${signo}$${Dominio.formatearMonedaDosDecimales(resumen.diferencia)}`;
+                    if (miniIco) miniIco.innerHTML = '<use href="#i-warn"/>';
+                }
+            } else {
+                miniBadge.className = 'badge-cuadre cuadre-neutro';
+                miniBadge.textContent = 'Sin Papel';
+                if (miniIco) miniIco.innerHTML = '<use href="#i-wallet"/>';
+            }
         }
     }
 
@@ -575,6 +672,8 @@
             actualizarCabeceraFacturaDesdeUI();
             if (!Estado.sesionActual.proveedor || !Estado.sesionActual.numeroFactura || !Estado.sesionActual.fechaEmision) {
                 UI.Notificaciones.mostrarMensaje('Completa Proveedor, Número de Factura y Fecha de Emisión antes de guardar.', 'error');
+                fijarCabeceraFacturaColapsada(false);
+                activarTabCockpit('factura');
                 el('seccionDatosFactura').scrollIntoView({ behavior: 'smooth' });
                 return;
             }
@@ -719,6 +818,46 @@
             if (td && !td.querySelector('input')) iniciarEdicionCeldaTabla(td);
         });
 
+        const btnToggleCabecera = el('btnToggleDatosFactura');
+        if (btnToggleCabecera) {
+            btnToggleCabecera.addEventListener('click', () => {
+                const estaColapsada = el('gridCamposFactura')?.style.display === 'none';
+                fijarCabeceraFacturaColapsada(!estaColapsada);
+            });
+        }
+        const btnExpChip = el('btnExpandirDesdeChip');
+        if (btnExpChip) {
+            btnExpChip.addEventListener('click', () => {
+                fijarCabeceraFacturaColapsada(false);
+                el('facProveedor')?.focus();
+            });
+        }
+        const tabCalc = el('tabCockpitCalc');
+        if (tabCalc) tabCalc.addEventListener('click', () => activarTabCockpit('calc'));
+        const tabFac = el('tabCockpitFactura');
+        if (tabFac) tabFac.addEventListener('click', () => activarTabCockpit('factura'));
+        const btnVerMini = el('btnVerFacturaDesdeMini');
+        if (btnVerMini) btnVerMini.addEventListener('click', () => activarTabCockpit('factura'));
+
+        window.addEventListener('keydown', e => {
+            if (e.altKey && (e.key === 'f' || e.key === 'F')) {
+                e.preventDefault();
+                const estaColapsada = el('gridCamposFactura')?.style.display === 'none';
+                fijarCabeceraFacturaColapsada(!estaColapsada);
+            } else if (e.altKey && e.key === '1') {
+                e.preventDefault();
+                activarTabCockpit('calc');
+            } else if (e.altKey && e.key === '2') {
+                e.preventDefault();
+                activarTabCockpit('factura');
+            }
+        });
+
+        try {
+            const colapsadaInicial = localStorage.getItem('calc_cabecera_factura_colapsada') === '1';
+            fijarCabeceraFacturaColapsada(colapsadaInicial);
+        } catch (_) {}
+
         el('btnImprimirActual').addEventListener('click', () => UI.Historial.imprimirFactura(Estado.sesionActual));
         el('btnFinalizarFactura').addEventListener('click', finalizarYGuardarFactura);
         el('btnDescartar').addEventListener('click', async () => {
@@ -736,6 +875,8 @@
         renderizarTablaProductosActuales,
         verificarDuplicadoUI,
         finalizarYGuardarFactura,
-        inicializarEventosFactura
+        inicializarEventosFactura,
+        fijarCabeceraFacturaColapsada,
+        activarTabCockpit
     });
 })(window);

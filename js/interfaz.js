@@ -427,6 +427,40 @@
                 }
             });
 
+            
+            // 5. Alternador Modo Mini-Cockpit / Dual con persistencia (ROL 02)
+            const btnModoCompacto = el('btnModoCompacto');
+            const txtModoCompacto = el('txtModoCompacto');
+
+            function aplicarModoCompacto(forzado) {
+                document.body.classList.toggle('modo-compacto-forzado', forzado);
+                if (txtModoCompacto) {
+                    txtModoCompacto.textContent = forzado ? 'Modo Mini-Cockpit' : 'Modo Dual';
+                }
+                localStorage.setItem('farmacia_modo_compacto_forzado', forzado ? '1' : '0');
+            }
+
+            const modoCompactoGuardado = localStorage.getItem('farmacia_modo_compacto_forzado') === '1';
+            if (modoCompactoGuardado) aplicarModoCompacto(true);
+
+            if (btnModoCompacto) {
+                btnModoCompacto.addEventListener('click', () => {
+                    const actual = document.body.classList.contains('modo-compacto-forzado');
+                    aplicarModoCompacto(!actual);
+                    UI.Notificaciones.mostrarMensaje(
+                        !actual ? 'Modo Mini-Cockpit activado (Foco rápido 1 columna).' : 'Modo Cockpit Dual activado (2 columnas lado a lado).',
+                        'info'
+                    );
+                });
+            }
+
+            window.addEventListener('keydown', e => {
+                if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+                    e.preventDefault();
+                    if (btnModoCompacto) btnModoCompacto.click();
+                }
+            });
+
             // PWA Registration
             registrarServiceWorker();
         } catch (errorInicializacion) {

@@ -147,7 +147,8 @@
         }
 
         .contenedor {
-            max-width: 1400px;
+            max-width: 1600px;
+            padding: 0 var(--espacio-2);
             margin: 0 auto;
             display: flex;
             flex-direction: column;
@@ -555,7 +556,10 @@
         }
         .tabla-contenedor {
             width: 100%;
-            overflow-x: hidden; /* CERO SCROLL HORIZONTAL */
+            max-height: calc(100vh - 340px);
+            min-height: 220px;
+            overflow-y: auto;
+            overflow-x: auto;
         }
         table {
             width: 100%;
@@ -1482,4 +1486,328 @@ dialog.farmacia-modal .modal-actions {
     color: var(--color-primario);
     box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     flex-shrink: 0;
+}
+
+
+/* ========================================================
+   REDISEÑO COCKPIT DUAL & ERGONOMÍA SPLIT-SCREEN (ROL 02)
+   ======================================================== */
+
+.cockpit-tabs-barra {
+    display: none;
+    gap: var(--espacio-1);
+    background: var(--color-superficie);
+    border: 2px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    padding: 3px;
+    margin-bottom: var(--espacio-2);
+}
+
+.cockpit-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radio-sm);
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-seminegrita);
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.cockpit-tab:hover {
+    background: var(--color-superficie-resaltada);
+    color: var(--color-texto-principal);
+}
+
+.cockpit-tab.activo {
+    background: var(--color-accion);
+    color: #FFFFFF;
+    box-shadow: var(--sombra-sm);
+}
+
+[data-tema="oscuro"] .cockpit-tab.activo {
+    background: var(--color-accion);
+    color: #090A0F;
+    font-weight: var(--peso-negrita);
+}
+
+.badge-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--radio-pildora);
+    background: rgba(0, 0, 0, 0.15);
+    font-size: 10px;
+    font-weight: var(--peso-negrita);
+    font-family: var(--fuente-mono);
+}
+
+.cockpit-tab.activo .badge-tab-count {
+    background: rgba(255, 255, 255, 0.3);
+    color: #FFFFFF;
+}
+
+[data-tema="oscuro"] .cockpit-tab.activo .badge-tab-count {
+    background: rgba(0, 0, 0, 0.4);
+    color: #090A0F;
+}
+
+/* GRIDS Y COLUMNAS COCKPIT DUAL */
+.cockpit-dual-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--espacio-2);
+    align-items: start;
+}
+
+.cockpit-col-calc,
+.cockpit-col-factura {
+    display: flex;
+    flex-direction: column;
+    gap: var(--espacio-2);
+    min-width: 0;
+}
+
+/* ESCRITORIO WIDE (≥ 1024px): COCKPIT DUAL LADO A LADO */
+@media (min-width: 1024px) {
+    body:not(.modo-compacto-forzado) .cockpit-tabs-barra {
+        display: none !important;
+    }
+    body:not(.modo-compacto-forzado) .cockpit-dual-grid {
+        grid-template-columns: minmax(460px, 1.05fr) minmax(480px, 1.15fr);
+        gap: var(--espacio-3);
+    }
+    body:not(.modo-compacto-forzado) .cockpit-col-calc,
+    body:not(.modo-compacto-forzado) .cockpit-col-factura {
+        display: flex !important;
+    }
+    body:not(.modo-compacto-forzado) .mini-cuadre-strip {
+        display: none !important;
+    }
+    body:not(.modo-compacto-forzado) .cockpit-col-calc .grid-operativo {
+        display: flex;
+        flex-direction: column;
+        gap: var(--espacio-2);
+    }
+}
+
+/* PANTALLA DIVIDIDA O MÓVIL (< 1024px): PESTAÑAS Y CERO SCROLL */
+@media (max-width: 1023px) {
+    .cockpit-tabs-barra {
+        display: flex;
+    }
+    .cockpit-dual-grid {
+        grid-template-columns: 1fr;
+    }
+    .cockpit-col-calc.cockpit-oculto,
+    .cockpit-col-factura.cockpit-oculto {
+        display: none !important;
+    }
+    .mini-cuadre-strip {
+        display: flex;
+    }
+}
+
+@media (max-width: 1023px) and (min-width: 680px) {
+    .cockpit-col-calc .grid-operativo {
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        align-items: stretch;
+        gap: var(--espacio-2);
+    }
+}
+
+@media (max-width: 679px) {
+    .cockpit-col-calc .grid-operativo {
+        display: flex;
+        flex-direction: column;
+        gap: var(--espacio-2);
+    }
+}
+
+/* MODO MINI-COCKPIT FORZADO */
+body.modo-compacto-forzado .cockpit-tabs-barra {
+    display: flex !important;
+}
+body.modo-compacto-forzado .cockpit-dual-grid {
+    grid-template-columns: 1fr !important;
+    max-width: 780px;
+    margin: 0 auto;
+}
+body.modo-compacto-forzado .cockpit-col-calc.cockpit-oculto,
+body.modo-compacto-forzado .cockpit-col-factura.cockpit-oculto {
+    display: none !important;
+}
+body.modo-compacto-forzado .mini-cuadre-strip {
+    display: flex !important;
+}
+body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
+    display: grid;
+    grid-template-columns: 1.08fr 0.92fr;
+    align-items: stretch;
+    gap: var(--espacio-2);
+}
+@media (max-width: 679px) {
+    body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
+        display: flex;
+        flex-direction: column;
+        gap: var(--espacio-2);
+    }
+}
+
+/* FILA DE 3 CAMPOS PARA MÁXIMA COMPACTACIÓN */
+.fila-tres-campos {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--espacio-2);
+}
+
+@media (max-width: 520px) {
+    .fila-tres-campos {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+}
+
+/* MINI STRIP DE CUADRE INFERIOR */
+.mini-cuadre-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--color-superficie);
+    border: 2px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-sm);
+    gap: 8px;
+}
+
+.mini-cuadre-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-seminegrita);
+    font-family: var(--fuente-mono);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-mini-cuadre {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    background: var(--color-accion-fondo);
+    color: var(--color-accion);
+    border: 1.5px solid var(--color-accion);
+    border-radius: var(--radio-sm);
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-seminegrita);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.btn-mini-cuadre:hover {
+    background: var(--color-accion);
+    color: #FFFFFF;
+}
+
+/* CABECERA DE FACTURA COLAPSABLE */
+.btn-toggle-cabecera {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--color-superficie-resaltada);
+    border: 1.5px solid var(--color-borde);
+    border-radius: var(--radio-sm);
+    font-size: 11px;
+    font-weight: var(--peso-seminegrita);
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.btn-toggle-cabecera:hover {
+    border-color: var(--color-accion);
+    color: var(--color-accion);
+    background: var(--color-accion-fondo);
+}
+
+.resumen-factura-compacta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--color-superficie-resaltada);
+    border: 1.5px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    margin-top: 6px;
+}
+
+.chip-factura-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--texto-xs);
+    background: var(--color-superficie);
+    padding: 3px 8px;
+    border-radius: var(--radio-sm);
+    border: 1px solid var(--color-borde);
+}
+
+.chip-tag {
+    font-size: 10px;
+    color: var(--color-texto-desactivado);
+    text-transform: uppercase;
+    font-weight: var(--peso-seminegrita);
+}
+
+.btn-chip-editar {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: var(--color-accion-fondo);
+    color: var(--color-accion);
+    border: 1.5px solid var(--color-accion);
+    border-radius: var(--radio-sm);
+    font-size: 11px;
+    font-weight: var(--peso-seminegrita);
+    cursor: pointer;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.btn-chip-editar:hover {
+    background: var(--color-accion);
+    color: #FFFFFF;
+}
+
+/* TABULAR NUMBERS (TNUM) PARA EVITAR JITTER EN FINANZAS */
+.td-mono,
+.input-mono,
+.numero-costo,
+.ficha-precio-cifra,
+.ficha-precio-sub,
+.mono,
+.badge-cuadre,
+.resumen-bar span b {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
 }

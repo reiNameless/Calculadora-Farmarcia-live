@@ -794,7 +794,7 @@
             gap: var(--espacio-2);
         }
 
-        /* BÓVEDA LATERAL / DRAWER DESLIZABLE (MENÚ HAMBURGUESA ☰) */
+        /* BÓVEDA LATERAL / DRAWER DESLIZABLE (MENÚ HAMBURGUESA) */
         .drawer-backdrop {
             position: fixed;
             inset: 0;
@@ -1339,7 +1339,7 @@ dialog.farmacia-modal .modal-actions {
     100% { top: 10%; opacity: 0.3; }
 }
 
-/* --- PIE DE PÁGINA CLÍNICO Y LEGAL (CRONIRIS OS) --- */
+/* --- PIE DE PÁGINA CLÍNICO Y LEGAL (CHRONIRIS OS) --- */
 .pie-pagina-farmacia {
     margin-top: var(--espacio-4, 24px);
     margin-bottom: var(--espacio-3, 16px);

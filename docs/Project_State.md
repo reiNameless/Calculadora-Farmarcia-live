@@ -1,12 +1,12 @@
 # ESTADO DEL PROYECTO: Calculadora de Farmacia (Cockpit de Operaciones e Inventario)
 > **Fuente de Verdad Técnica e Historial de Sesiones**  
-> *Última auditoría y consolidación: 2026-11-06 (Arquitectura Semántica HTML5, Atajos F1-F4, Web Audio API y Marca Croniris)*
+> *Última auditoría y consolidación: 2026-11-06 (Arquitectura Semántica HTML5, Atajos F1-F4, Web Audio API y Marca Chroniris)*
 
 ---
 
 ## 1. RESUMEN EJECUTIVO Y ARQUITECTURA GENERAL
 - **Naturaleza del Sistema:** Aplicación Web Progresiva (PWA) de alto rendimiento, cero dependencias de servidor (Local-First), diseñada para farmacias y droguerías en mostrador y dispositivos móviles.
-- **Marca y Titularidad:** Plataforma desarrollada bajo la marca **Croniris**, creada y desarrollada por **reiNameless**. Todos los derechos reservados.
+- **Marca y Titularidad:** Plataforma desarrollada bajo la marca **Chroniris**, creada y desarrollada por **reiNameless**. Todos los derechos reservados.
 - **Dominio Fiscal:** República Dominicana (DGII Art. 343: medicamentos exentos 0% ITBIS; bienes gravados al 18% / 16%; comprobantes e-CF/NCF B01, B02, E31, etc.; costo fiscal unitario exacto a 8 decimales; tolerancia de cuadre ±0.05).
 - **Motor de Datos Local:** Híbrido `IndexedDB` (`CalculadoraFarmaciaDB` v1) estructurado en 4 Object Stores con réplica reactiva síncrona en memoria (`Map` a 0ms), solicitud de almacenamiento persistente (`navigator.storage.persist()`), sembrado de catálogo dominicano (`catalogo_rd_inicial.json`) y fallback en `localStorage`. Credenciales de Google Gemini en `sessionStorage` (Zero-Trust).
 - **Estándar de Códigos:** GS1 Checksum (Módulo 10) para EAN-13 (prefijo RD 746), UPC-A (12 dígitos importados), EAN-8 (ampollas/gotas) e ITF-14 (cajas maestras). Decodificación con cámara vía `BarcodeDetector` nativo con fallback a `ZXing` embebido y sintetizador sonoro Web Audio API (bips de confirmación acústica en hardware).
@@ -31,7 +31,7 @@ Calculadora-Farmacia/
 │   └── workflows/
 │       └── ci.yml                             # CI: node -c, auditoría de 187 IDs y pruebas unitarias
 ├── css/
-│   └── estilos.css                            # Sistema de diseño Ultra-Dark, variables CSS, accesibilidad, print y footer Croniris
+│   └── estilos.css                            # Sistema de diseño Ultra-Dark, variables CSS, accesibilidad, print y footer Chroniris
 ├── docs/
 │   └── Project_State.md                       # [ESTE ARCHIVO] Tracker vivo de estado del proyecto
 ├── icons/
@@ -91,8 +91,8 @@ Calculadora-Farmacia/
 ### Mejoras de Arquitectura Web y Ergonomía de Mostrador (Sesión Actual)
 1. **Estructura Semántica HTML5 Canónica:**
    - Adición del landmark `<main id="contenidoPrincipal">` envolviendo todas las secciones operativas del cockpit.
-   - Creación del landmark `<footer class="pie-pagina-farmacia" role="contentinfo">` con información de versión, copyright legal de **Croniris**, desarrollo por **reiNameless** y botones de acción rápida.
-   - Metadatos optimizados en `<head>`: `<meta name="description">` y `<meta name="author" content="Croniris / reiNameless">`.
+   - Creación del landmark `<footer class="pie-pagina-farmacia" role="contentinfo">` con información de versión, copyright legal de **Chroniris**, desarrollo por **reiNameless** y botones de acción rápida.
+   - Metadatos optimizados en `<head>`: `<meta name="description">` y `<meta name="author" content="Chroniris / reiNameless">`.
 2. **Modal Accesible de Atajos de Teclado e Información (`#modalAtajosAyuda`):**
    - Diálogo modal HTML5 accesible con teclado (`F1` o `?`), listando las teclas rápidas de operación (`F1`, `F2`, `F4`, `Enter`, `Espacio`, `Esc`), resumen de la normativa tributaria DGII (Art. 343) y especificaciones GS1.
 3. **Feedback Acústico con Web Audio API (Cero Dependencias):**

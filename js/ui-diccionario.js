@@ -314,10 +314,19 @@
         if (btnCerrarEdit) btnCerrarEdit.addEventListener('click', cerrarModalEdit);
         if (btnCancelarEdit) btnCancelarEdit.addEventListener('click', cerrarModalEdit);
 
+        let guardandoFichaEnCurso = false;
         if (formEdit) {
             formEdit.addEventListener('submit', e => {
                 e.preventDefault();
-                const codigo = el('editProdCodigo').value;
+                if (guardandoFichaEnCurso) return;
+                const btnSubmit = formEdit.querySelector('button[type="submit"]');
+                try {
+                    guardandoFichaEnCurso = true;
+                    if (btnSubmit) {
+                        btnSubmit.disabled = true;
+                        btnSubmit.classList.add('btn-loading');
+                    }
+                    const codigo = el('editProdCodigo').value;
                 const ficha = {
                     codigoBarras: codigo,
                     nombre: el('editProdNombre').value,
@@ -340,6 +349,13 @@
                     UI.Notificaciones.mostrarMensaje(`Ficha de "${ficha.nombre}" actualizada en el Catálogo Maestro.`, 'success');
                 } else {
                     UI.Notificaciones.mostrarMensaje(res.error || 'Error al guardar ficha.', 'error');
+                }
+                } finally {
+                    guardandoFichaEnCurso = false;
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.classList.remove('btn-loading');
+                    }
                 }
             });
         }

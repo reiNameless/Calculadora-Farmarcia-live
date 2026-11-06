@@ -326,10 +326,20 @@
         return Dominio.validarCantidadEnteraPositiva(texto, 'la cantidad de cajas en factura');
     }
 
+    let agregandoProductoEnCurso = false;
     async function agregarProductoAFactura() {
-        const Estado = AppFarmacia.Estado;
-        const reglasActivas = Estado.reglasActivas;
-        const sesionActual = Estado.sesionActual;
+        if (agregandoProductoEnCurso) return;
+        const btnAgregar = el('btnAgregarProducto');
+        try {
+            agregandoProductoEnCurso = true;
+            if (btnAgregar) {
+                btnAgregar.disabled = true;
+                btnAgregar.classList.add('btn-loading');
+            }
+
+            const Estado = AppFarmacia.Estado;
+            const reglasActivas = Estado.reglasActivas;
+            const sesionActual = Estado.sesionActual;
 
         const enfocarConError = (idInput, mensaje) => {
             if (mensaje) UI.Notificaciones.mostrarMensaje(mensaje, 'error');
@@ -386,6 +396,13 @@
 
         const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea, sesionActual);
         Estado.agregarProductoASesion(nuevaLinea);
+        } finally {
+            agregandoProductoEnCurso = false;
+            if (btnAgregar) {
+                btnAgregar.disabled = false;
+                btnAgregar.classList.remove('btn-loading');
+            }
+        }
 
         // Reset completo de todos los campos de entrada al default solicitado
         ['calcCodigoBarras', 'calcNombre', 'calcPrecioCaja', 'calcCajasCompradas', 'calcDescuento', 'calcUnidadesCaja'].forEach(id => {

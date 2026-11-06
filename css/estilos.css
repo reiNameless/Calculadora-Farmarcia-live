@@ -973,12 +973,40 @@
             transform: scale(0.96) !important;
         }
 
-        /* 2. Micro-animación de Enfoque Accesible */
-        .input-control:focus, .btn-tipo-opcion:focus-visible, .btn-itbis-opcion:focus-visible, .copy-chip:focus-visible {
+        /* 2. Enfoque Accesible Universal WCAG 2.1 AA (Operabilidad por Teclado al 100%) */
+        :focus-visible {
+            outline: 2px solid var(--color-accion) !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px var(--color-accion-fondo) !important;
+            transition: outline-color var(--duracion-rapida) ease, box-shadow var(--duracion-rapida) ease;
+        }
+
+        .input-control:focus {
             outline: 2px solid var(--color-accion);
             outline-offset: 1px;
             box-shadow: 0 0 0 3px var(--color-accion-fondo);
             transition: border-color var(--duracion-rapida) ease, box-shadow var(--duracion-rapida) ease;
+        }
+
+        /* 2.1 Estado Bloqueado / Procesando (Submitting - Idempotencia UI) */
+        .btn-loading, button:disabled, input:disabled, select:disabled {
+            pointer-events: none !important;
+            opacity: 0.65 !important;
+            cursor: not-allowed !important;
+        }
+
+        /* 2.2 Distintivos Teclado (Kbd Tokens) */
+        .kbd-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            font-family: var(--fuente-mono);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            color: var(--color-texto-principal);
+            background: var(--color-superficie-resaltada);
+            border: 1px solid var(--color-borde);
+            border-radius: var(--radio-sm);
+            box-shadow: 0 1px 0 var(--color-borde-fuerte);
         }
 
         /* 3. Flash de Cálculo Numérico en Vivo (Visual Feedback al Tipear) */

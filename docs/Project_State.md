@@ -104,7 +104,7 @@ Calculadora-Farmacia/
    - **Inspección Profunda de Amenazas en PDFs:** Análisis de cabecera ISO 32000-1 (`%PDF-1.x`), presencia de marcador de cierre (`%%EOF`) y escaneo exhaustivo de objetos ejecutables activos (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFiles`, `/RichMedia`, `/SubmitForm`, `/ImportData`, `/URI javascript:`).
    - **Protección contra Bombas de Descompresión (Pixel Flood / Zip Bomb):** Decodificación preventiva en binario de bloques IHDR (PNG) y SOF (JPEG) para rechazar imágenes con dimensiones excesivas (> 64 Megapíxeles) antes de asignar memoria en lienzos Canvas.
    - **Sanitización de Nombres de Archivo:** Neutralización de Path Traversal (CWE-22) eliminando secuencias `../`, eliminación de bytes nulos (`\0`) y bloqueo estricto de dobles extensiones ejecutables (`.php.pdf`, `.exe.jpg`).
-   - **Invalidación de Caché PWA:** Actualización de Service Worker a `farmacia-pwa-v23`.
+   - **Invalidación de Caché PWA:** Actualización de Service Worker a `farmacia-pwa-v24`.
 6. **Sellos Criptográficos Digitales y Protección Anti-Tampering (Chroniris Seal):**
    - **Firma Digital HMAC-SHA256 en Archivos:** Toda exportación de datos (Respaldo Completo, Diccionario de Códigos o Historial) se encapsula en un sobre criptográfico inmutable (`_chroniris_sello`) con huella canónica SHA-256 y firma HMAC calculada con semilla de la aplicación.
    - **Rechazo Inmediato de Adulteraciones:** Si un atacante o usuario externo altera un solo centavo, letra o balance en un archivo JSON descargado, el sistema detecta la rotura de huella y aborta la restauración (`INTEGRIDAD_COMPROMETIDA`).
@@ -115,12 +115,12 @@ Calculadora-Farmacia/
 8. **Blindaje Riguroso Campo por Campo:**
    - Límites superiores físicos en precios (máximo RD$ 50,000,000.00) y cantidades (máximo 100,000 cajas) evitando desbordamientos de punto flotante IEEE 754.
    - Sanitización de entradas de texto contra caracteres de control, bytes nulos e inyecciones XSS en nombres de fármacos, números de factura y proveedores.
-   - Actualización de Service Worker a `farmacia-pwa-v23`.
+   - Actualización de Service Worker a `farmacia-pwa-v24`.
 
 
 ---
 
 ## 5. ESTADO DE PRUEBAS Y CI
 - **Sintaxis JS:** Verificada con `node -c` en 14 archivos (`sw.js` + 13 en `js/`). Estado: **100% PASS**.
-- **Paridad de IDs:** 208 IDs en `index.html` auditados contra los IDs críticos obligatorios. Estado: **100% PASS**.
+- **Paridad de IDs:** 211 IDs en `index.html` auditados contra los IDs críticos obligatorios. Estado: **100% PASS**.
 - **Suite de Pruebas Unitarias (`js/pruebas.js`):** 24 suites automatizadas (incluye Blindaje de Catálogo Maestro, Edición Deliberada y Organización Determinística por Categoría A-Z). Estado: **100% PASS**.

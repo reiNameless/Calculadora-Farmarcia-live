@@ -141,7 +141,7 @@
 
                     <!-- SELECTOR VISIBLE: ENTERO VS DIVIDIDO CON ICONOS SVG DEL SISTEMA -->
                     <div class="campo" style="margin-bottom:var(--espacio-2);">
-                        <label class="campo-label">Forma de Venta (Categoría)</label>
+                        <label class="campo-label" for="calcTipo">Forma de Venta (Categoría)</label>
                         <div class="selector-tipo-caja">
                             <button type="button" class="btn-tipo-opcion activo" id="btnTipoDivisible">
                                 <svg class="ico"><use href="#i-grid"/></svg>
@@ -161,7 +161,7 @@
 
                     <div class="form-grid">
                         <div class="campo">
-                            <label class="campo-label"><svg class="ico ico-sm"><use href="#i-barcode"/></svg> Código de Barras</label>
+                            <label class="campo-label" for="calcCodigoBarras"><svg class="ico ico-sm"><use href="#i-barcode"/></svg> Código de Barras</label>
                             <div style="display:flex;gap:var(--espacio-1);">
                                 <input type="text" class="input-control input-mono" id="calcCodigoBarras" placeholder="Escanear..." inputmode="numeric" pattern="[0-9]*" style="flex:1;min-width:0;">
                                 <button type="button" class="btn-icono" id="btnEscanearCamara" title="Escanear con cámara (Webcam de PC o Móvil)" aria-label="Escanear código de barras con cámara" style="flex-shrink:0;height:40px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-color:var(--color-borde-fuerte);">
@@ -179,15 +179,15 @@
                             <datalist id="listaSugerenciasProductos"></datalist>
                         </div>
                         <div class="campo">
-                            <label class="campo-label">1. Cant. Cajas</label>
+                            <label class="campo-label" for="calcCajasCompradas">1. Cant. Cajas</label>
                             <input type="number" id="calcCajasCompradas" class="input-control input-mono" placeholder="1" min="1">
                         </div>
                         <div class="campo">
-                            <label class="campo-label">2. Costo Caja Base ($)</label>
+                            <label class="campo-label" for="calcPrecioCaja">2. Costo Caja Base ($)</label>
                             <input type="number" id="calcPrecioCaja" class="input-control input-mono" placeholder="0.00" step="0.01">
                         </div>
                         <div class="campo" id="boxUnidadesPorCaja">
-                            <label class="campo-label">3. Trae x Caja (Uds)</label>
+                            <label class="campo-label" for="calcUnidadesCaja">3. Trae x Caja (Uds)</label>
                             <input type="number" id="calcUnidadesCaja" class="input-control input-mono" placeholder="1" min="1">
                         </div>
                         <div class="campo">
@@ -345,16 +345,16 @@
                 <!-- TODOS LOS CAMPOS DE LA FACTURA: PROVEEDOR, NÚMERO, TOTAL PAPEL, FECHA EMISIÓN, FECHA VENCIMIENTO -->
                                 <div class="factura-campos-grid">
                     <div class="campo">
-                        <label class="campo-label">Proveedor / Lab. *</label>
+                        <label class="campo-label" for="facProveedor">Proveedor / Lab. *</label>
                         <input type="text" class="input-control" id="facProveedor" placeholder="Ej. Rowe / Ethical" list="listaProveedoresSugeridos">
                         <datalist id="listaProveedoresSugeridos"></datalist>
                     </div>
                     <div class="campo">
-                        <label class="campo-label">RNC Proveedor (Opc.)</label>
+                        <label class="campo-label" for="facRnc">RNC Proveedor (Opc.)</label>
                         <input type="text" class="input-control input-mono" id="facRnc" placeholder="Ej. 101023456" maxlength="11" inputmode="numeric">
                     </div>
                     <div class="campo">
-                        <label class="campo-label">Factura # / e-NCF *</label>
+                        <label class="campo-label" for="facNumero">Factura # / e-NCF *</label>
                         <div style="display:flex;gap:var(--espacio-1);">
                             <input type="text" class="input-control input-mono" id="facNumero" placeholder="Ej. E3100028491 o 004582" style="flex:1;min-width:0;">
                             <button type="button" class="btn-icono" id="btnEscanearQrFactura" title="Escanear QR de Factura DGII con Cámara" aria-label="Escanear QR de Factura DGII con Cámara" style="flex-shrink:0;height:40px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border-color:var(--color-borde-fuerte);">
@@ -364,15 +364,15 @@
                         </div>
                     </div>
                     <div class="campo">
-                        <label class="campo-label">Total en Papel ($) *</label>
+                        <label class="campo-label" for="facTotalFisico">Total en Papel ($) *</label>
                         <input type="number" class="input-control input-mono" id="facTotalFisico" placeholder="Ej. 236.00" step="0.01">
                     </div>
                     <div class="campo">
-                        <label class="campo-label">Fecha Emisión *</label>
+                        <label class="campo-label" for="facFechaEmision">Fecha Emisión *</label>
                         <input type="date" class="input-control" id="facFechaEmision">
                     </div>
                     <div class="campo">
-                        <label class="campo-label">Fecha Vencimiento (Opc.)</label>
+                        <label class="campo-label" for="facFechaVencimiento">Fecha Vencimiento (Opc.)</label>
                         <input type="date" class="input-control" id="facFechaVencimiento">
                     </div>
                 </div>
@@ -655,7 +655,7 @@
                     <fieldset id="fieldsetReglas" class="formula-fieldset" disabled>
                         <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
                             <div class="campo">
-                                <label class="campo-label">Modo de Cálculo de Precios</label>
+                                <label class="campo-label" for="cfgEstrategia">Modo de Cálculo de Precios</label>
                                 <select id="cfgEstrategia" class="input-control">
                                     <option value="CASCADA_DESCUENTO">1. Cascada: P1 (+30%) &rarr; P2 (-5%) &rarr; P3 (-5%)</option>
                                     <option value="MARGEN_DIRECTO_COSTO">2. Margen Directo sobre Costo</option>
@@ -663,21 +663,21 @@
                                 </select>
                             </div>
                             <div class="campo">
-                                <label class="campo-label">Impuesto ITBIS (%)</label>
+                                <label class="campo-label" for="cfgItbisPct">Impuesto ITBIS (%)</label>
                                 <input type="number" id="cfgItbisPct" class="input-control input-mono" value="18" min="0" max="100" step="0.1">
                             </div>
                         </div>
                         <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
                             <div class="campo">
-                                <label class="campo-label" id="lblCfgP1">P1 (+%)</label>
+                                <label class="campo-label" id="lblCfgP1" for="cfgP1Pct">P1 (+%)</label>
                                 <input type="number" id="cfgP1Pct" class="input-control input-mono" value="30" min="0" max="500" step="0.1">
                             </div>
                             <div class="campo">
-                                <label class="campo-label" id="lblCfgP2">P2 (-% s/P1)</label>
+                                <label class="campo-label" id="lblCfgP2" for="cfgP2Pct">P2 (-% s/P1)</label>
                                 <input type="number" id="cfgP2Pct" class="input-control input-mono" value="5" min="0" max="500" step="0.1">
                             </div>
                             <div class="campo">
-                                <label class="campo-label" id="lblCfgP3">P3 (-% s/P2)</label>
+                                <label class="campo-label" id="lblCfgP3" for="cfgP3Pct">P3 (-% s/P2)</label>
                                 <input type="number" id="cfgP3Pct" class="input-control input-mono" value="5" min="0" max="500" step="0.1">
                             </div>
                         </div>
@@ -696,11 +696,11 @@
         </aside>
 
         <!-- AJUSTES DEL SISTEMA: MODAL DEDICADO (API GOOGLE GEMINI + DICCIONARIO Y ARCHIVOS) -->
-        <dialog id="modalAjustes" class="modal-ajustes">
+        <dialog id="modalAjustes" class="modal-ajustes" aria-labelledby="tituloModalAjustes" aria-modal="true">
             <div class="modal-ajustes-header">
                 <div style="display:flex;align-items:center;gap:8px;">
                     <svg class="ico" style="color:var(--color-accion);"><use href="#i-settings"/></svg>
-                    <strong style="font-size:var(--texto-base);">Ajustes del Sistema</strong>
+                    <strong id="tituloModalAjustes" style="font-size:var(--texto-base);">Ajustes del Sistema</strong>
                 </div>
                 <button type="button" class="btn-icono" id="btnCerrarAjustes" title="Cerrar Ajustes">
                     <svg class="ico ico-sm"><use href="#i-close"/></svg>
@@ -730,15 +730,15 @@
                     </div>
                     <div class="form-grid" style="grid-template-columns: 1fr;">
                         <div class="campo">
-                            <label class="campo-label">Clave de API de Google Gemini</label>
+                            <label class="campo-label" for="iaApiKey">Clave de API de Google Gemini</label>
                             <input type="password" id="iaApiKey" class="input-control" placeholder="Pega aquí tu API Key de Google" autocomplete="off" spellcheck="false">
                         </div>
                         <div class="campo">
-                            <label class="campo-label">Modelo de IA</label>
+                            <label class="campo-label" for="iaModelo">Modelo de IA</label>
                             <input type="text" id="iaModelo" class="input-control" value="gemini-2.5-flash">
                         </div>
                         <div class="campo">
-                            <label class="campo-label">Prueba o subida de foto de factura</label>
+                            <label class="campo-label" for="iaImagenInput">Prueba o subida de foto de factura</label>
                             <input type="file" id="iaImagenInput" class="input-control" accept="image/*,application/pdf" multiple>
                         </div>
                     </div>
@@ -822,11 +822,11 @@
         </dialog>
 
         <!-- Modal: Edición de Ficha Maestra de Producto en Catálogo -->
-        <dialog id="modalEditarProductoDiccionario" class="farmacia-modal" style="max-width:560px;">
+        <dialog id="modalEditarProductoDiccionario" class="farmacia-modal" style="max-width:560px;" aria-labelledby="tituloModalEditarFicha" aria-modal="true">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
                     <svg class="ico"><use href="#i-edit"/></svg>
-                    <span>Editar Ficha de Producto en Catálogo</span>
+                    <span id="tituloModalEditarFicha">Editar Ficha de Producto en Catálogo</span>
                 </div>
                 <button type="button" class="btn-icono" id="btnCerrarModalEditarProducto" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
                     <svg class="ico ico-sm"><use href="#i-close"/></svg>
@@ -925,11 +925,11 @@
         </nav>
 
         <!-- Modal Accesible: Atajos de Teclado e Información del Sistema (Chroniris) -->
-        <dialog id="modalAtajosAyuda" class="farmacia-modal" style="max-width:620px;">
+        <dialog id="modalAtajosAyuda" class="farmacia-modal" style="max-width:620px;" aria-labelledby="tituloModalAtajos" aria-modal="true">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
                     <svg class="ico"><use href="#i-kbd"/></svg>
-                    <span>Atajos de Teclado y Operación de Mostrador</span>
+                    <span id="tituloModalAtajos">Atajos de Teclado y Operación de Mostrador</span>
                 </div>
                 <button type="button" class="btn-icono" id="btnCerrarModalAtajos" style="border:none;padding:6px;cursor:pointer;" title="Cerrar ventana">
                     <svg class="ico ico-sm"><use href="#i-close"/></svg>
@@ -987,7 +987,7 @@
         </dialog>
 
         <!-- Diálogos Modales Nativos Accesibles (UX-01) -->
-        <dialog id="modalConfirmacion" class="farmacia-modal">
+        <dialog id="modalConfirmacion" class="farmacia-modal" aria-labelledby="modalConfirmTitulo" aria-modal="true">
             <h3 id="modalConfirmTitulo">Confirmación</h3>
             <div id="modalConfirmMensaje" class="modal-body"></div>
             <div class="modal-actions">
@@ -997,7 +997,7 @@
         </dialog>
 
         <!-- Modal Escáner de Cámara para Código de Barras (Fase 3) -->
-        <dialog id="modalCamaraEscaneo" class="farmacia-modal" style="max-width:440px;padding:var(--espacio-3);">
+        <dialog id="modalCamaraEscaneo" class="farmacia-modal" style="max-width:440px;padding:var(--espacio-3);" aria-labelledby="modalCamaraTitulo" aria-modal="true">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:var(--texto-base);">
                     <svg class="ico"><use href="#i-camera"/></svg>
@@ -1021,7 +1021,7 @@
             </div>
         </dialog>
 
-        <dialog id="modalPrompt" class="farmacia-modal">
+        <dialog id="modalPrompt" class="farmacia-modal" aria-labelledby="modalPromptTitulo" aria-modal="true">
             <form method="dialog" id="formModalPrompt">
                 <h3 id="modalPromptTitulo">Ingresar Valor</h3>
                 <div id="modalPromptMensaje" class="modal-body"></div>

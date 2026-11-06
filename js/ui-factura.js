@@ -241,7 +241,17 @@
         const usarRedondeo = el('calcRedondeo').checked;
 
         if (!Estado.sesionActual.productos.length) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center p-18 text-muted">Sin productos registrados en esta factura.</td></tr>';
+            tbody.innerHTML = `<tr>
+                <td colspan="12" style="text-align:center;padding:var(--espacio-5) var(--espacio-3);color:var(--color-texto-secundario);">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:var(--espacio-2);">
+                        <svg class="ico" style="width:36px;height:36px;opacity:0.35;color:var(--color-primario);" aria-hidden="true"><use href="#i-box"/></svg>
+                        <div style="font-weight:600;font-size:var(--texto-base);color:var(--color-texto-principal);">Esta factura no tiene productos todavía</div>
+                        <div style="font-size:var(--texto-sm);max-width:440px;line-height:1.4;">
+                            Escanea un código de barras con la pistola o presiona <kbd class="kbd-badge">F2</kbd> para ingresar un producto en la calculadora superior.
+                        </div>
+                    </div>
+                </td>
+            </tr>`;
             actualizarDesgloseFiscalGlobal();
             return;
         }
@@ -550,52 +560,69 @@
         }, Estado.reglasActivas));
     }
 
+    let operacionGuardadoEnCurso = false;
     function finalizarYGuardarFactura() {
-        const Estado = AppFarmacia.Estado;
-        actualizarCabeceraFacturaDesdeUI();
-        if (!Estado.sesionActual.proveedor || !Estado.sesionActual.numeroFactura || !Estado.sesionActual.fechaEmision) {
-            UI.Notificaciones.mostrarMensaje('Completa Proveedor, Número de Factura y Fecha de Emisión antes de guardar.', 'error');
-            el('seccionDatosFactura').scrollIntoView({ behavior: 'smooth' });
-            return;
+        if (operacionGuardadoEnCurso) return;
+        const btnFinalizar = el('btnFinalizarFactura');
+        try {
+            operacionGuardadoEnCurso = true;
+            if (btnFinalizar) {
+                btnFinalizar.disabled = true;
+                btnFinalizar.classList.add('btn-loading');
+            }
+
+            const Estado = AppFarmacia.Estado;
+            actualizarCabeceraFacturaDesdeUI();
+            if (!Estado.sesionActual.proveedor || !Estado.sesionActual.numeroFactura || !Estado.sesionActual.fechaEmision) {
+                UI.Notificaciones.mostrarMensaje('Completa Proveedor, Número de Factura y Fecha de Emisión antes de guardar.', 'error');
+                el('seccionDatosFactura').scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+            if (!Estado.sesionActual.productos.length) {
+                return UI.Notificaciones.mostrarMensaje('Agrega al menos un producto antes de finalizar la factura.', 'error');
+            }
+            if (verificarDuplicadoUI()) {
+                return UI.Notificaciones.mostrarMensaje('Este proveedor ya tiene registrada una factura con ese número.', 'error');
+            }
+
+            const historial = Almacenamiento.obtenerHistorialFacturas();
+            const resumen = Dominio.calcularResumenCuadreFactura(Estado.sesionActual.productos, Estado.sesionActual.totalFisico);
+
+            // DAT-05: Guarda fórmulas usadas
+            const facturaCerrada = {
+                ...Dominio.clonarObjetoSeguro(Estado.sesionActual),
+                id: Estado.sesionActual.id || Dominio.generarIdUnico(),
+                totalCalculado: resumen.sumaAcumulada,
+                timestampGuardado: Date.now(),
+                reglasCalculoUsadas: Dominio.clonarObjetoSeguro(Estado.reglasActivas)
+            };
+
+            const idx = historial.findIndex(f => f.id === facturaCerrada.id);
+            if (idx >= 0) historial[idx] = facturaCerrada;
+            else historial.unshift(facturaCerrada);
+
+            const guardado = Almacenamiento.guardarHistorialFacturas(historial);
+
+            if (Estado.sesionActual.proveedor || Estado.sesionActual.rnc) {
+                Almacenamiento.guardarProveedorEnDirectorio({
+                    nombre: Estado.sesionActual.proveedor,
+                    rnc: Estado.sesionActual.rnc
+                });
+                actualizarDatalistProveedores();
+            }
+            if (!guardado.exito) {
+                return UI.Notificaciones.mostrarMensaje(guardado.error || 'Error al guardar la factura en el historial.', 'error');
+            }
+
+            Estado.vaciarSesion();
+            UI.Notificaciones.mostrarMensaje('Factura guardada correctamente en el historial.', 'success');
+        } finally {
+            operacionGuardadoEnCurso = false;
+            if (btnFinalizar) {
+                btnFinalizar.disabled = false;
+                btnFinalizar.classList.remove('btn-loading');
+            }
         }
-        if (!Estado.sesionActual.productos.length) {
-            return UI.Notificaciones.mostrarMensaje('Agrega al menos un producto antes de finalizar la factura.', 'error');
-        }
-        if (verificarDuplicadoUI()) {
-            return UI.Notificaciones.mostrarMensaje('Este proveedor ya tiene registrada una factura con ese número.', 'error');
-        }
-
-        const historial = Almacenamiento.obtenerHistorialFacturas();
-        const resumen = Dominio.calcularResumenCuadreFactura(Estado.sesionActual.productos, Estado.sesionActual.totalFisico);
-
-        // DAT-05: Guarda fórmulas usadas
-        const facturaCerrada = {
-            ...Dominio.clonarObjetoSeguro(Estado.sesionActual),
-            id: Estado.sesionActual.id || Dominio.generarIdUnico(),
-            totalCalculado: resumen.sumaAcumulada,
-            timestampGuardado: Date.now(),
-            reglasCalculoUsadas: Dominio.clonarObjetoSeguro(Estado.reglasActivas)
-        };
-
-        const idx = historial.findIndex(f => f.id === facturaCerrada.id);
-        if (idx >= 0) historial[idx] = facturaCerrada;
-        else historial.unshift(facturaCerrada);
-
-        const guardado = Almacenamiento.guardarHistorialFacturas(historial);
-
-        if (Estado.sesionActual.proveedor || Estado.sesionActual.rnc) {
-            Almacenamiento.guardarProveedorEnDirectorio({
-                nombre: Estado.sesionActual.proveedor,
-                rnc: Estado.sesionActual.rnc
-            });
-            actualizarDatalistProveedores();
-        }
-        if (!guardado.exito) {
-            return UI.Notificaciones.mostrarMensaje(guardado.error || 'Error al guardar la factura en el historial.', 'error');
-        }
-
-        Estado.vaciarSesion();
-        UI.Notificaciones.mostrarMensaje('Factura guardada correctamente en el historial.', 'success');
     }
 
     function inicializarEventosFactura() {

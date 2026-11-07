@@ -1,5 +1,5 @@
 // Service Worker para Calculadora de Farmacia PWA (CAL-03)
-const CACHE_NAME = 'farmacia-pwa-v25';
+const CACHE_NAME = 'farmacia-pwa-v27';
 
 const ARCHIVOS_ESTATICOS = [
     './',

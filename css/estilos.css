@@ -1,0 +1,2754 @@
+/* DESIGN TOKENS: ALTO CONTRASTE Y ULTRA-DARK */
+        :root {
+            --fuente-principal: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --fuente-mono: 'Consolas', 'Roboto Mono', 'SF Mono', monospace;
+
+            --texto-xs: 0.75rem;
+            --texto-sm: 0.875rem;
+            --texto-base: 1rem;
+            --texto-md: 1.125rem;
+            --texto-lg: 1.25rem;
+            --texto-xl: 1.5rem;
+
+            --peso-regular: 400;
+            --peso-medio: 500;
+            --peso-seminegrita: 600;
+            --peso-negrita: 700;
+
+            --espacio-1: 4px;
+            --espacio-2: 8px;
+            --espacio-3: 12px;
+            --espacio-4: 16px;
+            --espacio-5: 20px;
+
+            --radio-sm: 5px;
+            --radio-md: 8px;
+            --radio-lg: 12px;
+            --radio-pildora: 9999px;
+
+            /* TOKENS DE MOVIMIENTO Y MICROINTERACCIONES (ETAPA 6) */
+            --duracion-ultra-rapida: 90ms;
+            --duracion-rapida: 160ms;
+            --duracion-media: 240ms;
+            --duracion-suave: 320ms;
+            --curva-estandar: cubic-bezier(0.2, 0, 0, 1);
+            --curva-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --curva-desacelerada: cubic-bezier(0, 0, 0.2, 1);
+
+            /* ==========================================================================
+               1. PALETA 1: BOTICA ESMERALDA & SALVIA ALABASTRO (PREDETERMINADA)
+               Inspiración: Salud botánica, bienestar boticario y alivio retiniano en turnos 12h.
+               ========================================================================== */
+            --color-fondo: #F3F6F4;
+            --color-superficie: #FFFFFF;
+            --color-superficie-resaltada: #E5ECE8;
+
+            --color-texto-principal: #0D1F17;
+            --color-texto-secundario: #2D4A3E;
+            --color-texto-desactivado: #627D72;
+
+            --color-borde: #CBD8D2;
+            --color-borde-fuerte: #6B8B7E;
+
+            --color-accion: #006654;
+            --color-accion-hover: #004D3F;
+            --color-accion-fondo: #E2F4EE;
+
+            --color-exito: #047857;
+            --color-exito-fondo: #D1FAE5;
+            --color-exito-borde: #10B981;
+
+            --color-alerta: #B45309;
+            --color-alerta-fondo: #FEF3C7;
+
+            --color-error: #BE123C;
+            --color-error-fondo: #FFE4E6;
+
+            --sombra-sm: 0 1px 3px rgba(13, 31, 23, 0.08);
+            --sombra-md: 0 4px 10px rgba(13, 31, 23, 0.12);
+            --sombra-foco: 0 0 0 4px rgba(0, 102, 84, 0.25);
+            --resaltado-foco-bg: #FFFFFF;
+
+            /* COLORES DE COLUMNAS DE LA TABLA (BOTICA CLARO) */
+            --col-inv-color: #0b6e6e;
+            --col-inv-bg: #e0f4f4;
+            --col-caja-color: #a04a00;
+            --col-caja-bg: #fff0e0;
+            --col-itbis-color: #047857;
+            --col-itbis-bg: #e6f5ee;
+            --col-sub-color: #0b5b75;
+            --col-sub-bg: #e1f2f7;
+            --col-costo-color: #0369a1;
+            --col-costo-bg: #e0f2fe;
+            --col-p1-color: #047857;
+            --col-p1-bg: #d1fae5;
+            --col-p2-color: #b45309;
+            --col-p2-bg: #fef3c7;
+            --col-p3-color: #4c1d95; /* Amatista Real Farmacéutico - CERO ROJO */
+            --col-p3-bg: #f3e8ff;
+        }
+
+        /* PALETA 1: BOTICA ESMERALDA - MODO OSCURO (CARBÓN BOSQUE ANTI-HALACIÓN) */
+        html[data-paleta="botica"][data-tema="oscuro"],
+        html:not([data-paleta="cobalto"])[data-tema="oscuro"] {
+            --color-fondo: #0B1311;
+            --color-superficie: #121E1B;
+            --color-superficie-resaltada: #192A26;
+
+            --color-texto-principal: #ECFDF5;
+            --color-texto-secundario: #93C5B5;
+            --color-texto-desactivado: #52786B;
+
+            --color-borde: #213B33;
+            --color-borde-fuerte: #3A6357;
+
+            --color-accion: #10B981;
+            --color-accion-hover: #34D399;
+            --color-accion-fondo: #064E3B;
+
+            --color-exito: #34D399;
+            --color-exito-fondo: #064E3B;
+            --color-exito-borde: #059669;
+
+            --color-alerta: #FBBF24;
+            --color-alerta-fondo: #451A03;
+
+            --color-error: #FB7185;
+            --color-error-fondo: #4C0519;
+
+            --sombra-sm: 0 2px 4px rgba(0, 0, 0, 0.6);
+            --sombra-md: 0 6px 16px rgba(0, 0, 0, 0.7);
+            --sombra-foco: 0 0 0 4px rgba(16, 185, 129, 0.35);
+            --resaltado-foco-bg: #152420;
+
+            /* COLORES DE COLUMNAS DE LA TABLA (BOTICA OSCURO) */
+            --col-inv-color: #2dd4bf;
+            --col-inv-bg: #0d2828;
+            --col-caja-color: #fb923c;
+            --col-caja-bg: #2e1b0c;
+            --col-itbis-color: #34d399;
+            --col-itbis-bg: #064e3b;
+            --col-sub-color: #38bdf8;
+            --col-sub-bg: #082f49;
+            --col-costo-color: #38bdf8;
+            --col-costo-bg: #082f49;
+            --col-p1-color: #34d399;
+            --col-p1-bg: #064e3b;
+            --col-p2-color: #fbbf24;
+            --col-p2-bg: #451a03;
+            --col-p3-color: #c084fc; /* Amatista Boreal */
+            --col-p3-bg: #24123e;
+        }
+
+        /* ==========================================================================
+           2. PALETA 2: COBALTO QUIRÚRGICO & PLATINO TITÁN
+           Inspiración: Precisión analítica hospitalaria, bioanálisis y ERP suizo/nórdico.
+           ========================================================================== */
+        html[data-paleta="cobalto"]:not([data-tema="oscuro"]) {
+            --color-fondo: #F4F6F9;
+            --color-superficie: #FFFFFF;
+            --color-superficie-resaltada: #E8EDF5;
+
+            --color-texto-principal: #0A1128;
+            --color-texto-secundario: #2C3A58;
+            --color-texto-desactivado: #697A9B;
+
+            --color-borde: #CAD4E2;
+            --color-borde-fuerte: #6E829F;
+
+            --color-accion: #1A56DB;
+            --color-accion-hover: #1442A6;
+            --color-accion-fondo: #EBF2FF;
+
+            --color-exito: #057A55;
+            --color-exito-fondo: #DEF7EC;
+            --color-exito-borde: #31C48D;
+
+            --color-alerta: #D97706;
+            --color-alerta-fondo: #FEF3C7;
+
+            --color-error: #E11D48;
+            --color-error-fondo: #FFE4E6;
+
+            --sombra-sm: 0 1px 3px rgba(10, 17, 40, 0.08);
+            --sombra-md: 0 4px 10px rgba(10, 17, 40, 0.12);
+            --sombra-foco: 0 0 0 4px rgba(26, 86, 219, 0.25);
+            --resaltado-foco-bg: #FFFFFF;
+
+            /* COLORES DE COLUMNAS DE LA TABLA (COBALTO CLARO) */
+            --col-inv-color: #0b6e6e;
+            --col-inv-bg: #e0f4f4;
+            --col-caja-color: #a04a00;
+            --col-caja-bg: #fff0e0;
+            --col-itbis-color: #057a55;
+            --col-itbis-bg: #def7ec;
+            --col-sub-color: #4f46e5;
+            --col-sub-bg: #eef2ff;
+            --col-costo-color: #4f46e5;
+            --col-costo-bg: #eef2ff;
+            --col-p1-color: #0284c7;
+            --col-p1-bg: #e0f2fe;
+            --col-p2-color: #d97706;
+            --col-p2-bg: #fef3c7;
+            --col-p3-color: #475569; /* Grafito Titán Neutro - CERO ROJO */
+            --col-p3-bg: #f1f5f9;
+        }
+
+        /* PALETA 2: COBALTO QUIRÚRGICO - MODO OSCURO (TITANIO PROFUNDO & CIAN) */
+        html[data-paleta="cobalto"][data-tema="oscuro"] {
+            --color-fondo: #0B0F19;
+            --color-superficie: #131927;
+            --color-superficie-resaltada: #1D263B;
+
+            --color-texto-principal: #F1F5F9;
+            --color-texto-secundario: #94A3B8;
+            --color-texto-desactivado: #54647C;
+
+            --color-borde: #253148;
+            --color-borde-fuerte: #435575;
+
+            --color-accion: #38BDF8;
+            --color-accion-hover: #0EA5E9;
+            --color-accion-fondo: #082F49;
+
+            --color-exito: #31C48D;
+            --color-exito-fondo: #03543F;
+            --color-exito-borde: #059669;
+
+            --color-alerta: #FBBF24;
+            --color-alerta-fondo: #451A03;
+
+            --color-error: #FB7185;
+            --color-error-fondo: #4C0519;
+
+            --sombra-sm: 0 2px 4px rgba(0, 0, 0, 0.6);
+            --sombra-md: 0 6px 16px rgba(0, 0, 0, 0.7);
+            --sombra-foco: 0 0 0 4px rgba(56, 189, 248, 0.35);
+            --resaltado-foco-bg: #1A2234;
+
+            /* COLORES DE COLUMNAS DE LA TABLA (COBALTO OSCURO) */
+            --col-inv-color: #2dd4bf;
+            --col-inv-bg: #0d2828;
+            --col-caja-color: #fb923c;
+            --col-caja-bg: #2e1b0c;
+            --col-itbis-color: #31c48d;
+            --col-itbis-bg: #03543f;
+            --col-sub-color: #818cf8;
+            --col-sub-bg: #1e1b4b;
+            --col-costo-color: #818cf8;
+            --col-costo-bg: #1e1b4b;
+            --col-p1-color: #38bdf8;
+            --col-p1-bg: #082f49;
+            --col-p2-color: #fbbf24;
+            --col-p2-bg: #451a03;
+            --col-p3-color: #94a3b8; /* Grafito Titán Noche */
+            --col-p3-bg: #1e293b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            min-height: 100%;
+            overflow-x: hidden;
+            overflow-y: auto; /* Permite scroll vertical fluido en cualquier pantalla, impidiendo cortes por la barra de tareas */
+            font-family: var(--fuente-principal);
+            background: var(--color-fondo);
+            color: var(--color-texto-principal);
+            line-height: 1.4;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .contenedor {
+            min-height: 100vh;
+            height: auto;
+            max-width: 1680px;
+            padding: 4px 8px 56px 8px; /* Colchón de seguridad inferior de 56px anti-guillotinado por barra de tareas de Windows */
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow: visible;
+        }
+
+        /* ICONOS SVG DEL SISTEMA */
+        .ico {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+            vertical-align: middle;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .ico-sm { width: 14px; height: 14px; }
+        .ico-lg { width: 22px; height: 22px; }
+
+        /* CABECERA MINIMALISTA (SIN EL NOMBRE DEL SOFTWARE EN GRANDE) */
+        .barra-superior {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--color-superficie);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-lg);
+            padding: 6px var(--espacio-3);
+            box-shadow: var(--sombra-sm);
+        }
+        .header-izquierda {
+            display: flex;
+            align-items: center;
+            gap: var(--espacio-2);
+        }
+        .indicador-pwa {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--color-accion-fondo);
+            color: var(--color-accion);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-negrita);
+            padding: 3px 8px;
+            border-radius: var(--radio-pildora);
+            border: 1px solid var(--color-accion);
+        }
+        .punto-verde {
+            width: 8px;
+            height: 8px;
+            background: var(--color-exito);
+            border-radius: 50%;
+        }
+
+        .btn-header {
+            background: var(--color-superficie-resaltada);
+            color: var(--color-texto-principal);
+            border: 1.5px solid var(--color-borde-fuerte);
+            border-radius: var(--radio-md);
+            padding: 5px 10px;
+            font-weight: var(--peso-seminegrita);
+            font-size: var(--texto-xs);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: border-color 0.15s;
+        }
+        .btn-header:hover {
+            border-color: var(--color-accion);
+            color: var(--color-accion);
+        }
+
+        /* REJILLA PRIMER PANTALLAZO ADAPTADA A VENTANA MINIMIZADA / PANTALLA DIVIDIDA */
+        .grid-operativo {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: var(--espacio-2);
+        }
+        /* DESDE 600px: Media pantalla / split-screen al lado del software de la farmacia */
+        @media (min-width: 600px) {
+            .grid-operativo {
+                grid-template-columns: 1.05fr 0.95fr;
+                align-items: stretch;
+            }
+        }
+        @media (min-width: 1200px) {
+            .grid-operativo {
+                grid-template-columns: 1.12fr 0.88fr;
+                gap: var(--espacio-3);
+            }
+        }
+
+        .tarjeta {
+            background: var(--color-superficie);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-lg);
+            padding: var(--espacio-3);
+            box-shadow: var(--sombra-md);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .tarjeta-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--espacio-2);
+            border-bottom: 2px solid var(--color-borde);
+            padding-bottom: 6px;
+        }
+        .tarjeta-titulo {
+            font-size: var(--texto-sm);
+            font-weight: var(--peso-negrita);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* SELECTOR CATEGORÍA: SE VENDE ENTERO VS SE DIVIDE (COMPACTO) */
+        .selector-tipo-caja {
+            background: var(--color-superficie-resaltada);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: 3px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            margin-bottom: var(--espacio-2);
+        }
+        .btn-tipo-opcion {
+            background: transparent;
+            border: none;
+            padding: 6px 8px;
+            border-radius: var(--radio-sm);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            color: var(--color-texto-secundario);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .btn-tipo-opcion.activo {
+            background: var(--color-accion);
+            color: #FFFFFF;
+            box-shadow: var(--sombra-sm);
+        }
+        [data-tema="oscuro"] .btn-tipo-opcion.activo {
+            background: var(--color-accion);
+            color: #090A0F;
+            font-weight: var(--peso-negrita);
+        }
+
+        /* CAMPOS DE ENTRADA CON BORDES MUY VISIBLES Y FOCO POTENTE */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--espacio-2);
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        .col-full { grid-column: 1 / -1; }
+        .campo {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .campo-label {
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-negrita);
+            color: var(--color-texto-secundario);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .input-control {
+            height: 40px;
+            padding: 6px 10px;
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            font-size: var(--texto-sm);
+            font-family: inherit;
+            background: var(--color-superficie);
+            color: var(--color-texto-principal);
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+        .input-control:focus {
+            outline: none;
+            border-color: var(--color-accion) !important;
+            box-shadow: var(--sombra-foco) !important;
+            background: var(--resaltado-foco-bg) !important;
+        }
+        .input-mono {
+            font-family: var(--fuente-mono);
+            font-weight: var(--peso-negrita);
+            font-size: var(--texto-sm);
+        }
+        .input-bloqueado {
+            background: var(--color-superficie-resaltada) !important;
+            border-style: dashed;
+            cursor: not-allowed;
+            color: var(--color-texto-desactivado);
+        }
+
+        /* CASILLA DE FOTO / IA */
+        .dropzone-foto {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            background: var(--color-superficie-resaltada);
+            border: 2px dashed var(--color-borde-fuerte);
+            border-radius: var(--radio-md);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-negrita);
+            color: var(--color-texto-principal);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .dropzone-foto:hover {
+            border-color: var(--color-accion);
+            background: var(--color-accion-fondo);
+            color: var(--color-accion);
+        }
+
+        /* SELECTOR RÁPIDO DE ITBIS (EXENTO / 18% / 16%) */
+        .selector-itbis-rapido {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr 1fr;
+            gap: 2px;
+            background: var(--color-superficie-resaltada);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: 2px;
+            height: 34px;
+            box-sizing: border-box;
+            align-items: stretch;
+            overflow: hidden; /* Cero desbordamiento visual del botón azul activo */
+        }
+        /* SELECTOR MODO DESCUENTO ($ / %) */
+        .selector-desc-modo {
+            display: inline-grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            background: var(--color-superficie-resaltada);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: 2px;
+            height: 34px;
+            box-sizing: border-box;
+            align-items: stretch;
+            overflow: hidden; /* Cero desbordamiento visual */
+            width: auto;
+            margin: 0;
+        }
+        .btn-itbis-opcion {
+            height: 100% !important;
+            width: 100%;
+            margin: 0;
+            padding: 0 4px;
+            background: transparent;
+            border: none;
+            border-radius: calc(var(--radio-md) - 3px);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            font-family: inherit;
+            color: var(--color-texto-secundario);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            box-sizing: border-box;
+            transition: background var(--duracion-rapida, 120ms) ease,
+                        color var(--duracion-rapida, 120ms) ease,
+                        box-shadow var(--duracion-rapida, 120ms) ease;
+        }
+        .btn-itbis-opcion:hover:not(.activo) {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--color-texto-principal);
+        }
+        [data-tema="oscuro"] .btn-itbis-opcion:hover:not(.activo) {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--color-texto-principal);
+        }
+        .btn-itbis-opcion.activo {
+            background: var(--color-accion) !important;
+            color: #FFFFFF !important;
+            font-weight: var(--peso-negrita);
+            box-shadow: 0 1px 2px rgba(0, 82, 204, 0.25);
+        }
+        [data-tema="oscuro"] .btn-itbis-opcion.activo {
+            background: var(--color-accion) !important;
+            color: #090A0F !important;
+            font-weight: var(--peso-negrita);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        .btn-itbis-opcion:focus-visible {
+            outline: 2px solid var(--color-accion);
+            outline-offset: -1px;
+            z-index: 2;
+        }
+
+        /* PANEL DE RESULTADOS EN VIVO */
+        .costo-unitario-caja {
+            background: var(--color-superficie-resaltada);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: var(--espacio-2) var(--espacio-3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--espacio-2);
+        }
+        .numero-costo {
+            font-family: var(--fuente-mono);
+            font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+            color: var(--color-accion);
+            font-weight: var(--peso-negrita);
+            letter-spacing: -0.5px;
+        }
+
+        .precios-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+            margin-bottom: var(--espacio-2);
+        }
+        .ficha-precio {
+            background: var(--color-superficie);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: 6px 4px;
+            text-align: center;
+            transition: transform 0.15s;
+        }
+        .ficha-precio.p1 { border-top: 4px solid var(--col-p1-color); }
+        .ficha-precio.p2 { border-top: 4px solid var(--col-p2-color); }
+        .ficha-precio.p3 { border-top: 4px solid var(--col-p3-color); }
+        .ficha-precio-titulo { font-size: 11px; font-weight: var(--peso-negrita); color: var(--color-texto-secundario); text-transform: uppercase; }
+        .ficha-precio-cifra { font-family: var(--fuente-mono); font-size: 1.15rem; font-weight: var(--peso-negrita); margin: 2px 0; }
+        .ficha-precio-sub { font-size: 11px; color: var(--color-texto-secundario); }
+
+        .resumen-bar {
+            display: flex;
+            justify-content: space-between;
+            background: var(--color-superficie-resaltada);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: 8px var(--espacio-2);
+            font-size: var(--texto-xs);
+            margin-bottom: var(--espacio-2);
+            font-weight: var(--peso-seminegrita);
+        }
+
+        .btn-primario {
+            background: var(--color-accion);
+            color: #FFFFFF;
+            border: none;
+            border-radius: var(--radio-md);
+            padding: 10px 14px;
+            font-size: var(--texto-sm);
+            font-weight: var(--peso-negrita);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: var(--espacio-2);
+            box-shadow: var(--sombra-md);
+            transition: all 0.15s;
+        }
+        .btn-primario:hover { background: var(--color-accion-hover); transform: translateY(-1px); }
+        [data-tema="oscuro"] .btn-primario { color: #090A0F; }
+
+        /* SECCIÓN FACTURA: TARJETA COMPLETA CON FECHAS Y METADATOS */
+        .tarjeta-factura {
+            background: var(--color-superficie);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-lg);
+            padding: var(--espacio-2) var(--espacio-3);
+            box-shadow: var(--sombra-sm);
+            display: flex;
+            flex-direction: column;
+            gap: var(--espacio-2);
+        }
+        .factura-top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--espacio-2);
+            border-bottom: 1.5px solid var(--color-borde);
+            padding-bottom: 6px;
+        }
+        .factura-acciones {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .factura-campos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: var(--espacio-2);
+        }
+        .badge-cuadre {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--espacio-2);
+            padding: 6px 14px;
+            border-radius: var(--radio-pildora);
+            font-weight: var(--peso-negrita);
+            font-size: var(--texto-xs);
+            border: 2px solid transparent;
+        }
+        .cuadre-exito {
+            background: var(--color-exito-fondo);
+            color: var(--color-exito);
+            border-color: var(--color-exito-borde);
+        }
+        .cuadre-alerta {
+            background: var(--color-alerta-fondo);
+            color: var(--color-alerta);
+            border-color: var(--color-alerta);
+        }
+        .cuadre-neutro {
+            background: var(--color-superficie-resaltada);
+            color: var(--color-texto-secundario);
+            border-color: var(--color-borde);
+        }
+
+        /* TABLA MAESTRA CON LÍNEAS VERTICALES DE SEPARACIÓN Y CERO SCROLL HORIZONTAL */
+        .tabla-card {
+            background: var(--color-superficie);
+            border: 2px solid var(--color-borde-fuerte);
+            border-radius: var(--radio-lg);
+            overflow: hidden;
+            box-shadow: var(--sombra-md);
+        }
+        .tabla-contenedor {
+            width: 100%;
+            max-height: calc(100vh - 340px);
+            min-height: 220px;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            table-layout: auto;
+        }
+        th, td {
+            padding: 6px 6px;
+            text-align: left;
+            border-bottom: 1.5px solid var(--color-borde);
+            border-right: 1.5px solid var(--color-borde); /* LÍNEA VERTICAL CLARA Y NÍTIDA */
+            vertical-align: middle;
+        }
+        th:last-child, td:last-child {
+            border-right: none;
+        }
+        th {
+            background: var(--color-superficie-resaltada);
+            color: var(--color-texto-principal);
+            font-weight: var(--peso-negrita);
+            border-bottom: 2px solid var(--color-borde-fuerte);
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.3px;
+        }
+        .td-mono {
+            font-family: var(--fuente-mono);
+            text-align: right;
+            font-weight: var(--peso-negrita);
+        }
+        .celda-edit {
+            border-bottom: 2px dashed var(--color-borde-fuerte);
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .celda-edit:hover {
+            background: var(--color-accion-fondo);
+            border-bottom-color: var(--color-accion);
+        }
+
+        /* COLORES DE COLUMNA DE ALTO CONTRASTE */
+        .c-inv { color: var(--col-inv-color) !important; background: var(--col-inv-bg); font-weight: var(--peso-negrita); }
+        .c-caja { color: var(--col-caja-color) !important; background: var(--col-caja-bg); font-weight: var(--peso-negrita); }
+        .c-itbis { color: var(--col-itbis-color) !important; background: var(--col-itbis-bg); font-weight: var(--peso-negrita); text-align: center; }
+        .c-sub { color: var(--col-sub-color) !important; background: var(--col-sub-bg); font-weight: var(--peso-negrita); }
+        .c-costo { color: var(--col-costo-color) !important; background: var(--col-costo-bg); font-weight: var(--peso-negrita); }
+        .c-p1 { color: var(--col-p1-color) !important; background: var(--col-p1-bg); font-weight: var(--peso-negrita); }
+        .c-p2 { color: var(--col-p2-color) !important; background: var(--col-p2-bg); font-weight: var(--peso-negrita); }
+        .c-p3 { color: var(--col-p3-color) !important; background: var(--col-p3-bg); font-weight: var(--peso-negrita); }
+
+        /* PÍLDORA ITBIS EN TABLA */
+        .badge-itbis {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 8px;
+            border-radius: var(--radio-pildora);
+            font-weight: var(--peso-negrita);
+            font-size: 10px;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            transition: transform 0.1s;
+        }
+        .badge-itbis:hover { transform: scale(1.05); }
+        .itbis-on {
+            background: var(--color-exito-fondo);
+            color: var(--color-exito);
+            border-color: var(--color-exito-borde);
+        }
+        .itbis-off {
+            background: var(--color-superficie-resaltada);
+            color: var(--color-texto-secundario);
+            border-color: var(--color-borde-fuerte);
+        }
+
+        .btn-icono {
+            background: var(--color-superficie-resaltada);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-sm);
+            padding: 4px 8px;
+            cursor: pointer;
+            color: var(--color-texto-principal);
+            font-weight: var(--peso-seminegrita);
+            font-size: var(--texto-xs);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-icono:hover { border-color: var(--color-accion); color: var(--color-accion); }
+        .text-danger { color: var(--color-error); }
+        .text-danger:hover { border-color: var(--color-error); }
+
+        /* BADGES RESUMEN EN CABECERA */
+        .badge-header {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--color-superficie-resaltada);
+            color: var(--color-texto-secundario);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            padding: 3px 8px;
+            border-radius: var(--radio-sm);
+            border: 1px solid var(--color-borde);
+        }
+        .badge-cuadre-top {
+            color: var(--color-exito);
+            border-color: var(--color-exito-borde);
+            background: var(--color-exito-fondo);
+            font-weight: var(--peso-negrita);
+        }
+
+        /* CHIP BOTÓN COPIAR AL PORTAPAPELES (CÓDIGO REAL) */
+        .copy-chip {
+            background: var(--color-superficie-resaltada);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-sm);
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: var(--peso-negrita);
+            cursor: pointer;
+            color: var(--color-texto-secundario);
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            transition: all 0.1s;
+        }
+        .copy-chip:hover {
+            border-color: var(--color-accion);
+            color: var(--color-accion);
+            background: var(--color-accion-fondo);
+        }
+
+        /* BARRA DE NAVEGACIÓN ENTRE SECCIONES (IGUAL QUE EN INDEX.HTML) */
+        .nav-buttons {
+            display: flex;
+            gap: var(--espacio-2);
+            overflow-x: auto;
+            padding-bottom: 2px;
+        }
+        .nav-btn {
+            background: var(--color-superficie);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            color: var(--color-texto-principal);
+            padding: 6px 12px;
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .nav-btn:hover, .nav-btn.active {
+            background: var(--color-accion);
+            color: #FFFFFF;
+            border-color: var(--color-accion);
+        }
+        [data-tema="oscuro"] .nav-btn:hover, [data-tema="oscuro"] .nav-btn.active {
+            color: #090A0F;
+        }
+
+        /* SECCIONES SECUNDARIAS (DICCIONARIO, REGLAS, IA, HISTORIAL) */
+        .seccion-card {
+            background: var(--color-superficie);
+            border: 2px solid var(--color-borde);
+            border-radius: var(--radio-lg);
+            padding: var(--espacio-3);
+            display: flex;
+            flex-direction: column;
+            gap: var(--espacio-2);
+            box-shadow: var(--sombra-sm);
+        }
+        .seccion-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--espacio-2);
+            border-bottom: 1.5px solid var(--color-borde);
+            padding-bottom: 8px;
+        }
+        .helper-text {
+            font-size: var(--texto-xs);
+            color: var(--color-texto-secundario);
+            line-height: 1.4;
+        }
+        .formula-explanation-box {
+            background: var(--color-superficie-resaltada);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: 10px 12px;
+            font-size: var(--texto-xs);
+            line-height: 1.5;
+        }
+        .formula-fieldset {
+            border: 1.5px dashed var(--color-borde);
+            border-radius: var(--radio-md);
+            padding: var(--espacio-3);
+            display: flex;
+            flex-direction: column;
+            gap: var(--espacio-2);
+        }
+        .formula-fieldset:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* MODALES NATIVOS ACCESIBLES */
+        .farmacia-modal {
+            margin: auto;
+            border: 2px solid var(--color-borde-fuerte);
+            border-radius: var(--radio-lg);
+            padding: var(--espacio-4);
+            background: var(--color-superficie);
+            color: var(--color-texto-principal);
+            max-width: 420px;
+            width: 90%;
+            box-shadow: var(--sombra-md);
+        }
+        .farmacia-modal::backdrop {
+            background: rgba(9, 10, 15, 0.75);
+            backdrop-filter: blur(2px);
+        }
+        .modal-body {
+            margin: var(--espacio-3) 0;
+            font-size: var(--texto-sm);
+            line-height: 1.5;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--espacio-2);
+        }
+
+        /* BÓVEDA LATERAL / DRAWER DESLIZABLE (MENÚ HAMBURGUESA) */
+        .drawer-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(9, 10, 15, 0.65);
+            backdrop-filter: blur(2px);
+            z-index: 998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .drawer-backdrop.abierto {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .drawer-boveda {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: min(660px, 95vw);
+            background: var(--color-superficie);
+            border-left: 2px solid var(--color-borde-fuerte);
+            box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+            z-index: 999;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .drawer-boveda.abierto {
+            transform: translateX(0);
+        }
+        .drawer-header {
+            padding: var(--espacio-3) var(--espacio-4);
+            background: var(--color-superficie-resaltada);
+            border-bottom: 2px solid var(--color-borde-fuerte);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .drawer-tabs {
+            display: flex;
+            background: var(--color-fondo);
+            border-bottom: 1.5px solid var(--color-borde);
+            overflow-x: auto;
+            padding: 4px var(--espacio-3) 0;
+            gap: 4px;
+        }
+        .drawer-tab-btn {
+            background: transparent;
+            border: none;
+            border-bottom: 2.5px solid transparent;
+            padding: 8px 12px;
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            color: var(--color-texto-secundario);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .drawer-tab-btn:hover {
+            color: var(--color-texto-principal);
+        }
+        .drawer-tab-btn.activo {
+            color: var(--color-accion);
+            border-bottom-color: var(--color-accion);
+            font-weight: var(--peso-negrita);
+        }
+        [data-tema="oscuro"] .drawer-tab-btn.activo {
+            color: var(--color-accion);
+            border-bottom-color: var(--color-accion);
+        }
+        .drawer-contenido {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--espacio-4);
+            display: flex;
+            flex-direction: column;
+            gap: var(--espacio-3);
+        }
+        .boveda-panel {
+            display: none !important;
+        }
+        .boveda-panel.activo {
+            display: flex !important;
+        }
+
+        /* GRUPOS MODULARES Y MANUAL EN BÓVEDA */
+        .boveda-grupo-tarjeta {
+            padding: var(--espacio-3);
+            border: 1.5px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            background: var(--color-superficie-resaltada);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: var(--espacio-2);
+        }
+        .boveda-grupo-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .boveda-grupo-titulo {
+            font-weight: var(--peso-negrita);
+            font-size: var(--texto-xs);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--color-texto-principal);
+        }
+        .manual-bloque {
+            padding: var(--espacio-3);
+            border: 1px solid var(--color-borde);
+            border-radius: var(--radio-md);
+            background: var(--color-superficie);
+            margin-bottom: var(--espacio-3);
+        }
+        .manual-subtitulo {
+            font-size: var(--texto-sm);
+            font-weight: var(--peso-negrita);
+            color: var(--color-accion);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0 0 8px 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--color-borde);
+        }
+        .manual-cuerpo {
+            font-size: var(--texto-xs);
+            line-height: 1.5;
+            color: var(--color-texto-principal);
+        }
+        .manual-cuerpo p {
+            margin: 0 0 6px 0;
+        }
+        .manual-cuerpo ul, .manual-cuerpo ol {
+            margin: 0 0 6px 0;
+            padding-left: 20px;
+        }
+        .manual-cuerpo li {
+            margin-bottom: 4px;
+        }
+        .manual-cuerpo code {
+            background: var(--color-superficie-resaltada);
+            padding: 1px 4px;
+            border-radius: var(--radio-xs);
+            font-family: var(--fuente-mono);
+            border: 1px solid var(--color-borde);
+            font-size: 11px;
+        }
+        .manual-tabla-atajos {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-top: 6px;
+        }
+        .manual-tabla-atajos th {
+            text-align: left;
+            padding: 4px 6px;
+            background: var(--color-superficie-resaltada);
+            border-bottom: 1.5px solid var(--color-borde-fuerte);
+            font-weight: var(--peso-negrita);
+        }
+        .manual-tabla-atajos td {
+            padding: 4px 6px;
+            border-bottom: 1px solid var(--color-borde);
+        }
+        .manual-tabla-atajos kbd {
+            background: var(--color-fondo);
+            border: 1px solid var(--color-borde-fuerte);
+            border-radius: var(--radio-xs);
+            padding: 1px 5px;
+            font-family: var(--fuente-mono);
+            font-size: 10px;
+            font-weight: 700;
+            box-shadow: 0 1px 0 var(--color-borde);
+        }
+
+        /* MODAL DE AJUSTES TÉCNICOS (API GOOGLE + DICCIONARIO / ARCHIVOS) */
+        .modal-ajustes {
+            max-width: 580px;
+            width: 92%;
+            padding: 0;
+            border-radius: var(--radio-lg);
+            border: 2px solid var(--color-borde-fuerte);
+            background: var(--color-superficie);
+            box-shadow: var(--sombra-md);
+            overflow: hidden;
+            margin: auto;
+        }
+        .modal-ajustes::backdrop {
+            background: rgba(9, 10, 15, 0.7);
+            backdrop-filter: blur(2px);
+        }
+        .modal-ajustes-header {
+            padding: var(--espacio-3) var(--espacio-4);
+            background: var(--color-superficie-resaltada);
+            border-bottom: 2px solid var(--color-borde-fuerte);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-tabs {
+            display: flex;
+            background: var(--color-fondo);
+            border-bottom: 1.5px solid var(--color-borde);
+            padding: 4px var(--espacio-3) 0;
+            gap: 6px;
+        }
+        .modal-tab-btn {
+            background: transparent;
+            border: none;
+            border-bottom: 2.5px solid transparent;
+            padding: 8px 14px;
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            color: var(--color-texto-secundario);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+        .modal-tab-btn:hover {
+            color: var(--color-texto-principal);
+        }
+        .modal-tab-btn.activo {
+            color: var(--color-accion);
+            border-bottom-color: var(--color-accion);
+            font-weight: var(--peso-negrita);
+        }
+        .modal-ajustes-body {
+            padding: var(--espacio-4);
+            max-height: 75vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--espacio-3);
+        }
+        .ajustes-panel {
+            display: none !important;
+            flex-direction: column;
+            gap: var(--espacio-3);
+        }
+        .ajustes-panel.activo {
+            display: flex !important;
+        }
+
+        /* ============================================================
+           ETAPA 6: MICROINTERACCIONES Y ESPECIALISTA EN MOVIMIENTO
+           ============================================================ */
+
+        /* 1. Pulsación Táctil Elástica en Botones y Chips */
+        .btn-primario, .btn-header, .btn-icono, .btn-tipo-opcion, .btn-itbis-opcion, .copy-chip, .badge-itbis {
+            transition: transform var(--duracion-ultra-rapida) var(--curva-desacelerada),
+                        background-color var(--duracion-rapida) ease,
+                        border-color var(--duracion-rapida) ease,
+                        box-shadow var(--duracion-rapida) ease,
+                        color var(--duracion-rapida) ease;
+            will-change: transform;
+        }
+        .btn-primario:active, .btn-header:active, .btn-icono:active, .btn-tipo-opcion:active, .btn-itbis-opcion:active, .copy-chip:active, .badge-itbis:active {
+            transform: scale(0.96) !important;
+        }
+
+        /* 2. Enfoque Accesible Universal WCAG 2.1 AA (Operabilidad por Teclado al 100%) */
+        :focus-visible {
+            outline: 2px solid var(--color-accion) !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px var(--color-accion-fondo) !important;
+            transition: outline-color var(--duracion-rapida) ease, box-shadow var(--duracion-rapida) ease;
+        }
+
+        .input-control:focus {
+            outline: 2px solid var(--color-accion);
+            outline-offset: 1px;
+            box-shadow: 0 0 0 3px var(--color-accion-fondo);
+            transition: border-color var(--duracion-rapida) ease, box-shadow var(--duracion-rapida) ease;
+        }
+
+        /* 2.1 Estado Bloqueado / Procesando (Submitting - Idempotencia UI) */
+        .btn-loading, button:disabled, input:disabled, select:disabled {
+            pointer-events: none !important;
+            opacity: 0.65 !important;
+            cursor: not-allowed !important;
+        }
+
+        /* 2.2 Distintivos Teclado (Kbd Tokens) */
+        .kbd-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            font-family: var(--fuente-mono);
+            font-size: var(--texto-xs);
+            font-weight: var(--peso-seminegrita);
+            color: var(--color-texto-principal);
+            background: var(--color-superficie-resaltada);
+            border: 1px solid var(--color-borde);
+            border-radius: var(--radio-sm);
+            box-shadow: 0 1px 0 var(--color-borde-fuerte);
+        }
+
+        /* 3. Flash de Cálculo Numérico en Vivo (Visual Feedback al Tipear) */
+        @keyframes pulsoCalculo {
+            0% {
+                background-color: var(--color-accion-fondo);
+                transform: scale(1.02);
+            }
+            40% {
+                background-color: var(--color-accion-fondo);
+            }
+            100% {
+                background-color: transparent;
+                transform: scale(1);
+            }
+        }
+        .numero-actualizado {
+            animation: pulsoCalculo var(--duracion-suave) var(--curva-estandar);
+            border-radius: var(--radio-sm);
+            display: inline-block;
+        }
+
+        /* 4. Transición Suave y Rebote en Botón Copiar */
+        @keyframes bounceCheck {
+            0% { transform: scale(0.6); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .copy-chip.copiado {
+            background-color: var(--color-exito-fondo) !important;
+            color: var(--color-exito) !important;
+            border-color: var(--color-exito-borde) !important;
+        }
+        .copy-chip.copiado svg {
+            animation: bounceCheck var(--duracion-media) var(--curva-rebote);
+        }
+
+        /* 5. Apertura Suave de Modales y Diálogos */
+        dialog[open] {
+            animation: entradaDialogo var(--duracion-media) var(--curva-estandar);
+        }
+        @keyframes entradaDialogo {
+            from {
+                opacity: 0;
+                transform: scale(0.96) translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* 6. Animación del Candado de Seguridad */
+        #btnToggleCandadoReglas svg {
+            transition: transform var(--duracion-rapida) var(--curva-rebote);
+        }
+        #btnToggleCandadoReglas:hover svg {
+            transform: rotate(-12deg);
+        }
+
+        /* 7. Respeto Estricto a Preferencias de Movimiento Reducido (WCAG AAA) */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+/* ==========================================================================
+   COMPONENTES Y UTILIDADES DE INTEGRACIÓN EN PRODUCCIÓN
+   ========================================================================== */
+
+/* CAL-04: Spinner de carga */
+.btn-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.75;
+}
+.btn-loading::after {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spinAnimation 0.65s linear infinite;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+@keyframes spinAnimation {
+    to { transform: rotate(360deg); }
+}
+
+/* UX-07: Notificaciones y Banners con animación */
+@keyframes slideDownNotification {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.alert-banner {
+    padding: 10px 14px;
+    border-radius: var(--radio-md, 8px);
+    margin-bottom: 12px;
+    font-size: 0.86rem;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 500;
+}
+.alert-banner.mostrar {
+    display: flex;
+    animation: slideDownNotification var(--duracion-media, 180ms) var(--curva-suave, cubic-bezier(0.4, 0, 0.2, 1));
+}
+.alert-warning {
+    background: var(--color-alerta-fondo);
+    color: var(--color-alerta);
+    border: 1.5px solid var(--color-alerta);
+}
+.alert-success {
+    background: var(--color-exito-fondo);
+    color: var(--color-exito);
+    border: 1.5px solid var(--color-exito-borde);
+}
+.alert-error {
+    background: var(--color-error-fondo);
+    color: var(--color-error);
+    border: 1.5px solid var(--color-error);
+}
+.alert-info {
+    background: var(--color-accion-fondo);
+    color: var(--color-accion);
+    border: 1.5px solid var(--color-accion);
+}
+
+#notificacionGlobal {
+    position: sticky;
+    top: 60px;
+    z-index: 900;
+}
+
+#avisoEdicion {
+    display: none;
+    background: var(--color-alerta-fondo);
+    color: var(--color-alerta);
+    border: 1.5px solid var(--color-alerta);
+    padding: 8px 12px;
+    border-radius: var(--radio-md, 8px);
+    margin-bottom: 10px;
+    font-size: 0.84rem;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Badges de Fórmulas y Candado en Bóveda */
+.lock-badge {
+    padding: 4px 10px;
+    border-radius: var(--radio-sm, 6px);
+    font-size: 0.78rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.lock-closed {
+    background: var(--color-exito-fondo);
+    color: var(--color-exito);
+    border: 1px solid var(--color-exito-borde);
+}
+.lock-open {
+    background: var(--color-error-fondo);
+    color: var(--color-error);
+    border: 1px solid var(--color-error);
+}
+.formula-explanation-box {
+    background: var(--color-fondo);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md, 8px);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--color-texto-principal);
+}
+.formula-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+.formula-card {
+    background: var(--color-superficie);
+    border: 1.5px solid var(--color-borde);
+    border-radius: var(--radio-md, 8px);
+    padding: 10px 12px;
+}
+.formula-card.activa {
+    border: 2px solid var(--color-accion);
+    background: var(--color-accion-fondo);
+}
+.formula-fieldset {
+    border: 1.5px dashed var(--color-borde);
+    border-radius: var(--radio-md, 8px);
+    padding: 12px;
+    margin: 0;
+}
+.formula-fieldset:disabled {
+    opacity: 0.65;
+    background: var(--color-fondo);
+}
+
+/* Badges de ITBIS para filas de tabla */
+.badge-itbis-on {
+    background: var(--col-itbis-bg) !important;
+    color: var(--col-itbis-color) !important;
+    border: 1px solid var(--color-exito-borde) !important;
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all var(--duracion-rapida, 90ms) ease;
+}
+.badge-itbis-on:hover {
+    filter: brightness(0.95);
+}
+.badge-itbis-off {
+    background: var(--color-superficie-resaltada) !important;
+    color: var(--color-texto-secundario) !important;
+    border: 1px solid var(--color-borde) !important;
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all var(--duracion-rapida, 90ms) ease;
+}
+.badge-itbis-off:hover {
+    color: var(--color-texto-principal) !important;
+    border-color: var(--color-borde-fuerte) !important;
+}
+
+/* Diálogos Modales Accesibles HTML5 (Confirmación / Prompt) */
+dialog.farmacia-modal {
+    border: 1.5px solid var(--color-borde-fuerte);
+    border-radius: var(--radio-lg, 12px);
+    padding: 22px;
+    max-width: 480px;
+    width: 92%;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    box-shadow: var(--sombra-md);
+    background: var(--color-superficie);
+    color: var(--color-texto-principal);
+}
+dialog.farmacia-modal::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px);
+}
+dialog.farmacia-modal h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 1.08rem;
+    color: var(--color-accion);
+}
+dialog.farmacia-modal .modal-body {
+    margin-bottom: 18px;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--color-texto-principal);
+}
+dialog.farmacia-modal .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Clases de utilidad */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--color-texto-secundario); }
+.text-success { color: var(--color-exito); }
+.text-danger { color: var(--color-error); }
+.p-18 { padding: 18px; }
+.fs-xs { font-size: 0.72rem; }
+.w-full { width: 100%; }
+.cursor-pointer { cursor: pointer; }
+.hidden { display: none !important; }
+.flash { box-shadow: var(--sombra-foco); }
+.celda-edit { cursor: pointer; border-bottom: 1px dashed var(--color-borde); }
+.celda-edit:hover { background: var(--color-accion-fondo); }
+
+.tag-expira-pronto {
+    background: var(--color-alerta-fondo);
+    color: var(--color-alerta);
+    border: 1px solid var(--color-alerta);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+/* Impresión Optimizada (UX-03) */
+#printArea { display: none; }
+@media print {
+    body * { visibility: hidden; }
+    #printArea, #printArea * { visibility: visible; }
+    #printArea {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 20px;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-family: Arial, sans-serif;
+    }
+    .print-header {
+        border-bottom: 2px solid #222;
+        padding-bottom: 8px;
+        margin-bottom: 14px;
+    }
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+    }
+    .print-table th, .print-table td {
+        border: 1px solid #bbb;
+        padding: 6px 8px;
+        text-align: left;
+    }
+    .print-table th {
+        background: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .print-totals {
+        margin-top: 14px;
+        text-align: right;
+        font-size: 1rem;
+    }
+}
+
+
+/* Animación de escaneo para cámara de código de barras */
+@keyframes scanLine {
+    0% { top: 10%; opacity: 0.3; }
+    50% { top: 90%; opacity: 1; }
+    100% { top: 10%; opacity: 0.3; }
+}
+
+/* --- PIE DE PÁGINA CLÍNICO Y LEGAL (CHRONIRIS OS) --- */
+.pie-pagina-farmacia {
+    margin-top: 8px;
+    margin-bottom: 4px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--color-borde);
+    background: var(--color-superficie);
+    border-radius: var(--radio-md, 8px);
+    color: var(--color-texto-secundario);
+    font-size: var(--texto-sm, 12px);
+    flex-shrink: 0;
+}
+
+.footer-contenido {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.footer-marca {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--color-texto);
+    font-weight: var(--peso-negrita, 700);
+}
+
+.badge-version {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: var(--radio-sm, 6px);
+    background: var(--color-superficie-resaltada);
+    border: 1px solid var(--color-borde-fuerte);
+    color: var(--color-primario);
+    font-family: var(--fuente-mono);
+    font-weight: 600;
+}
+
+.footer-desc {
+    display: none; /* Se retira el párrafo explicativo redundante para optimizar la altura útil vertical */
+}
+
+.footer-legal {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-texto-desactivado);
+    display: inline-block;
+}
+
+.footer-col-acciones {
+    display: flex;
+    gap: var(--espacio-2, 8px);
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.btn-footer {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radio-sm, 6px);
+    background: var(--color-superficie-resaltada);
+    border: 1px solid var(--color-borde-fuerte);
+    color: var(--color-texto);
+    font-size: 11px;
+    font-weight: var(--peso-seminegrita, 600);
+    cursor: pointer;
+    transition: all var(--transicion-rapida, 0.15s ease);
+}
+
+.btn-footer:hover {
+    background: var(--color-borde);
+    border-color: var(--color-primario);
+    color: var(--color-primario);
+}
+
+/* Modal de Atajos de Teclado e Información */
+.shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--espacio-2, 8px);
+    margin: var(--espacio-2, 8px) 0;
+}
+
+.shortcut-card {
+    padding: 10px 12px;
+    background: var(--color-superficie-resaltada);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-sm, 6px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.shortcut-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 4px 8px;
+    background: var(--color-fondo);
+    border: 1px solid var(--color-borde-fuerte);
+    border-radius: 4px;
+    font-family: var(--fuente-mono);
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--color-primario);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    flex-shrink: 0;
+}
+
+
+/* ========================================================
+   REDISEÑO COCKPIT DUAL & ERGONOMÍA SPLIT-SCREEN (ROL 02)
+   ======================================================== */
+
+.cockpit-tabs-barra {
+    display: none;
+    gap: var(--espacio-1);
+    background: var(--color-superficie);
+    border: 2px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    padding: 3px;
+    margin-bottom: var(--espacio-2);
+}
+
+.cockpit-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radio-sm);
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-seminegrita);
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.cockpit-tab:hover {
+    background: var(--color-superficie-resaltada);
+    color: var(--color-texto-principal);
+}
+
+.cockpit-tab.activo {
+    background: var(--color-accion);
+    color: #FFFFFF;
+    box-shadow: var(--sombra-sm);
+}
+
+[data-tema="oscuro"] .cockpit-tab.activo {
+    background: var(--color-accion);
+    color: #090A0F;
+    font-weight: var(--peso-negrita);
+}
+
+.badge-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--radio-pildora);
+    background: rgba(0, 0, 0, 0.15);
+    font-size: 10px;
+    font-weight: var(--peso-negrita);
+    font-family: var(--fuente-mono);
+}
+
+.cockpit-tab.activo .badge-tab-count {
+    background: rgba(255, 255, 255, 0.3);
+    color: #FFFFFF;
+}
+
+[data-tema="oscuro"] .cockpit-tab.activo .badge-tab-count {
+    background: rgba(0, 0, 0, 0.4);
+    color: #090A0F;
+}
+
+/* GRIDS Y COLUMNAS COCKPIT DUAL */
+.cockpit-dual-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--espacio-2);
+    align-items: start;
+}
+
+/* ==========================================================================
+   NUEVO COCKPIT HUD FIJO (VIEWPORT-LOCKED 100vh - EGM ARCHITECTURE)
+   La Calculadora Rápida y los Precios en Vivo permanecen SIEMPRE en pantalla.
+   El Deck Inferior (Tabla de Factura) posee scroll interno e independiente.
+   ========================================================================== */
+
+.cockpit-tabs-barra {
+    display: none !important;
+}
+
+.cockpit-dual-grid {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.cockpit-col-calc {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.cockpit-col-factura {
+    display: none;
+}
+
+/* COCKPIT SUPERIOR FIJO: Entrada rápida + Precios en vivo inamovibles */
+.cockpit-col-calc .grid-operativo {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+}
+
+.cockpit-col-calc .grid-operativo .tarjeta {
+    padding: 8px 12px;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* DESTACADO DE PRECIO 1 (PÚBLICO GENERAL - 80% DE VENTAS) */
+.ficha-precio.p1 {
+    border: 2px solid var(--col-p1-color) !important;
+    background: var(--col-p1-bg) !important;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+}
+
+.ficha-precio.p1 .ficha-precio-cifra {
+    font-size: 1.25rem !important;
+    font-weight: 800 !important;
+    color: var(--col-p1-color) !important;
+}
+
+/* DECK INFERIOR: Factura en curso y tabla con scroll exclusivo */
+.cockpit-col-calc .tabla-card {
+    flex: 1;
+    min-height: 0;
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-superficie);
+    border-radius: var(--radio-md);
+    border: 1.5px solid var(--color-borde);
+    width: 100%;
+}
+
+.tabla-contenedor {
+    flex: 1;
+    min-height: 0;
+    max-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+}
+
+.tabla-contenedor table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--color-superficie-resaltada);
+    box-shadow: 0 1px 0 var(--color-borde);
+}
+
+/* CONGELAMIENTO HORIZONTAL DE COLUMNA DE PRODUCTO (STICKY LEFT) Y ACCIONES (STICKY RIGHT) */
+.tabla-contenedor table th:first-child,
+.tabla-contenedor table td:first-child:not([colspan]) {
+    position: sticky;
+    left: 0;
+    background: var(--color-superficie);
+    z-index: 6;
+    box-shadow: 2px 0 6px rgba(0, 0, 0, 0.08);
+    border-right: 2px solid var(--color-borde-fuerte);
+}
+.tabla-contenedor table thead th:first-child {
+    z-index: 16; /* Superior al sticky top (10) y al body sticky left (6) */
+    background: var(--color-superficie-resaltada);
+}
+.tabla-contenedor table th:last-child,
+.tabla-contenedor table td:last-child:not([colspan]) {
+    position: sticky;
+    right: 0;
+    background: var(--color-superficie);
+    z-index: 6;
+    box-shadow: -2px 0 6px rgba(0, 0, 0, 0.08);
+    border-left: 2px solid var(--color-borde-fuerte);
+    text-align: center;
+}
+.tabla-contenedor table thead th:last-child {
+    z-index: 16;
+    background: var(--color-superficie-resaltada);
+}
+.tabla-contenedor table tbody tr:hover td:first-child:not([colspan]),
+.tabla-contenedor table tbody tr:hover td:last-child:not([colspan]) {
+    background: var(--color-superficie-resaltada);
+}
+.tabla-contenedor table tbody tr td:first-child.celda-edit:hover {
+    background: var(--color-accion-fondo);
+}
+
+/* BOTONES DE ACCIÓN EN FILAS DE LA TABLA (ERGONOMÍA Y PREVENCIÓN DE ERRORES) */
+.actions-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+.action-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0;
+    border-radius: var(--radio-md);
+    border: 1px solid var(--color-borde);
+    background: var(--color-superficie-resaltada);
+    color: var(--color-texto-principal);
+    cursor: pointer;
+    overflow: hidden;
+    font-size: 0;
+    line-height: 0;
+    white-space: nowrap;
+    text-overflow: clip;
+    box-sizing: border-box;
+    transition: all var(--duracion-rapida, 120ms) ease;
+}
+.action-icon-btn svg.ico {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+.action-icon-btn:hover {
+    border-color: var(--color-accion);
+    color: var(--color-accion);
+    background: var(--color-accion-fondo);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.action-icon-btn.text-danger:hover {
+    border-color: var(--color-error);
+    color: var(--color-error);
+    background: var(--color-error-fondo);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.action-icon-btn.text-danger {
+    margin-left: 2px;
+}
+
+.mini-cuadre-strip {
+    display: none !important;
+}
+
+/* ==========================================================================
+   ARQUITECTURA DE SCROLL ADAPTATIVO: VÁLVULA DE ESCAPE ANTE PANTALLAS PEQUEÑAS
+   Resolución de Choque Físico: Preserva HUD inamovible (cero scroll) en monitores 1080p+,
+   pero libera el scroll fluido en laptops (1366x768 / escalado 125%), baja altura (<940px)
+   o ventanas divididas (<1100px), erradicando el guillotinado por la barra de tareas de Windows.
+   ========================================================================== */
+@media (max-height: 940px), (max-width: 1100px) {
+    html, body {
+        height: auto !important;
+        min-height: 100% !important;
+        max-height: none !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+
+    .contenedor {
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding-bottom: 56px !important; /* Espacio de seguridad anti-guillotinado por barra de tareas de Windows */
+    }
+
+    .cockpit-dual-grid {
+        height: auto !important;
+        overflow: visible !important;
+        flex: none !important;
+    }
+
+    .cockpit-col-calc {
+        height: auto !important;
+        overflow: visible !important;
+        flex: none !important;
+    }
+
+    .cockpit-col-calc .grid-operativo {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .cockpit-col-calc .tabla-card {
+        flex: none !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    .tabla-contenedor {
+        max-height: 380px !important;
+        min-height: 140px !important;
+        overflow-y: auto !important;
+    }
+}
+
+/* RESPONSIVE SPLIT-SCREEN (PANTALLA DIVIDIDA JUNTO AL ERP EN MOSTRADOR) */
+@media (max-width: 1024px) {
+    .cockpit-col-calc .grid-operativo {
+        grid-template-columns: 1.12fr 0.88fr;
+        gap: 6px;
+    }
+}
+
+@media (max-width: 900px) {
+    .cockpit-col-calc .grid-operativo {
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 6px;
+    }
+    .cockpit-col-calc .grid-operativo .tarjeta {
+        padding: 6px 8px;
+    }
+}
+
+/* Split screen de mostrador (540px a 780px): Cero scroll en la calculadora y blindaje periférico */
+@media (max-width: 780px) {
+    /* 1. CALCULADORA RÁPIDA SUPERIOR */
+    .cockpit-col-calc .grid-operativo {
+        grid-template-columns: 1.06fr 0.94fr;
+        gap: 6px;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    .cockpit-col-calc .grid-operativo .tarjeta {
+        padding: 5px 6px;
+    }
+    .costo-unitario-caja {
+        padding: 4px 6px;
+    }
+    .precios-grid {
+        gap: 4px;
+        margin-bottom: 4px;
+    }
+    .ficha-precio {
+        padding: 4px 2px;
+    }
+    .ficha-precio.p1 .ficha-precio-cifra {
+        font-size: 1.1rem !important;
+    }
+    .ficha-precio-cifra {
+        font-size: 0.98rem;
+    }
+    .resumen-bar {
+        padding: 4px 6px;
+        font-size: 10px;
+        margin-bottom: 4px;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .btn-primario#btnAgregarProducto {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    /* 2. HEADER SUPERIOR COMPACTO (1 SOLA FILA ESTABLE) */
+    .barra-superior {
+        padding: 4px 8px;
+        min-height: 36px;
+    }
+    .header-izquierda {
+        gap: 4px !important;
+    }
+    .indicador-pwa span:not(.punto-verde) {
+        display: none;
+    }
+    .indicador-pwa {
+        padding: 2px 4px;
+    }
+    #topInvoiceBadge {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 2px 6px;
+        font-size: 11px;
+    }
+    #topCuadreBadge {
+        padding: 2px 6px;
+        font-size: 11px;
+    }
+    #btnModalAtajos span {
+        display: none;
+    }
+    #btnModalAtajos::after {
+        content: "F1";
+        font-size: 11px;
+        font-weight: var(--peso-negrita);
+    }
+
+    /* 3. CABECERA DE FACTURA FÍSICA (CERO DESBORDE NI WRAP INNECESARIO) */
+    .factura-top-bar {
+        gap: 4px;
+        flex-wrap: nowrap !important;
+        padding-bottom: 4px;
+    }
+    .btn-toggle-cabecera span {
+        display: none;
+    }
+    .btn-toggle-cabecera::after {
+        content: "Cabecera";
+        font-size: 10px;
+        font-weight: 600;
+    }
+    .badge-cuadre {
+        padding: 3px 6px;
+        font-size: 10px;
+        gap: 4px;
+    }
+    .factura-acciones {
+        gap: 4px;
+        flex-shrink: 0;
+    }
+    .factura-acciones #btnImprimirActual span {
+        display: none;
+    }
+    .factura-acciones #btnDescartar span {
+        display: none;
+    }
+    .factura-acciones #btnFinalizarFactura {
+        padding: 0 8px;
+        font-size: 10.5px;
+    }
+    .factura-campos-grid {
+        grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)) !important;
+        gap: 4px !important;
+        margin-top: 4px !important;
+    }
+    .factura-campos-grid .input-control {
+        height: 32px !important;
+        padding: 0 6px !important;
+        font-size: 12px !important;
+    }
+    .factura-campos-grid .campo-label {
+        font-size: 10px !important;
+        margin-bottom: 2px !important;
+    }
+    .resumen-factura-compacta {
+        padding: 4px 6px;
+        gap: 4px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+    .chip-factura-item {
+        padding: 2px 6px;
+        font-size: 10.5px;
+        white-space: nowrap;
+    }
+    .btn-chip-editar {
+        padding: 3px 8px;
+        font-size: 10px;
+        white-space: nowrap;
+    }
+
+    /* 4. DESGLOSE FISCAL GLOBAL DGII ULTRA-COMPACTO */
+    .factura-resumen-fiscal {
+        padding: 3px 6px;
+    }
+    .factura-resumen-header {
+        margin-bottom: 2px;
+    }
+    .factura-resumen-grid {
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 3px;
+        font-size: 11px;
+    }
+    .resumen-fiscal-card {
+        padding: 2px 4px;
+    }
+    .resumen-fiscal-card .text-muted {
+        font-size: 9px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .resumen-fiscal-card .mono {
+        font-size: 10.5px !important;
+    }
+    .resumen-fiscal-card #resumenFiscalDiferencia {
+        font-size: 8.5px !important;
+    }
+
+    /* 5. DRAWER DE BÓVEDA AJUSTADO EN PANTALLA DIVIDIDA */
+    .drawer-boveda {
+        width: min(540px, 88vw);
+    }
+    .drawer-header {
+        padding: 8px 12px;
+    }
+    .drawer-contenido {
+        padding: 10px;
+        gap: 8px;
+    }
+}
+
+/* SOLO EN DISPOSITIVOS MÓVILES REALMENTE PEQUEÑOS (<540px) */
+@media (max-width: 539px) {
+    .cockpit-col-calc .grid-operativo {
+        grid-template-columns: 1fr !important;
+        gap: 6px;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+}
+
+/* MODO MINI-COCKPIT FORZADO */
+body.modo-compacto-forzado .cockpit-tabs-barra {
+    display: flex !important;
+}
+body.modo-compacto-forzado .cockpit-dual-grid {
+    grid-template-columns: 1fr !important;
+    max-width: 780px;
+    margin: 0 auto;
+}
+body.modo-compacto-forzado .cockpit-col-calc.cockpit-oculto,
+body.modo-compacto-forzado .cockpit-col-factura.cockpit-oculto {
+    display: none !important;
+}
+body.modo-compacto-forzado .mini-cuadre-strip {
+    display: flex !important;
+}
+body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
+    display: grid;
+    grid-template-columns: 1.08fr 0.92fr;
+    align-items: stretch;
+    gap: var(--espacio-2);
+}
+@media (max-width: 679px) {
+    body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
+        display: flex;
+        flex-direction: column;
+        gap: var(--espacio-2);
+    }
+}
+
+/* FILA DE 3 CAMPOS PARA MÁXIMA COMPACTACIÓN */
+.fila-tres-campos {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--espacio-2);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+@media (max-width: 520px) {
+    .fila-tres-campos {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+}
+
+/* MINI STRIP DE CUADRE INFERIOR */
+.mini-cuadre-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--color-superficie);
+    border: 2px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-sm);
+    gap: 8px;
+}
+
+.mini-cuadre-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-seminegrita);
+    font-family: var(--fuente-mono);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-mini-cuadre {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    background: var(--color-accion-fondo);
+    color: var(--color-accion);
+    border: 1.5px solid var(--color-accion);
+    border-radius: var(--radio-sm);
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-seminegrita);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.btn-mini-cuadre:hover {
+    background: var(--color-accion);
+    color: #FFFFFF;
+}
+
+/* CABECERA DE FACTURA COLAPSABLE */
+.btn-toggle-cabecera {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--color-superficie-resaltada);
+    border: 1.5px solid var(--color-borde);
+    border-radius: var(--radio-sm);
+    font-size: 11px;
+    font-weight: var(--peso-seminegrita);
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.btn-toggle-cabecera:hover {
+    border-color: var(--color-accion);
+    color: var(--color-accion);
+    background: var(--color-accion-fondo);
+}
+
+.resumen-factura-compacta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--color-superficie-resaltada);
+    border: 1.5px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    margin-top: 6px;
+}
+
+.chip-factura-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--texto-xs);
+    background: var(--color-superficie);
+    padding: 3px 8px;
+    border-radius: var(--radio-sm);
+    border: 1px solid var(--color-borde);
+}
+
+.chip-tag {
+    font-size: 10px;
+    color: var(--color-texto-desactivado);
+    text-transform: uppercase;
+    font-weight: var(--peso-seminegrita);
+}
+
+.btn-chip-editar {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: var(--color-accion-fondo);
+    color: var(--color-accion);
+    border: 1.5px solid var(--color-accion);
+    border-radius: var(--radio-sm);
+    font-size: 11px;
+    font-weight: var(--peso-seminegrita);
+    cursor: pointer;
+    transition: all var(--duracion-rapida) var(--curva-estandar);
+}
+
+.btn-chip-editar:hover {
+    background: var(--color-accion);
+    color: #FFFFFF;
+}
+
+/* TABULAR NUMBERS (TNUM) PARA EVITAR JITTER EN FINANZAS */
+.td-mono,
+.input-mono,
+.numero-costo,
+.ficha-precio-cifra,
+.ficha-precio-sub,
+.mono,
+.badge-cuadre,
+.resumen-bar span b {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+/* ==========================================================================
+   COMPONENTES PERIFÉRICOS: CONTENEDOR DE TABLAS RESPONSIVAS (BÓVEDA / DICCIONARIO)
+   ========================================================================== */
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radio-md);
+    border: 1px solid var(--color-borde);
+}
+
+/* ==========================================================================
+   DESGLOSE FISCAL GLOBAL DGII (COMPACTO Y RESPONSIVO)
+   ========================================================================== */
+.factura-resumen-fiscal {
+    padding: 6px 10px;
+    background: var(--color-superficie);
+    border-top: 1.5px solid var(--color-borde);
+    flex-shrink: 0 !important;
+    margin-bottom: max(4px, env(safe-area-inset-bottom));
+}
+.factura-resumen-header {
+    font-weight: var(--peso-negrita);
+    font-size: var(--texto-xs);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.factura-resumen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+    gap: 6px;
+    font-size: var(--texto-xs);
+}
+.resumen-fiscal-card {
+    padding: 4px 6px;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-sm);
+    background: var(--color-superficie-resaltada);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+.resumen-fiscal-card.resumen-fiscal-calculado {
+    border: 1.5px solid var(--color-accion);
+    background: var(--color-accion-fondo);
+}
+.resumen-fiscal-card.resumen-fiscal-papel {
+    border: 1.5px solid var(--color-borde-fuerte);
+}
+
+/* FÓRMULAS DE PORCENTAJES P1, P2, P3 EN BÓVEDA */
+.form-grid-p-porcentajes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: var(--espacio-2);
+}
+
+
+/* ==========================================================================
+   DISEÑO COMPACTO Y ERGONÓMICO DE ENTRADA (CERO DESPERDICIO DE ESPACIO)
+   ========================================================================== */
+#badgeEstadoProducto,
+.fila-fefo-compacta {
+    display: none !important;
+}
+
+.form-grid-compacto {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fila-producto-id {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    width: 100%;
+}
+
+.campo-codigo {
+    width: 175px;
+    flex-shrink: 0;
+}
+
+.campo-nombre {
+    flex: 1;
+    min-width: 0;
+}
+
+.fila-valores-compacta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-end;
+    width: 100%;
+}
+
+.campo-cajas {
+    width: 65px;
+    flex: 0 0 65px;
+}
+
+.campo-costo {
+    width: 105px;
+    flex: 0 0 105px;
+}
+
+.campo-trae {
+    width: 75px;
+    flex: 0 0 75px;
+}
+
+.campo-itbis {
+    width: 155px;
+    flex: 0 0 155px;
+}
+
+.campo-desc {
+    width: 145px;
+    flex: 0 0 145px;
+}
+
+.form-grid-compacto .input-control {
+    height: 34px;
+    padding: 0 8px;
+    font-size: 13px;
+}
+
+.form-grid-compacto .campo-label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: var(--color-texto-secundario);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.form-grid-compacto .btn-itbis-opcion {
+    height: 100% !important;
+    padding: 0 4px;
+    font-size: 11px;
+}
+
+/* SOLO EN DISPOSITIVOS MÓVILES EXTREMOS (<540px) */
+@media (max-width: 539px) {
+    .fila-producto-id {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .campo-codigo,
+    .campo-cajas,
+    .campo-costo,
+    .campo-trae,
+    .campo-itbis,
+    .campo-desc {
+        width: 100%;
+    }
+}
+
+/* ==========================================================================
+   RADAR DE VARIACIÓN E INFLACIÓN DE COSTOS DE DROGUERÍAS (EGM FEAT)
+   ========================================================================== */
+.badge-radar-costo {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.2px;
+    line-height: 1.3;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.badge-radar-costo.alza {
+    background: rgba(239, 68, 68, 0.16);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.badge-radar-costo.alza.critica {
+    background: rgba(239, 68, 68, 0.26);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    animation: pulsoAlzaCosto 1.6s infinite ease-in-out;
+}
+.badge-radar-costo.baja {
+    background: rgba(16, 185, 129, 0.16);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.badge-radar-costo.igual {
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--color-texto-secundario);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+@keyframes pulsoAlzaCosto {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.75; transform: scale(0.98); }
+}
+
+.badge-costo-variacion {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+.badge-costo-variacion.alza {
+    background: rgba(239, 68, 68, 0.18);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.badge-costo-variacion.baja {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* ==========================================================================
+   SEMÁFORO FEFO Y CONTROL SANITARIO DE CADUCIDAD (MISPAS)
+   ========================================================================== */
+.badge-fefo-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.2px;
+}
+.badge-fefo-pill.vencido {
+    background: rgba(239, 68, 68, 0.25);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    animation: pulsoAlzaCosto 1.2s infinite;
+}
+.badge-fefo-pill.critico {
+    background: rgba(249, 115, 22, 0.2);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.4);
+}
+.badge-fefo-pill.alerta {
+    background: rgba(234, 179, 8, 0.18);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.35);
+}
+.badge-fefo-pill.optimo {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.badge-fefo-tabla {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+}
+.badge-fefo-tabla.vencido {
+    background: rgba(239, 68, 68, 0.22);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+}
+.badge-fefo-tabla.critico {
+    background: rgba(249, 115, 22, 0.2);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.35);
+}
+.badge-fefo-tabla.alerta {
+    background: rgba(234, 179, 8, 0.16);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+.badge-fefo-tabla.optimo {
+    background: rgba(16, 185, 129, 0.14);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+

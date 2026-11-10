@@ -771,7 +771,7 @@
                     <div class="seccion-card-header">
                         <div class="tarjeta-titulo">
                             <svg class="ico"><use href="#i-barcode"/></svg>
-                            <span>Catálogo Maestro de Fármacos</span>
+                            <span id="tituloCabeceraCatalogoBoveda">Catálogo Maestro de Fármacos & Productos</span>
                         </div>
                         <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                             <button type="button" class="btn-icono" id="btnExportarCatalogoCsv" title="Exportar Catálogo Maestro para ERP o Excel (.csv)">
@@ -790,7 +790,7 @@
                         </button>
                         <button type="button" class="subtab-btn" data-subtab-cat="proveedores" id="tabCatProveedores">
                             <svg class="ico ico-sm"><use href="#i-box"/></svg>
-                            <span>2. Droguerías & Proveedores</span>
+                            <span>2. Proveedores & Distribuidores</span>
                         </button>
                         <button type="button" class="subtab-btn" data-subtab-cat="laboratorios" id="tabCatLaboratorios">
                             <svg class="ico ico-sm"><use href="#i-check"/></svg>
@@ -821,9 +821,9 @@
                             <div style="flex:1;min-width:220px;">
                                 <input type="text" id="filtroBuscadorProveedores" class="input-control" placeholder="Buscar proveedor por nombre, RNC o contacto..." autocomplete="off">
                             </div>
-                            <button type="button" class="btn-icono" id="btnNuevoProveedor" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                            <button type="button" class="btn-icono" id="btnNuevoProveedor" style="background:var(--color-accion);color:#fff;border-color:var(--color-accion);">
                                 <svg class="ico ico-sm"><use href="#i-plus"/></svg>
-                                <span>+ Nueva Droguería</span>
+                                <span>+ Nuevo Proveedor</span>
                             </button>
                         </div>
                         <div id="contenedorProveedores"></div>
@@ -1122,7 +1122,7 @@
                         <input type="text" id="editProdLaboratorio" class="input-control" list="listaLaboratoriosSugeridos" placeholder="Ej. Laboratorios Rowe, LAM">
                     </div>
                     <div class="campo" style="flex:1;min-width:150px;">
-                        <label class="campo-label" for="editProdProveedorHabitual">Droguería / Proveedor Habitual</label>
+                        <label class="campo-label" for="editProdProveedorHabitual">Proveedor Habitual / Distribuidor</label>
                         <input type="text" id="editProdProveedorHabitual" class="input-control" list="listaProveedoresHabitualesSugeridos" placeholder="Ej. Droguería Betances">
                     </div>
                 </div>
@@ -1220,12 +1220,12 @@
             </form>
         </dialog>
 
-        <!-- Modal Accesible: Alta y Edición de Proveedor / Droguería -->
+        <!-- Modal Accesible: Alta y Edición de Proveedor / Distribuidor -->
         <dialog id="modalEditarProveedor" class="farmacia-modal" style="max-width:520px;" aria-labelledby="tituloModalProveedor" aria-modal="true">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
-                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-accion);">
                     <svg class="ico"><use href="#i-box"/></svg>
-                    <span id="tituloModalProveedor">Ficha de Proveedor / Droguería</span>
+                    <span id="tituloModalProveedor">Ficha de Proveedor / Distribuidor</span>
                 </div>
                 <button type="button" class="btn-icono" id="btnCerrarModalProveedor" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
                     <svg class="ico ico-sm"><use href="#i-close"/></svg>
@@ -1235,16 +1235,16 @@
                 <input type="hidden" id="editProvId">
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                     <div class="campo" style="flex:1;min-width:130px;">
-                        <label class="campo-label" for="editProvRnc">RNC Fiscal *</label>
-                        <input type="text" id="editProvRnc" class="input-control input-mono" required placeholder="Ej. 101023456" maxlength="11">
+                        <label class="campo-label" for="editProvRnc">RNC Fiscal (Opcional)</label>
+                        <input type="text" id="editProvRnc" class="input-control input-mono" placeholder="Ej. 101023456" maxlength="11">
                     </div>
                     <div class="campo" style="flex:2;min-width:160px;">
-                        <label class="campo-label" for="editProvNombre">Nombre Comercial *</label>
+                        <label class="campo-label" for="editProvNombre">Nombre Comercial / Proveedor *</label>
                         <input type="text" id="editProvNombre" class="input-control" required placeholder="Ej. Droguería Betances">
                     </div>
                 </div>
                 <div class="campo">
-                    <label class="campo-label" for="editProvRazonSocial">Razón Social Oficial</label>
+                    <label class="campo-label" for="editProvRazonSocial">Razón Social Oficial (Distribuidor)</label>
                     <input type="text" id="editProvRazonSocial" class="input-control" placeholder="Ej. Droguería Betances, S.A.S.">
                 </div>
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
@@ -1269,7 +1269,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:var(--espacio-2);margin-top:var(--espacio-2);">
                     <button type="button" class="btn-icono" id="btnCancelarEditarProveedor">Cancelar</button>
-                    <button type="submit" class="btn-icono" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                    <button type="submit" class="btn-icono" style="background:var(--color-accion);color:#fff;border-color:var(--color-accion);font-weight:700;">
                         <svg class="ico ico-sm"><use href="#i-check"/></svg>
                         <span>Guardar Proveedor</span>
                     </button>
@@ -1317,7 +1317,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:var(--espacio-2);margin-top:var(--espacio-2);">
                     <button type="button" class="btn-icono" id="btnCancelarEditarLaboratorio">Cancelar</button>
-                    <button type="submit" class="btn-icono" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                    <button type="submit" class="btn-icono" style="background:var(--color-accion);color:#fff;border-color:var(--color-accion);font-weight:700;">
                         <svg class="ico ico-sm"><use href="#i-check"/></svg>
                         <span>Guardar Laboratorio</span>
                     </button>

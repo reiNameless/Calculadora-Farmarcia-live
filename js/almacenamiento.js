@@ -276,15 +276,13 @@
                         const reqGetVademecum = txCargar.objectStore(STORES.CONFIGURACION).get('vademecum_maestro');
 
                         txCargar.oncomplete = () => {
-                            const listaProv = (reqGetAllProv.result && reqGetAllProv.result.length > 0)
-                                ? reqGetAllProv.result
-                                : obtenerDirectorioProveedores();
+                            const listaProv = fusionarSemillasConGuardados(reqGetAllProv.result || [], PROVEEDORES_SEMILLA);
                             cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProv);
+                            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProv);
 
-                            const listaLab = (reqGetAllLab.result && reqGetAllLab.result.length > 0)
-                                ? reqGetAllLab.result
-                                : obtenerDirectorioLaboratorios();
+                            const listaLab = fusionarSemillasConGuardados(reqGetAllLab.result || [], LABORATORIOS_SEMILLA);
                             cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
+                            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
 
                             // Si las tablas de proveedores o laboratorios están vacías en IDB, sembrarlas
                             if (!reqGetAllProv.result || reqGetAllProv.result.length === 0) {
@@ -819,14 +817,28 @@
     }
 
 
-    // --- DIRECTORIO DE PROVEEDORES / DROGUERÍAS (RD) ---
+    // --- DIRECTORIO DE PROVEEDORES / DISTRIBUIDORES OFICIALES (RD) ---
     const PROVEEDORES_SEMILLA = Object.freeze([
-        { id: 'prov_betances', rnc: '101023456', nombre: 'Droguería Betances', razonSocial: 'Droguería Betances, S.A.S.', telefono: '(809) 565-1234', contacto: 'Ventas Institucionales', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_betances', rnc: '101023456', nombre: 'Droguería Betances', razonSocial: 'Droguería Betances, S.A.S.', telefono: '(809) 565-1234', contacto: 'Ventas Institucionales / Farmacias', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'prov_farach', rnc: '101012345', nombre: 'Droguería Farach', razonSocial: 'Droguería Farach, S.A.', telefono: '(809) 567-5678', contacto: 'Despacho Farmacias', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_suiphar', rnc: '130123456', nombre: 'Suiphar Dominicana', razonSocial: 'Suiphar de la República Dominicana, S.R.L.', telefono: '(809) 540-3344', contacto: 'División Farmacéutica', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_union', rnc: '101889922', nombre: 'Droguería Unión', razonSocial: 'Droguería Unión, S.A.S.', telefono: '(809) 562-7788', contacto: 'Pedidos Mayoristas', diasCredito: 45, descuentoHabitual: 5, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_san_luis', rnc: '102334455', nombre: 'Distribuidora San Luis', razonSocial: 'Distribuidora San Luis, S.R.L.', telefono: '(809) 598-1122', contacto: 'Atención a Farmacias', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_masso', rnc: '130998877', nombre: 'Farmacéutica Massó', razonSocial: 'Farmacéutica Massó Dominicana, S.A.', telefono: '(809) 537-8899', contacto: 'Distribución Nacional', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'prov_ethical', rnc: '101054321', nombre: 'Ethical Farmacéutica', razonSocial: 'Ethical Farmacéutica, S.A.', telefono: '(809) 530-1122', contacto: 'Servicio al Cliente', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
-        { id: 'prov_suiphar', rnc: '130123456', nombre: 'Suiphar Dominicana', razonSocial: 'Suiphar de la República Dominicana, S.R.L.', telefono: '(809) 540-3344', contacto: 'Representante Médico', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'prov_corripio', rnc: '101002233', nombre: 'Distribuidora Corripio', razonSocial: 'Distribuidora Corripio, S.A.S.', telefono: '(809) 227-2000', contacto: 'Consumo Masivo / Conveniencia', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
-        { id: 'prov_mallas', rnc: '101004455', nombre: 'Mallas y Enlaces', razonSocial: 'Mallas y Enlaces Farmacéuticos, S.R.L.', telefono: '(809) 688-9900', contacto: 'Distribución Nacional', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' }
+        { id: 'prov_mallas', rnc: '101004455', nombre: 'Mallas y Enlaces', razonSocial: 'Mallas y Enlaces Farmacéuticos, S.R.L.', telefono: '(809) 688-9900', contacto: 'Logística y Hospitales', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_macrofarma', rnc: '130887766', nombre: 'Macrofarma Dominicana', razonSocial: 'Macrofarma Dominicana, S.R.L.', telefono: '(809) 563-3322', contacto: 'Ventas Institucionales', diasCredito: 45, descuentoHabitual: 3, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_cedipharma', rnc: '131445566', nombre: 'CediPharma', razonSocial: 'Centro de Distribución Farmacéutica CediPharma, S.R.L.', telefono: '(809) 548-7711', contacto: 'Despacho Express', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_bassa', rnc: '101223344', nombre: 'Bassa Distribuidora', razonSocial: 'Bassa Distribución Farmacéutica, S.A.', telefono: '(809) 535-6677', contacto: 'Línea Dermatológica y Ética', diasCredito: 30, descuentoHabitual: 2, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_quimocaribe', rnc: '101665544', nombre: 'Quimocaribe', razonSocial: 'Químicos del Caribe, S.A.S.', telefono: '(809) 566-4455', contacto: 'Insumos y Material Médico', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_difarna', rnc: '101778899', nombre: 'DIFARNA', razonSocial: 'Distribuidores Farmacéuticos Nacionales, S.R.L.', telefono: '(809) 595-3344', contacto: 'Despacho Cibao y Norte', diasCredito: 45, descuentoHabitual: 4, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_repmed', rnc: '131998811', nombre: 'REPMED', razonSocial: 'Representaciones Médicas del Caribe, S.R.L.', telefono: '(809) 560-8800', contacto: 'Especialidades Médicas', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_gador', rnc: '131002233', nombre: 'Gador Dominicana', razonSocial: 'Gador Dominicana, S.R.L.', telefono: '(809) 472-1100', contacto: 'Fármacos de Alta Especialidad', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_profamilia', rnc: '101044556', nombre: 'Profamilia Distribución', razonSocial: 'Asociación Pro-Familia (Profamilia)', telefono: '(809) 689-0141', contacto: 'Salud Femenina y Reproductiva', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_farmacoop', rnc: '130556677', nombre: 'Farmacoop', razonSocial: 'Cooperativa de Farmacias Dominicanas', telefono: '(809) 561-2244', contacto: 'Alianza de Farmacias', diasCredito: 60, descuentoHabitual: 5, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_interfarma', rnc: '130778811', nombre: 'Interfarma Dominicana', razonSocial: 'Interfarma Dominicana, S.R.L.', telefono: '(809) 532-9900', contacto: 'Genéricos Bioequivalentes', diasCredito: 30, descuentoHabitual: 3, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_propharma', rnc: '131554433', nombre: 'Pro-Pharma Dominicana', razonSocial: 'Pro-Pharma Dominicana, S.A.', telefono: '(809) 541-6677', contacto: 'Insumos Hospitalarios', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' }
     ]);
 
     // --- DIRECTORIO DE LABORATORIOS FABRICANTES (RD E INTERNACIONALES) ---
@@ -834,28 +846,73 @@
         { id: 'lab_rowe', nombre: 'Laboratorios Rowe', razonSocial: 'Laboratorios Rowe, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Laboratorios Rowe', telefono: '(809) 560-6000', actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'lab_lam', nombre: 'Laboratorios LAM', razonSocial: 'Laboratorios de Aplicaciones Médicas (LAM), S.R.L.', origen: 'Nacional RD', titularRegistro: 'LAM Dominicana', telefono: '(809) 565-5555', actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'lab_magnachem', nombre: 'Magnachem International', razonSocial: 'Magnachem International Pharmaceuticals, S.A.', origen: 'Nacional RD', titularRegistro: 'Magnachem Corp', telefono: '(809) 560-1200', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_acromax', nombre: 'Acromax Dominicana', razonSocial: 'Acromax Dominicana, C. por A.', origen: 'Nacional RD', titularRegistro: 'Acromax Dominicana', telefono: '(809) 565-4422', actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'lab_alfa', nombre: 'Laboratorios Alfa', razonSocial: 'Laboratorios Alfa, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Alfa Farmacéutica', telefono: '(809) 534-7121', actualizadoEn: '2026-11-09T00:00:00.000Z' },
-        { id: 'lab_sued', nombre: 'Sued Farmacéutica', razonSocial: 'Sued Farmacéutica, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Sued Fargesa', telefono: '(809) 582-4141', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_sued', nombre: 'Sued Farmacéutica', razonSocial: 'Sued Farmacéutica, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Sued & Fargesa', telefono: '(809) 582-4141', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_ethical', nombre: 'Ethical Pharmaceutical', razonSocial: 'Ethical Pharmaceutical, S.A.', origen: 'Nacional RD', titularRegistro: 'Ethical Farmacéutica', telefono: '(809) 530-1122', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_infaca', nombre: 'Infaca', razonSocial: 'Industria Farmacéutica del Caribe (Infaca), S.A.', origen: 'Nacional RD', titularRegistro: 'Infaca RD', telefono: '(809) 566-2181', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_pharmatech', nombre: 'Pharmatech', razonSocial: 'Pharmatech Dominicana, S.A.', origen: 'Nacional RD', titularRegistro: 'Pharmatech', telefono: '(809) 535-7799', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_iberoventas', nombre: 'Iberoventas', razonSocial: 'Iberoventas / Iberofármacos, S.A.', origen: 'Nacional RD', titularRegistro: 'Iberofármacos', telefono: '(809) 563-8822', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_rowe_esp', nombre: 'Rowe Especialidades', razonSocial: 'Rowe Especialidades Médicas, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Rowe RD', telefono: '(809) 560-6000', actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'lab_bayer', nombre: 'Bayer', razonSocial: 'Bayer S.A. / Consumer Health', origen: 'Importado', titularRegistro: 'Bayer AG Alemania', telefono: '(809) 544-2400', actualizadoEn: '2026-11-09T00:00:00.000Z' },
-        { id: 'lab_pfizer', nombre: 'Pfizer', razonSocial: 'Pfizer Free Zone Panamá / RD', origen: 'Importado', titularRegistro: 'Pfizer Inc.', telefono: '(809) 562-4111', actualizadoEn: '2026-11-09T00:00:00.000Z' },
-        { id: 'lab_novartis', nombre: 'Novartis', razonSocial: 'Novartis Pharma AG', origen: 'Importado', titularRegistro: 'Novartis Pharma', telefono: '(809) 563-7111', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_pfizer', nombre: 'Pfizer', razonSocial: 'Pfizer Free Zone Panamá / RD', origen: 'Importado', titularRegistro: 'Pfizer Inc. EE. UU.', telefono: '(809) 562-4111', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_novartis', nombre: 'Novartis', razonSocial: 'Novartis Pharma AG', origen: 'Importado', titularRegistro: 'Novartis Pharma Suiza', telefono: '(809) 563-7111', actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'lab_abbott', nombre: 'Abbott Laboratories', razonSocial: 'Abbott Laboratories Dominicana', origen: 'Importado', titularRegistro: 'Abbott USA', telefono: '(809) 567-2200', actualizadoEn: '2026-11-09T00:00:00.000Z' },
         { id: 'lab_sanofi', nombre: 'Sanofi', razonSocial: 'Sanofi-Aventis de la República Dominicana', origen: 'Importado', titularRegistro: 'Sanofi Francia', telefono: '(809) 540-0202', actualizadoEn: '2026-11-09T00:00:00.000Z' },
-        { id: 'lab_philips_avent', nombre: 'Philips Avent', razonSocial: 'Philips Consumer Lifestyle B.V.', origen: 'Importado', titularRegistro: 'Philips Puericultura', telefono: '(809) 565-1122', actualizadoEn: '2026-11-09T00:00:00.000Z' }
+        { id: 'lab_gsk', nombre: 'GlaxoSmithKline (GSK)', razonSocial: 'GlaxoSmithKline Caribe, S.A.', origen: 'Importado', titularRegistro: 'GSK Reino Unido', telefono: '(809) 566-3399', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_astrazeneca', nombre: 'AstraZeneca', razonSocial: 'AstraZeneca Centroamérica y Caribe', origen: 'Importado', titularRegistro: 'AstraZeneca Reino Unido', telefono: '(809) 541-0022', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_roche', nombre: 'Roche', razonSocial: 'Roche Servicios Dominicana, S.A.', origen: 'Importado', titularRegistro: 'F. Hoffmann-La Roche Suiza', telefono: '(809) 563-5500', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_roemmers', nombre: 'Laboratorios Roemmers', razonSocial: 'Roemmers Centroamérica y Caribe', origen: 'Importado', titularRegistro: 'Roemmers Argentina', telefono: '(809) 562-8811', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_menarini', nombre: 'Menarini', razonSocial: 'Grupo Menarini Centroamérica y Caribe', origen: 'Importado', titularRegistro: 'Laboratorios Menarini España/Italia', telefono: '(809) 567-8899', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_chinoin', nombre: 'Laboratorios Chinoin', razonSocial: 'Productos Farmacéuticos Chinoin', origen: 'Importado', titularRegistro: 'Chinoin México', telefono: '(809) 540-5544', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_calox', nombre: 'Calox International', razonSocial: 'Calox Dominicana, S.A.', origen: 'Importado', titularRegistro: 'Calox International', telefono: '(809) 532-4411', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_mk', nombre: 'MK (Tecnoquímicas)', razonSocial: 'Tecnoquímicas Dominicana, S.A.', origen: 'Importado', titularRegistro: 'MK Colombia', telefono: '(809) 549-3388', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_medifarma', nombre: 'Medifarma', razonSocial: 'Medifarma Centroamérica y Caribe', origen: 'Importado', titularRegistro: 'Medifarma Perú', telefono: '(809) 567-9911', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_stein', nombre: 'Stein Corp', razonSocial: 'Laboratorios Stein Dominicana', origen: 'Importado', titularRegistro: 'Stein Costa Rica', telefono: '(809) 544-3322', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_philips_avent', nombre: 'Philips Avent', razonSocial: 'Philips Consumer Lifestyle B.V.', origen: 'Importado', titularRegistro: 'Philips Puericultura', telefono: '(809) 565-1122', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_jnj', nombre: 'Johnson & Johnson', razonSocial: 'Johnson & Johnson del Caribe', origen: 'Importado', titularRegistro: 'Kenvue / J&J EE. UU.', telefono: '(809) 563-4400', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_pg', nombre: 'Procter & Gamble (Salud)', razonSocial: 'P&G Dominicana', origen: 'Importado', titularRegistro: 'P&G Health', telefono: '(809) 540-7700', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_colgate', nombre: 'Colgate-Palmolive (Oral)', razonSocial: 'Colgate-Palmolive Dominicana', origen: 'Importado', titularRegistro: 'Colgate Oral Care', telefono: '(809) 567-7711', actualizadoEn: '2026-11-09T00:00:00.000Z' }
     ]);
+
+    // Función universal de fusión no destructiva para mantener sincronizados los directorios
+    function fusionarSemillasConGuardados(guardados, semillas, claveId = 'id', claveNombre = 'nombre') {
+        const resultado = (Array.isArray(guardados) ? guardados : []).map(x => {
+            if (typeof x === 'string') {
+                return {
+                    id: 'item_' + Dominio.generarIdUnico(),
+                    nombre: x,
+                    razonSocial: x,
+                    actualizadoEn: new Date().toISOString()
+                };
+            }
+            return { ...x };
+        });
+
+        const idsExistentes = new Set(resultado.map(x => String(x[claveId] || '').toLowerCase().trim()));
+        const nombresExistentes = new Set(resultado.map(x => String(x[claveNombre] || '').toLowerCase().trim()));
+
+        semillas.forEach(sem => {
+            const idSem = String(sem[claveId] || '').toLowerCase().trim();
+            const nomSem = String(sem[claveNombre] || '').toLowerCase().trim();
+            if (!idsExistentes.has(idSem) && !nombresExistentes.has(nomSem)) {
+                resultado.push({ ...sem });
+                idsExistentes.add(idSem);
+                nombresExistentes.add(nomSem);
+            }
+        });
+        return resultado;
+    }
 
     function obtenerDirectorioProveedores() {
         if (cacheStorage.has(CONSTANTES.CLAVES_STORAGE.PROVEEDORES)) {
             return cacheStorage.get(CONSTANTES.CLAVES_STORAGE.PROVEEDORES);
         }
         const guardados = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, null);
-        if (Array.isArray(guardados) && guardados.length > 0) {
-            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, guardados);
-            return guardados;
-        }
-        const iniciales = PROVEEDORES_SEMILLA.map(p => ({ ...p }));
-        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, iniciales);
-        return iniciales;
+        const fusionados = fusionarSemillasConGuardados(guardados, PROVEEDORES_SEMILLA);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, fusionados);
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, fusionados);
+        return fusionados;
     }
 
     function guardarProveedorEnDirectorio(proveedor) {
@@ -946,13 +1003,10 @@
             return cacheStorage.get(CONSTANTES.CLAVES_STORAGE.LABORATORIOS);
         }
         const guardados = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, null);
-        if (Array.isArray(guardados) && guardados.length > 0) {
-            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, guardados);
-            return guardados;
-        }
-        const iniciales = LABORATORIOS_SEMILLA.map(l => ({ ...l }));
-        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, iniciales);
-        return iniciales;
+        const fusionados = fusionarSemillasConGuardados(guardados, LABORATORIOS_SEMILLA);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, fusionados);
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, fusionados);
+        return fusionados;
     }
 
     function guardarLaboratorioEnDirectorio(lab) {

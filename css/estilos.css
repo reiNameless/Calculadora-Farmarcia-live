@@ -2831,36 +2831,58 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
    ========================================================================== */
 .subtabs-catalogo {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: var(--espacio-2);
-    border-bottom: 1px solid var(--color-borde);
-    padding-bottom: 8px;
+    border-bottom: 2px solid var(--color-borde);
+    padding-bottom: 10px;
     flex-wrap: wrap;
 }
 .subtab-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    font-size: 12px;
+    gap: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
     font-weight: 600;
-    border-radius: var(--radio-sm);
-    border: 1px solid var(--color-borde);
-    background: var(--color-fondo-panel);
+    border-radius: var(--radio-md, 8px);
+    border: 1.5px solid var(--color-borde);
+    background: var(--color-superficie-resaltada);
     color: var(--color-texto-secundario);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease-in-out;
     user-select: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.subtab-btn svg.ico {
+    width: 15px;
+    height: 15px;
+    pointer-events: none;
+    transition: transform 0.15s ease;
 }
 .subtab-btn:hover {
-    color: var(--color-primario);
-    border-color: var(--color-primario);
-    background: var(--color-superficie-resaltada);
+    background: var(--color-accion-fondo);
+    color: var(--color-accion);
+    border-color: var(--color-accion);
+    transform: translateY(-1px);
+}
+.subtab-btn:hover svg.ico {
+    transform: scale(1.08);
 }
 .subtab-btn.activo {
-    color: #fff;
-    background: var(--color-primario);
-    border-color: var(--color-primario);
+    background: var(--color-accion) !important;
+    color: #ffffff !important;
+    border-color: var(--color-accion) !important;
+    box-shadow: 0 3px 10px rgba(0, 102, 84, 0.35);
+    font-weight: 700;
+    transform: translateY(-1px);
+}
+.subtab-btn.activo svg.ico {
+    color: #ffffff !important;
+    stroke: #ffffff;
+    fill: currentColor;
+}
+html[data-paleta="cobalto"] .subtab-btn.activo {
+    box-shadow: 0 3px 10px rgba(29, 78, 216, 0.35);
 }
 .panel-subtab-catalogo {
     animation: fadeInSubtab 0.2s ease-out;

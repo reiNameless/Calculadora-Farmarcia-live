@@ -105,7 +105,7 @@
         }
     }
 
-    // Renderizado del Directorio de Proveedores / Droguerías
+    // Renderizado del Directorio de Proveedores / Distribuidores Oficiales
     function renderizarProveedoresUI(terminoFiltro = '') {
         const contenedor = el('contenedorProveedores');
         if (!contenedor) return;
@@ -123,19 +123,20 @@
         if (filtrados.length === 0) {
             contenedor.innerHTML = `<div style="text-align:center;padding:24px;color:var(--color-texto-secundario);">
                 <svg class="ico ico-lg" style="opacity:0.4;margin-bottom:8px;"><use href="#i-box"/></svg>
-                <div style="font-weight:600;">No se encontraron droguerías o proveedores.</div>
-                <div class="fs-xs" style="margin-top:4px;">Presiona "+ Nueva Droguería" para registrar un distribuidor.</div>
+                <div style="font-weight:600;">No se encontraron proveedores o distribuidores.</div>
+                <div class="fs-xs" style="margin-top:4px;">Presiona "+ Nuevo Proveedor" para registrar un distribuidor.</div>
             </div>`;
             return;
         }
 
         const filas = filtrados.map(p => {
-            const idEsc = escaparHtml(p.id);
+            const idTarget = p.id || p.rnc || p.nombre;
+            const idEsc = escaparHtml(idTarget);
             const rncFmt = p.rnc ? `<span class="badge-radar-costo igual">${escaparHtml(p.rnc)}</span>` : '<span class="text-muted fs-xs">Sin RNC</span>';
             return `<tr>
                 <td class="mono" style="font-weight:600;">${rncFmt}</td>
-                <td>
-                    <strong>${escaparHtml(p.nombre)}</strong>
+                <td data-editar-proveedor="${idEsc}" style="cursor:pointer;" title="Clic para editar datos de este proveedor">
+                    <strong style="color:var(--color-accion);display:inline-block;">${escaparHtml(p.nombre)}</strong>
                     ${p.razonSocial ? `<div class="fs-xs text-muted">${escaparHtml(p.razonSocial)}</div>` : ''}
                 </td>
                 <td>
@@ -154,15 +155,16 @@
         }).join('');
 
         contenedor.innerHTML = `
-            <div style="font-size:12px;color:var(--color-texto-secundario);padding:6px 0;">
-                ${filtrados.length} droguerías y proveedores registrados.
+            <div style="font-size:12px;color:var(--color-texto-secundario);padding:6px 0;display:flex;justify-content:space-between;align-items:center;">
+                <span><strong>${filtrados.length}</strong> proveedores y distribuidores registrados.</span>
+                <span class="fs-xs text-muted">Haz clic en el nombre o en el lápiz para editar.</span>
             </div>
             <div class="table-responsive">
                 <table>
                     <thead>
                         <tr>
                             <th>RNC</th>
-                            <th>Droguería / Razón Social</th>
+                            <th>Proveedor / Distribuidor</th>
                             <th>Teléfono / Contacto</th>
                             <th style="text-align:center;">Crédito</th>
                             <th style="text-align:right;">Desc. Base</th>
@@ -201,8 +203,8 @@
             const idEsc = escaparHtml(l.id);
             const origenClase = (l.origen === 'Nacional RD') ? 'badge-radar-costo baja' : 'badge-radar-costo igual';
             return `<tr>
-                <td>
-                    <strong>${escaparHtml(l.nombre)}</strong>
+                <td data-editar-laboratorio="${idEsc}" style="cursor:pointer;" title="Clic para editar laboratorio">
+                    <strong style="color:var(--color-accion);display:inline-block;">${escaparHtml(l.nombre)}</strong>
                     ${l.razonSocial ? `<div class="fs-xs text-muted">${escaparHtml(l.razonSocial)}</div>` : ''}
                 </td>
                 <td><span class="${origenClase}">${escaparHtml(l.origen || 'Nacional RD')}</span></td>
@@ -741,6 +743,13 @@
                 if (panelProvs) panelProvs.style.display = (subtab === 'proveedores') ? 'block' : 'none';
                 if (panelLabs) panelLabs.style.display = (subtab === 'laboratorios') ? 'block' : 'none';
 
+                const tituloBoveda = el('tituloCabeceraCatalogoBoveda');
+                if (tituloBoveda) {
+                    if (subtab === 'productos') tituloBoveda.textContent = 'Catálogo Maestro de Fármacos & Productos';
+                    if (subtab === 'proveedores') tituloBoveda.textContent = 'Directorio Oficial: Proveedores & Distribuidores';
+                    if (subtab === 'laboratorios') tituloBoveda.textContent = 'Directorio Oficial: Laboratorios Fabricantes';
+                }
+
                 if (subtab === 'proveedores') renderizarProveedoresUI();
                 if (subtab === 'laboratorios') renderizarLaboratoriosUI();
             });
@@ -803,15 +812,20 @@
             });
         }
 
-        // Click delegation en tabla de proveedores
+        // Click delegation en tabla de proveedores (botón editar y celda de nombre/razón social)
         const contProvs = el('contenedorProveedores');
         if (contProvs) {
             contProvs.addEventListener('click', async e => {
                 const btnEdit = e.target.closest('[data-editar-proveedor]');
                 if (btnEdit) {
-                    const idProv = btnEdit.dataset.editarProveedor;
+                    const idProv = String(btnEdit.dataset.editarProveedor || '').trim();
                     const provs = Almacenamiento.obtenerDirectorioProveedores();
-                    const prov = provs.find(p => p.id === idProv);
+                    const prov = provs.find(p =>
+                        String(p.id) === idProv ||
+                        (p.rnc && String(p.rnc) === idProv) ||
+                        (p.nombre && String(p.nombre).toLowerCase() === idProv.toLowerCase()) ||
+                        (p.razonSocial && String(p.razonSocial).toLowerCase() === idProv.toLowerCase())
+                    );
                     if (prov && modalProv) {
                         if (el('editProvId')) el('editProvId').value = prov.id || '';
                         if (el('editProvRnc')) el('editProvRnc').value = prov.rnc || '';
@@ -821,7 +835,7 @@
                         if (el('editProvContacto')) el('editProvContacto').value = prov.contacto || '';
                         if (el('editProvDiasCredito')) el('editProvDiasCredito').value = prov.diasCredito || 30;
                         if (el('editProvDescuento')) el('editProvDescuento').value = (prov.descuentoHabitual || 0).toFixed(2);
-                        if (el('tituloModalProveedor')) el('tituloModalProveedor').textContent = 'Editar Droguería / Proveedor';
+                        if (el('tituloModalProveedor')) el('tituloModalProveedor').textContent = 'Editar Proveedor / Distribuidor';
                         modalProv.showModal();
                     }
                     return;
@@ -893,9 +907,13 @@
             contLabs.addEventListener('click', async e => {
                 const btnEdit = e.target.closest('[data-editar-laboratorio]');
                 if (btnEdit) {
-                    const idLab = btnEdit.dataset.editarLaboratorio;
+                    const idLab = String(btnEdit.dataset.editarLaboratorio || '').trim();
                     const labs = Almacenamiento.obtenerDirectorioLaboratorios();
-                    const lab = labs.find(l => l.id === idLab);
+                    const lab = labs.find(l =>
+                        String(l.id) === idLab ||
+                        (l.nombre && String(l.nombre).toLowerCase() === idLab.toLowerCase()) ||
+                        (l.razonSocial && String(l.razonSocial).toLowerCase() === idLab.toLowerCase())
+                    );
                     if (lab && modalLab) {
                         if (el('editLabId')) el('editLabId').value = lab.id || '';
                         if (el('editLabNombre')) el('editLabNombre').value = lab.nombre || '';

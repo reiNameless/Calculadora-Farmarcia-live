@@ -970,6 +970,20 @@
             afirmarIgualdad(Dominio.obtenerMacroCategoria('Vitamina C'), 'Vitaminas & Suplementos', 'Macrocategoría: Vitamina mapea a Vitaminas & Suplementos');
         }
 
+        // Validación de Catálogos Ampliados de Proveedores (20) y Laboratorios (30)
+        if (typeof Almacenamiento !== 'undefined' && typeof Almacenamiento.obtenerDirectorioProveedores === 'function') {
+            const provs = Almacenamiento.obtenerDirectorioProveedores();
+            afirmarIgualdad(provs.length >= 20, true, 'Directorio Proveedores: Catálogo ampliado cuenta con al menos 20 distribuidores oficiales');
+            const betances = provs.find(p => p.nombre.includes('Betances'));
+            afirmarIgualdad(Boolean(betances && betances.rnc), true, 'Directorio Proveedores: Betances tiene RNC válido');
+        }
+        if (typeof Almacenamiento !== 'undefined' && typeof Almacenamiento.obtenerDirectorioLaboratorios === 'function') {
+            const labs = Almacenamiento.obtenerDirectorioLaboratorios();
+            afirmarIgualdad(labs.length >= 30, true, 'Directorio Laboratorios: Catálogo ampliado cuenta con al menos 30 laboratorios oficiales');
+            const rowe = labs.find(l => l.nombre.includes('Rowe'));
+            afirmarIgualdad(Boolean(rowe && rowe.origen === 'Nacional RD'), true, 'Directorio Laboratorios: Rowe registrado como Nacional RD');
+        }
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

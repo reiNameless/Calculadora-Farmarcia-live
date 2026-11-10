@@ -120,6 +120,10 @@
         }
         Estado.sesionActual.fechaVencimiento = el('facFechaVencimiento').value;
         Estado.sesionActual.totalFisico = parseFloat(el('facTotalFisico').value) || 0;
+        if (el('facDescuentoGlobal')) {
+            Estado.sesionActual.descuentoGlobalValor = Math.max(0, parseFloat(el('facDescuentoGlobal').value) || 0);
+            Estado.sesionActual.descuentoGlobalTipo = tipoDescuentoGlobalSeleccionado;
+        }
 
         verificarDuplicadoUI();
         Estado.sincronizarYGuardarSesion();
@@ -281,7 +285,14 @@
         const productos = Estado.sesionActual.productos || [];
         const totalFisico = parseFloat(el('facTotalFisico') ? el('facTotalFisico').value : 0) || 0;
 
-        const resumen = Dominio.calcularResumenCuadreFactura(productos, totalFisico);
+        const descGlobalInput = el('facDescuentoGlobal');
+        const descGlobalValor = parseFloat(descGlobalInput ? descGlobalInput.value : 0) || 0;
+        const modoDescGlobal = tipoDescuentoGlobalSeleccionado || 'monto';
+
+        const resumen = Dominio.calcularResumenCuadreFactura(productos, totalFisico, {
+            descuentoGlobalValor: descGlobalValor,
+            descuentoGlobalTipo: modoDescGlobal
+        });
         const totalBruto = resumen.totalBrutoAcumulado;
         const totalDescuento = resumen.totalDescuentoAcumulado;
         const totalExento = resumen.totalExentoAcumulado;
@@ -299,6 +310,17 @@
         if (el('resumenFiscalItbis')) el('resumenFiscalItbis').textContent = '+$' + totalItbis.toFixed(2);
         if (el('resumenFiscalTotalCalculado')) el('resumenFiscalTotalCalculado').textContent = '$' + totalCalculado.toFixed(2);
         if (el('resumenFiscalTotalFisico')) el('resumenFiscalTotalFisico').textContent = '$' + totalFisico.toFixed(2);
+
+        const filaDescGlobal = el('filaResumenFiscalDescGlobal');
+        const txtDescGlobal = el('resumenFiscalDescGlobal');
+        if (filaDescGlobal && txtDescGlobal) {
+            if (resumen.montoDescuentoGlobal > 0) {
+                filaDescGlobal.style.display = 'block';
+                txtDescGlobal.textContent = '-$' + resumen.montoDescuentoGlobal.toFixed(2);
+            } else {
+                filaDescGlobal.style.display = 'none';
+            }
+        }
 
         const elDif = el('resumenFiscalDiferencia');
         const badge = el('badgeCuadreFiscal');
@@ -378,9 +400,12 @@
                 ? p.montoItbisLinea
                 : Dominio.redondearDecimalExacto(p.cajasCompradas * itbisPorCaja, CONSTANTES.DECIMALES_MONEDA);
 
-            const detalleInvCosto = p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE
-                ? 'Trae ' + p.unidadesPorCaja + ' uds (' + p.totalUnidadesInventario + ' total) | Unit Fiscal: $' + Dominio.formatearCostoFiscalOchoDecimales(p.costoUnitarioFinal || p.costoUnitario)
-                : 'Venta entera (1 ud) | Unit Fiscal: $' + Dominio.formatearCostoFiscalOchoDecimales(p.costoUnitarioFinal || p.costoUnitario);
+            const costoFiscalFormateado = Dominio.formatearCostoFiscalOchoDecimales(p.costoUnitarioFinal || p.costoUnitario);
+            const chipCostoFiscal = '<span class="label-costo-unit-tabla" style="font-size:10px;color:var(--color-texto-secundario);margin-right:2px;">Costo Unit:</span>' +
+                '<button type="button" class="copy-chip copy-chip-costo" data-copiar-precio="' + costoFiscalFormateado + '" data-copiar-tipo="costo" title="Clic para copiar costo unitario fiscal $' + costoFiscalFormateado + ' al portapapeles">' +
+                    '<span>$' + costoFiscalFormateado + '</span>' +
+                    '<svg class="ico ico-sm" style="width:10px;height:10px;margin-left:2px;"><use href="#i-copy"/></svg>' +
+                '</button>';
 
             const badgeVariacion = (p.variacionCosto !== undefined && Number(p.variacionCosto) !== 0)
                 ? '<div class="badge-costo-variacion ' + (p.variacionCosto > 0 ? 'alza' : 'baja') + '" title="Costo anterior: $' + (Number(p.costoAnteriorCaja) || 0).toFixed(2) + '">' +
@@ -404,12 +429,20 @@
                     '<strong>' + escaparHtml(p.nombre) + '</strong>' + badgeLeche +
                     badgeFefo +
                     etiquetaCodigo +
-                    '<div class="fs-xs text-muted" style="font-size:10px;margin-top:2px;">' + detalleInvCosto + '</div>' +
+                    '<div class="fs-xs text-muted" style="font-size:10px;margin-top:2px;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">' + chipCostoFiscal + '</div>' +
                 '</td>' +
-                '<td class="mono celda-edit" ' + attrId + ' data-campo="cajasCompradas" style="text-align:right;">' + p.cajasCompradas + '</td>' +
+                '<td class="mono celda-edit" ' + attrId + ' data-campo="cajasCompradas" style="text-align:right;">' +
+                    p.cajasCompradas +
+                    ((p.cajasBonificadas && p.cajasBonificadas > 0)
+                        ? ' <span class="badge-bonif-mini" title="+' + p.cajasBonificadas + ' cajas bonificadas gratis (Total: ' + (p.cajasCompradas + p.cajasBonificadas) + ' físicas)">+' + p.cajasBonificadas + '</span>'
+                        : '') +
+                '</td>' +
                 '<td class="mono celda-edit" ' + attrId + ' data-campo="unidadesPorCaja" style="text-align:right;" title="Clic para editar unidades por caja">' + (p.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? p.unidadesPorCaja : 1) + '</td>' +
                 '<td class="mono celda-edit c-caja" ' + attrId + ' data-campo="precioCajaBase" style="text-align:right;" title="Clic para editar precio de compra base">' +
                     '<div>$' + p.precioCajaBase.toFixed(2) + '</div>' +
+                    ((p.esBonificacionCruzada || p.precioCajaBase === 0)
+                        ? '<span class="badge-bonif-mini" style="background:var(--color-exito-fondo);color:var(--color-exito);border:1px solid var(--color-exito);font-size:9px;padding:1px 4px;border-radius:3px;" title="Bonificación cruzada / Regalo a costo $0.00">[REGALO]</span>'
+                        : '') +
                     badgeVariacion +
                 '</td>' +
                 '<td class="mono" style="text-align:right;color:' + (descLinea > 0 ? 'var(--color-exito)' : 'inherit') + ';">' +
@@ -516,7 +549,9 @@
 
         const mapaValores = {
             nombre: producto.nombre,
-            cajasCompradas: producto.cajasCompradas,
+            cajasCompradas: (producto.cajasBonificadas && producto.cajasBonificadas > 0)
+                ? (producto.cajasCompradas + '+' + producto.cajasBonificadas)
+                : producto.cajasCompradas,
             unidadesPorCaja: producto.unidadesPorCaja,
             precioCajaBase: producto.precioCajaBase,
             descuento: producto.descuentoValor || 0
@@ -540,7 +575,7 @@
 
         let removerFiltro = null;
         if (esCampoNumerico && typeof UI.configurarFiltroNumerico === 'function') {
-            removerFiltro = UI.configurarFiltroNumerico(input, esDecimal);
+            removerFiltro = UI.configurarFiltroNumerico(input, esDecimal, campo === 'cajasCompradas');
         }
 
         input.focus();
@@ -595,12 +630,16 @@
             }
             datosClonados.nombre = nuevoTexto.trim();
         } else if (campo === 'cajasCompradas') {
-            const v = Dominio.validarCantidadEnteraPositiva(nuevoTexto, 'las cajas compradas');
+            const v = (Dominio && typeof Dominio.parsearExpresionCajas === 'function')
+                ? Dominio.parsearExpresionCajas(nuevoTexto)
+                : Dominio.validarCantidadEnteraPositiva(nuevoTexto, 'las cajas compradas');
             if (!v.esValido) {
                 UI.Notificaciones.mostrarMensaje(v.error, 'error');
                 return false;
             }
-            datosClonados.cajasCompradas = v.valor;
+            datosClonados.cajasCompradas = v.cajasCompradas !== undefined ? v.cajasCompradas : v.valor;
+            datosClonados.cajasBonificadas = v.cajasBonificadas !== undefined ? v.cajasBonificadas : 0;
+            datosClonados.manual = {};
         } else if (campo === 'unidadesPorCaja') {
             const v = Dominio.validarCantidadEnteraPositiva(nuevoTexto, 'las unidades por caja');
             if (!v.esValido) {
@@ -672,6 +711,25 @@
     }
 
     let operacionGuardadoEnCurso = false;
+    let tipoDescuentoGlobalSeleccionado = 'monto';
+
+    function establecerModoDescuentoGlobal(modo) {
+        tipoDescuentoGlobalSeleccionado = modo === 'porcentaje' ? 'porcentaje' : 'monto';
+        const btnMonto = el('btnDescGlobalMonto');
+        const btnPorc = el('btnDescGlobalPorc');
+        const lblModo = el('lblDescGlobalModoTexto');
+        if (btnMonto && btnPorc) {
+            if (tipoDescuentoGlobalSeleccionado === 'porcentaje') {
+                btnPorc.classList.add('activo');
+                btnMonto.classList.remove('activo');
+                if (lblModo) lblModo.textContent = '%';
+            } else {
+                btnMonto.classList.add('activo');
+                btnPorc.classList.remove('activo');
+                if (lblModo) lblModo.textContent = '$';
+            }
+        }
+    }
     function finalizarYGuardarFactura() {
         if (operacionGuardadoEnCurso) return;
         const btnFinalizar = el('btnFinalizarFactura');
@@ -741,7 +799,7 @@
     function inicializarEventosFactura() {
         const Estado = AppFarmacia.Estado;
 
-        ['facProveedor', 'facRnc', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento'].forEach(id => {
+        ['facProveedor', 'facRnc', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento', 'facDescuentoGlobal'].forEach(id => {
             el(id).addEventListener('input', actualizarCabeceraFacturaDesdeUI);
         });
 
@@ -798,16 +856,35 @@
 
         if (typeof UI.configurarFiltroNumerico === 'function') {
             UI.configurarFiltroNumerico(el('facTotalFisico'), true);
+            if (el('facDescuentoGlobal')) UI.configurarFiltroNumerico(el('facDescuentoGlobal'), true);
+
+            const btnDescMonto = el('btnDescGlobalMonto');
+            const btnDescPorc = el('btnDescGlobalPorc');
+            const lblModo = el('lblDescGlobalModoTexto');
+            if (btnDescMonto && btnDescPorc) {
+                btnDescMonto.addEventListener('click', () => {
+                    establecerModoDescuentoGlobal('monto');
+                    actualizarCabeceraFacturaDesdeUI();
+                    actualizarDesgloseFiscalGlobal();
+                });
+                if (btnDescPorc) btnDescPorc.addEventListener('click', () => {
+                    establecerModoDescuentoGlobal('porcentaje');
+                    actualizarCabeceraFacturaDesdeUI();
+                    actualizarDesgloseFiscalGlobal();
+                });
+            }
         }
 
-        el('tablaProductosActuales').addEventListener('click', async e => {
+        if (el('tablaProductosActuales')) el('tablaProductosActuales').addEventListener('click', async e => {
             const btnCopiar = e.target.closest('[data-copiar-precio]');
             if (btnCopiar) {
                 const valor = btnCopiar.dataset.copiarPrecio;
+                const esCosto = btnCopiar.dataset.copiarTipo === 'costo';
+                const msgCopia = esCosto ? ('Costo copiado: $' + valor) : ('Precio copiado: $' + valor);
                 try {
                     await Dominio.copiarAlPortapapeles(valor);
                     btnCopiar.classList.add('copiado');
-                    UI.Notificaciones.mostrarMensaje('Precio copiado: $' + valor, 'info');
+                    UI.Notificaciones.mostrarMensaje(msgCopia, 'info');
                     setTimeout(() => btnCopiar.classList.remove('copiado'), 1200);
                 } catch (err) {
                     UI.Notificaciones.mostrarMensaje('$' + valor, 'info');
@@ -872,9 +949,9 @@
             fijarCabeceraFacturaColapsada(colapsadaInicial);
         } catch (_) {}
 
-        el('btnImprimirActual').addEventListener('click', () => UI.Historial.imprimirFactura(Estado.sesionActual));
-        el('btnFinalizarFactura').addEventListener('click', finalizarYGuardarFactura);
-        el('btnDescartar').addEventListener('click', async () => {
+        if (el('btnImprimirActual')) el('btnImprimirActual').addEventListener('click', () => UI.Historial.imprimirFactura(Estado.sesionActual));
+        if (el('btnFinalizarFactura')) el('btnFinalizarFactura').addEventListener('click', finalizarYGuardarFactura);
+        if (el('btnDescartar')) el('btnDescartar').addEventListener('click', async () => {
             if (Estado.sesionActual.id || (await UI.Notificaciones.mostrarConfirmacion('¿Deseas descartar la factura en curso y limpiar todos los datos?', 'Descartar Factura'))) {
                 Estado.vaciarSesion();
             }
@@ -891,6 +968,8 @@
         finalizarYGuardarFactura,
         inicializarEventosFactura,
         fijarCabeceraFacturaColapsada,
-        activarTabCockpit
+        activarTabCockpit,
+        establecerModoDescuentoGlobal,
+        actualizarDesgloseFiscalGlobal
     });
 })(window);

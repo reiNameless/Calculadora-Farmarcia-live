@@ -14,6 +14,7 @@
     let borradorPerfilesEdicion = null;
     let tasaItbisSeleccionada = 0;
     let tipoDescuentoSeleccionado = 'monto'; // 'monto' ($) o 'porcentaje' (%)
+    let fichaVademecumSeleccionada = null; // Enlazado progresivo con Vademécum Maestro RD
 
     function fijarItbis(tasa) {
         tasaItbisSeleccionada = tasa;
@@ -61,8 +62,29 @@
         const sesionActual = Estado.sesionActual;
 
         const tipo = el('calcTipo').value;
-        const vCajas = Dominio.validarCantidadEnteraPositiva(el('calcCajasCompradas').value, 'cajas');
-        const vPrecio = Dominio.validarPrecioCompra(el('calcPrecioCaja').value);
+        const parseCajas = (Dominio && typeof Dominio.parsearExpresionCajas === 'function')
+            ? Dominio.parsearExpresionCajas(el('calcCajasCompradas').value)
+            : { esValido: true, cajasCompradas: 1, cajasBonificadas: 0, totalCajasFisicas: 1, esOferta: false };
+
+        const badgeBonif = el('badgeBonifCajasCockpit');
+        if (badgeBonif) {
+            if (parseCajas.esValido && parseCajas.esOferta) {
+                badgeBonif.style.display = 'inline-flex';
+                badgeBonif.innerHTML = '<svg class="ico ico-sm" style="width:11px;height:11px;margin-right:2px;" aria-hidden="true"><use href="#i-offer"/></svg>+' + parseCajas.cajasBonificadas + ' Bonif. (' + parseCajas.totalCajasFisicas + ' Físicas)';
+            } else {
+                badgeBonif.style.display = 'none';
+            }
+        }
+
+        const vCajas = {
+            esValido: parseCajas.esValido,
+            valor: parseCajas.cajasCompradas,
+            cajasCompradas: parseCajas.cajasCompradas,
+            cajasBonificadas: parseCajas.cajasBonificadas,
+            totalCajasFisicas: parseCajas.totalCajasFisicas,
+            error: parseCajas.error
+        };
+        const vPrecio = Dominio.validarPrecioCompra(el('calcPrecioCaja').value, { permitirCero: true });
         const vUnidades = tipo === CONSTANTES.CATEGORIAS.ENTERO
             ? { esValido: true, valor: 1 }
             : Dominio.validarCantidadEnteraPositiva(el('calcUnidadesCaja').value, 'unidades');
@@ -70,6 +92,15 @@
         const esLeche = Boolean(el('calcEsLeche') && el('calcEsLeche').checked);
         const valDescRaw = el('calcDescuento') ? el('calcDescuento').value : '0';
         const descuentoValor = Math.max(0, parseFloat(valDescRaw) || 0);
+
+        const codigoCrudo = el('calcCodigoBarras') ? el('calcCodigoBarras').value.trim() : '';
+        const codigoNormalizado = Dominio.normalizarCodigoBarras(codigoCrudo);
+        const prodDic = (codigoNormalizado && AppFarmacia.Almacenamiento)
+            ? AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoNormalizado)
+            : null;
+        const costoAnterior = (prodDic && prodDic.ultimoPrecioCaja && Number(prodDic.ultimoPrecioCaja) > 0)
+            ? Number(prodDic.ultimoPrecioCaja)
+            : 0;
 
         const resumenActual = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
         const aplicaItbis = tasaItbisSeleccionada > 0;
@@ -85,11 +116,13 @@
             aplicaItbis,
             reglasEfectivas,
             {
-                cajasCompradas: vCajas.esValido ? vCajas.valor : 1,
+                cajasCompradas: vCajas.esValido ? vCajas.cajasCompradas : 1,
+                cajasBonificadas: vCajas.esValido ? vCajas.cajasBonificadas : 0,
                 esLeche,
                 descuentoValor,
                 tipoDescuento: tipoDescuentoSeleccionado,
-                mostrarPreciosConItbis: mostrarConItbis
+                mostrarPreciosConItbis: mostrarConItbis,
+                costoReferencia: costoAnterior
             }
         );
 
@@ -118,17 +151,22 @@
                 badgeRadar.style.display = 'inline-flex';
                 if (analisis.esAlza) {
                     badgeRadar.className = 'badge-radar-costo alza' + (analisis.esAlertaCritica ? ' critica' : '');
-                    badgeRadar.textContent = `▲ +${analisis.porcentaje}% (ant. $${costoAnterior.toFixed(2)})`;
+                    badgeRadar.textContent = `▲ +${analisis.porcentaje}%`;
                     badgeRadar.title = `Alza detectada: El costo subió $${analisis.diferenciaMonto.toFixed(2)} (+${analisis.porcentaje}%) respecto a la última compra (Umbral: ${umbralInflacion}%).`;
                 } else if (analisis.esBaja) {
                     badgeRadar.className = 'badge-radar-costo baja';
-                    badgeRadar.textContent = `▼ ${analisis.porcentaje}% (ant. $${costoAnterior.toFixed(2)})`;
+                    badgeRadar.textContent = `▼ ${analisis.porcentaje}%`;
                     badgeRadar.title = `Costo reducido: Bajó $${Math.abs(analisis.diferenciaMonto).toFixed(2)} (${analisis.porcentaje}%) respecto a la última compra.`;
                 } else {
                     badgeRadar.className = 'badge-radar-costo igual';
-                    badgeRadar.textContent = `= Sin variación ($${costoAnterior.toFixed(2)})`;
-                    badgeRadar.title = 'El costo de compra coincide exactamente con la última factura registrada.';
+                    badgeRadar.textContent = '=';
+                    badgeRadar.title = `Sin variación: El costo coincide con la última compra ($${costoAnterior.toFixed(2)}).`;
                 }
+            } else if (vPrecio.esValido && vPrecio.valor === 0) {
+                badgeRadar.style.display = 'inline-flex';
+                badgeRadar.className = 'badge-radar-costo bonificacion';
+                badgeRadar.textContent = '0$';
+                badgeRadar.title = `Bonificación cruzada: Costo $0.00. Precios de venta basados en costo habitual ($${costoAnterior.toFixed(2)}).`;
             } else {
                 badgeRadar.style.display = 'none';
             }
@@ -147,16 +185,16 @@
                 badgeFefo.textContent = evalFefo.texto;
                 if (textoFefo) {
                     if (evalFefo.esVencido) {
-                        textoFefo.textContent = `⛔ VENCIDO: Caducó hace ${Math.abs(evalFefo.diasRestantes)} días. Prohibida venta/recepción.`;
+                        textoFefo.textContent = `[VENCIDO] Caducó hace ${Math.abs(evalFefo.diasRestantes)} días. Prohibida venta/recepción.`;
                         textoFefo.style.color = '#ef4444';
                     } else if (evalFefo.estado === Dominio.ESTADOS_FEFO.CRITICO_90D) {
-                        textoFefo.textContent = `⚠️ Advertencia MISPAS: Caduca en ${evalFefo.diasRestantes} días (<90d). Rechazo recomendado.`;
+                        textoFefo.textContent = `[ADVERTENCIA MISPAS] Caduca en ${evalFefo.diasRestantes} días (<90d). Rechazo recomendado.`;
                         textoFefo.style.color = '#fb923c';
                     } else if (evalFefo.estado === Dominio.ESTADOS_FEFO.ALERTA_180D) {
-                        textoFefo.textContent = `🟡 Precaución FEFO: Vence en ~${Math.ceil(evalFefo.diasRestantes / 30)} meses. Venta prioritaria.`;
+                        textoFefo.textContent = `[PRECAUCIÓN FEFO] Vence en ~${Math.ceil(evalFefo.diasRestantes / 30)} meses. Venta prioritaria.`;
                         textoFefo.style.color = '#facc15';
                     } else {
-                        textoFefo.textContent = `🟢 Fecha óptima de caducidad (${evalFefo.fechaNormalizada}).`;
+                        textoFefo.textContent = `[ÓPTIMO FEFO] Fecha óptima de caducidad (${evalFefo.fechaNormalizada}).`;
                         textoFefo.style.color = 'var(--color-texto-secundario)';
                     }
                 }
@@ -197,7 +235,7 @@
         }
 
         if (vCajas.esValido && vUnidades.esValido) {
-            el('resTotalUnidadesInventario').textContent = String(vCajas.valor * vUnidades.valor);
+            el('resTotalUnidadesInventario').textContent = String(vCajas.totalCajasFisicas * vUnidades.valor);
         } else {
             el('resTotalUnidadesInventario').textContent = '0';
         }
@@ -418,9 +456,21 @@
                 'Confirmar Cantidad de Cajas'
             );
             if (aceptaUnaCaja) {
-                return { esValido: true, valor: 1 };
+                return { esValido: true, valor: 1, cajasCompradas: 1, cajasBonificadas: 0, totalCajasFisicas: 1 };
             }
             return { esValido: false, error: '' };
+        }
+        if (Dominio && typeof Dominio.parsearExpresionCajas === 'function') {
+            const res = Dominio.parsearExpresionCajas(texto);
+            return {
+                esValido: res.esValido,
+                valor: res.cajasCompradas,
+                cajasCompradas: res.cajasCompradas,
+                cajasBonificadas: res.cajasBonificadas,
+                totalCajasFisicas: res.totalCajasFisicas,
+                esOferta: res.esOferta,
+                error: res.error
+            };
         }
         return Dominio.validarCantidadEnteraPositiva(texto, 'la cantidad de cajas en factura');
     }
@@ -429,6 +479,7 @@
     async function agregarProductoAFactura() {
         if (agregandoProductoEnCurso) return;
         const btnAgregar = el('btnAgregarProducto');
+        let aprendioCodigo = false;
         try {
             agregandoProductoEnCurso = true;
             if (btnAgregar) {
@@ -458,7 +509,7 @@
         const vCajas = await solicitarConfirmacionCajas(el('calcCajasCompradas').value);
         if (!vCajas.esValido) return enfocarConError('calcCajasCompradas', vCajas.error);
 
-        const vPrecio = Dominio.validarPrecioCompra(el('calcPrecioCaja').value);
+        const vPrecio = Dominio.validarPrecioCompra(el('calcPrecioCaja').value, { permitirCero: true });
         if (!vPrecio.esValido) return enfocarConError('calcPrecioCaja', vPrecio.error);
 
         const tipo = el('calcTipo').value;
@@ -491,7 +542,7 @@
             variacionCosto = analisis.porcentaje;
             if (analisis.esAlertaCritica) {
                 if (Dominio.emitirBipAlerta) Dominio.emitirBipAlerta();
-                UI.Notificaciones.mostrarMensaje(`⚠️ Alza detectada: "${prodDic.nombre || el('calcNombre').value}" subió +${analisis.porcentaje}% (+$${analisis.diferenciaMonto.toFixed(2)}/caja)`, 'warning');
+                UI.Notificaciones.mostrarMensaje(`[ALZA DE COSTO]: "${prodDic.nombre || el('calcNombre').value}" subió +${analisis.porcentaje}% (+$${analisis.diferenciaMonto.toFixed(2)}/caja)`, 'warning');
             }
         }
 
@@ -501,10 +552,10 @@
             const fefoCheck = Dominio.evaluarSemaforoFefo(fechaVencimiento);
             if (fefoCheck.esVencido) {
                 if (Dominio.emitirBipError) Dominio.emitirBipError();
-                UI.Notificaciones.mostrarMensaje(`⛔ ALERTA SANITARIA: "${el('calcNombre').value}" está VENCIDO (${fefoCheck.texto}). Prohibida su venta.`, 'error');
+                UI.Notificaciones.mostrarMensaje(`[ALERTA SANITARIA]: "${el('calcNombre').value}" está VENCIDO (${fefoCheck.texto}). Prohibida su venta.`, 'error');
             } else if (fefoCheck.estado === Dominio.ESTADOS_FEFO.CRITICO_90D) {
                 if (Dominio.emitirBipAlerta) Dominio.emitirBipAlerta();
-                UI.Notificaciones.mostrarMensaje(`⚠️ Advertencia FEFO MISPAS: Caduca en <90 días (${fefoCheck.diasRestantes} días). Prioriza venta o devolución.`, 'warning');
+                UI.Notificaciones.mostrarMensaje(`[ADVERTENCIA FEFO]: Caduca en <90 días (${fefoCheck.diasRestantes} días). Prioriza venta o devolución.`, 'warning');
             }
         }
 
@@ -512,18 +563,52 @@
         let nombreProcesado = (Dominio && typeof Dominio.sanitizarEntradaTexto === 'function')
             ? Dominio.sanitizarEntradaTexto(nombreCrudo, 120)
             : nombreCrudo;
-        if (nombreProcesado && Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
+        if (nombreProcesado && Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function') {
+            nombreProcesado = Dominio.normalizarNombreProductoMayusculas(nombreProcesado);
+        } else if (nombreProcesado && Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
             nombreProcesado = Dominio.estandarizarNombreFarmaceutico(nombreProcesado);
         }
         const nombreFinalLinea = nombreProcesado || `Producto #${sesionActual.productos.length + 1}`;
 
+        // Validación obligatoria de datos mínimos (nombre, concentración/unidad, laboratorio, tipo)
+        const datosParaValidar = {
+            nombre: nombreFinalLinea,
+            laboratorio: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio) || (prodDic && prodDic.laboratorio) || (sesionActual && sesionActual.proveedor) || '',
+            concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || '',
+            tipo,
+            unidadesPorCaja: vUnidades.valor,
+            precioCajaBase: vPrecio.valor,
+            permitirCero: true,
+            esBonificacionCruzada: vPrecio.valor === 0,
+            aplicaItbis
+        };
+
+        if (Dominio && typeof Dominio.validarDatosMinimosProducto === 'function') {
+            const resMin = Dominio.validarDatosMinimosProducto(datosParaValidar);
+            if (!resMin.esValido) {
+                const targetInput = resMin.campo === 'unidadesPorCaja' ? 'calcUnidadesCaja' : (resMin.campo === 'precioCaja' ? 'calcPrecioCaja' : 'calcNombre');
+                return enfocarConError(targetInput, resMin.error);
+            }
+        }
+
         const nuevaLinea = Dominio.crearLineaProductoInmutable({
             codigoBarras: el('calcCodigoBarras').value,
             nombre: nombreFinalLinea,
+            nombreComercial: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.nombreComercial) || (prodDic && prodDic.nombreComercial) || nombreFinalLinea,
+            principioActivo: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.principioActivo) || (prodDic && prodDic.principioActivo) || '',
+            laboratorio: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio) || (prodDic && prodDic.laboratorio) || (sesionActual && sesionActual.proveedor) || '',
+            costoReferencia: costoAnteriorCaja,
+            esBonificacionCruzada: vPrecio.valor === 0,
+            concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || '',
+            formaFarmaceutica: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.formaFarmaceutica) || (prodDic && prodDic.formaFarmaceutica) || '',
+            registroSanitario: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.registroSanitario) || (prodDic && prodDic.registroSanitario) || '',
+            condicionVenta: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.condicionVenta) || (prodDic && prodDic.condicionVenta) || 'OTC',
+            cadenaFrio: Boolean(fichaVademecumSeleccionada && fichaVademecumSeleccionada.cadenaFrio),
             tipo,
             precioCajaBase: vPrecio.valor,
             unidadesPorCaja: vUnidades.valor,
-            cajasCompradas: vCajas.valor,
+            cajasCompradas: vCajas.cajasCompradas !== undefined ? vCajas.cajasCompradas : vCajas.valor,
+            cajasBonificadas: vCajas.cajasBonificadas !== undefined ? vCajas.cajasBonificadas : 0,
             aplicaItbis,
             tasaItbis: tasaItbisSeleccionada,
             esLeche,
@@ -535,8 +620,9 @@
             fechaVencimiento
         }, reglasEfectivas);
 
-        const aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea, sesionActual);
+        aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea, sesionActual);
         Estado.agregarProductoASesion(nuevaLinea);
+        fichaVademecumSeleccionada = null;
         } finally {
             agregandoProductoEnCurso = false;
             if (btnAgregar) {
@@ -649,6 +735,19 @@
                 }
                 return;
             }
+            if (e.altKey && (e.key === 'b' || e.key === 'B' || e.code === 'KeyB')) {
+                e.preventDefault();
+                const cajasInput = el('calcCajasCompradas');
+                if (cajasInput) {
+                    cajasInput.focus();
+                    if (!cajasInput.value.includes('+')) {
+                        cajasInput.value = (cajasInput.value.trim() || '1') + '+';
+                    }
+                    cajasInput.selectionStart = cajasInput.selectionEnd = cajasInput.value.length;
+                    cajasInput.dispatchEvent(new Event('input'));
+                }
+                return;
+            }
             if (e.key === 'Escape') {
                 const inputCod = el('calcCodigoBarras');
                 const modalAtajos = el('modalAtajosAyuda');
@@ -663,7 +762,7 @@
             }
         });
 
-        seccionCalc.addEventListener('keydown', e => {
+        if (seccionCalc) seccionCalc.addEventListener('keydown', e => {
             const esCampoTexto = e.target.id === 'calcNombre' || e.target.id === 'calcCodigoBarras';
             const presionaEspacio = (e.code === 'Space' || e.key === ' ') && (!esCampoTexto || e.ctrlKey);
 
@@ -842,7 +941,7 @@
         const Estado = AppFarmacia.Estado;
         borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
 
-        el('btnToggleCandadoReglas').addEventListener('click', async () => {
+        if (el("btnToggleCandadoReglas")) el("btnToggleCandadoReglas").addEventListener('click', async () => {
             const estaBloqueado = el('fieldsetReglas').disabled;
             if (estaBloqueado) {
                 const desbloquear = await UI.Notificaciones.mostrarConfirmacion('¿Deseas desbloquear la configuración de fórmulas matemáticas para editarlas?', 'Desbloquear Fórmulas');
@@ -857,7 +956,7 @@
             }
         });
 
-        el('cfgEstrategia').addEventListener('change', () => {
+        if (el("cfgEstrategia")) el("cfgEstrategia").addEventListener('change', () => {
             const nuevaEstrategia = el('cfgEstrategia').value;
             const perfilDeEsaFormula = borradorPerfilesEdicion[nuevaEstrategia] || { p1: 30, p2: 5, p3: 5 };
             actualizarEtiquetasReglasUI({
@@ -893,7 +992,7 @@
             if (el(id)) el(id).addEventListener('input', previsualizarCambiosReglas);
         });
 
-        el('btnGuardarReglas').addEventListener('click', () => {
+        if (el("btnGuardarReglas")) el("btnGuardarReglas").addEventListener('click', () => {
             const estActual = el('cfgEstrategia').value;
             borradorPerfilesEdicion[estActual] = {
                 p1: Number(el('cfgP1Pct').value) || 0,
@@ -924,7 +1023,7 @@
             UI.Notificaciones.mostrarMensaje('Fórmula actualizada y bloqueada exitosamente.', 'success');
         });
 
-        el('btnRestaurarReglasDefecto').addEventListener('click', () => {
+        if (el("btnRestaurarReglasDefecto")) el("btnRestaurarReglasDefecto").addEventListener('click', () => {
             const resRestaurado = Almacenamiento.guardarReglasNegocio(AppFarmacia.Configuracion.REGLAS_NEGOCIO_POR_DEFECTO);
             Estado.reglasActivas = resRestaurado.reglas;
             borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
@@ -938,7 +1037,7 @@
     }
 
     function inicializarEventosCalculadora() {
-        el('calcTipo').addEventListener('change', actualizarVisibilidadCategoria);
+        if (el("calcTipo")) el("calcTipo").addEventListener('change', actualizarVisibilidadCategoria);
         ['calcCajasCompradas', 'calcPrecioCaja', 'calcUnidadesCaja', 'calcLote', 'calcVencimiento'].forEach(id => {
             if (el(id)) el(id).addEventListener('input', dispararCalculoDebounced);
         });
@@ -947,7 +1046,7 @@
         // UX-08: Bloqueo físico de letras y símbolos en entradas numéricas
         if (typeof UI.configurarFiltroNumerico === 'function') {
             UI.configurarFiltroNumerico(el('calcCodigoBarras'), false);
-            UI.configurarFiltroNumerico(el('calcCajasCompradas'), false);
+            UI.configurarFiltroNumerico(el('calcCajasCompradas'), false, true);
             UI.configurarFiltroNumerico(el('calcUnidadesCaja'), false);
             UI.configurarFiltroNumerico(el('calcPrecioCaja'), true);
             UI.configurarFiltroNumerico(el('cfgItbisPct'), true);
@@ -1020,10 +1119,12 @@
         if (btnItbis18) btnItbis18.addEventListener('click', () => fijarItbis(18));
         if (btnItbis16) btnItbis16.addEventListener('click', () => fijarItbis(16));
 
-        // Autocompletado fonético difuso farmacológico para Nombre de Producto
+        // Autocompletado fonético difuso farmacológico para Nombre de Producto (Catálogo Local + Vademécum RD)
         const inputNombre = el('calcNombre');
         const datalistSugerencias = el('listaSugerenciasProductos');
         if (inputNombre && datalistSugerencias) {
+            inputNombre.style.textTransform = 'uppercase';
+
             inputNombre.addEventListener('input', () => {
                 const val = inputNombre.value.trim();
                 if (val.length < 2) {
@@ -1031,24 +1132,49 @@
                     return;
                 }
                 const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
-                const coincidencias = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
+                const coincidenciasDic = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
                     ? Dominio.buscarEnCatalogoFuzzy(val, diccionario, 6)
                     : [];
 
-                datalistSugerencias.innerHTML = coincidencias.map(p => {
-                    const descCosto = p.ultimoPrecioCaja ? ` - ${Number(p.ultimoPrecioCaja).toFixed(2)}` : '';
+                const coincidenciasVad = (Almacenamiento && typeof Almacenamiento.buscarEnVademecum === 'function')
+                    ? Almacenamiento.buscarEnVademecum(val, 6)
+                    : [];
+
+                const htmlDic = coincidenciasDic.map(p => {
+                    const descCosto = p.ultimoPrecioCaja ? ` - $${Number(p.ultimoPrecioCaja).toFixed(2)}` : '';
                     const nom = Dominio.escaparHtml(p.nombre || p.nombreComercial || '');
                     const cod = Dominio.escaparHtml(p.codigoBarras || '');
-                    return `<option value="${nom}" label="${nom} [${cod}]${descCosto}"></option>`;
+                    return `<option value="${nom}" label="[EN FARMACIA] ${nom} [${cod}]${descCosto}"></option>`;
                 }).join('');
+
+                const htmlVad = coincidenciasVad.map(v => {
+                    const nom = Dominio.escaparHtml(v.nombreComercial || v.nombre || '');
+                    const lab = Dominio.escaparHtml(v.laboratorio || '');
+                    const conc = Dominio.escaparHtml(v.concentracion || '');
+                    return `<option value="${nom}" label="[VADEMÉCUM RD] ${nom} - ${lab} (${conc})"></option>`;
+                }).join('');
+
+                datalistSugerencias.innerHTML = htmlDic + htmlVad;
             });
 
             inputNombre.addEventListener('change', () => {
                 const val = inputNombre.value.trim();
                 if (!val) return;
+
+                const valMayus = (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
+                    ? Dominio.normalizarNombreProductoMayusculas(val)
+                    : val.toUpperCase();
+                inputNombre.value = valMayus;
+
                 const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
-                const encontrado = Object.values(diccionario || {}).find(p => p && (p.nombre === val || p.nombreComercial === val));
+                const encontrado = Object.values(diccionario || {}).find(p => p && (
+                    (p.nombre && p.nombre.toUpperCase() === valMayus) ||
+                    (p.nombreComercial && p.nombreComercial.toUpperCase() === valMayus) ||
+                    p.nombre === val || p.nombreComercial === val
+                ));
+
                 if (encontrado) {
+                    fichaVademecumSeleccionada = null;
                     if (el('calcCodigoBarras') && !el('calcCodigoBarras').value && encontrado.codigoBarras) {
                         el('calcCodigoBarras').value = encontrado.codigoBarras;
                     }
@@ -1073,6 +1199,34 @@
                     const tasa = encontrado.tasaItbis !== undefined ? Number(encontrado.tasaItbis) : (encontrado.aplicaItbis ? 18 : 0);
                     fijarItbis(tasa);
                     calcularEnVivo();
+                } else if (Almacenamiento && typeof Almacenamiento.buscarEnVademecum === 'function') {
+                    const matchesVad = Almacenamiento.buscarEnVademecum(valMayus, 3);
+                    const encontradoVad = matchesVad.find(v => (v.nombreComercial || v.nombre || '').toUpperCase() === valMayus) || matchesVad[0];
+                    if (encontradoVad) {
+                        fichaVademecumSeleccionada = encontradoVad;
+                        inputNombre.value = (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
+                            ? Dominio.normalizarNombreProductoMayusculas(encontradoVad.nombreComercial || encontradoVad.nombre)
+                            : (encontradoVad.nombreComercial || encontradoVad.nombre).toUpperCase();
+
+                        const forma = (encontradoVad.formaFarmaceutica || '').toLowerCase();
+                        const esDivisible = /tableta|c[aá]psula|comprimido|ampolla|sobre|bl[ií]ster/i.test(forma);
+                        if (el('calcTipo')) {
+                            el('calcTipo').value = esDivisible ? CONSTANTES.CATEGORIAS.DIVISIBLE : CONSTANTES.CATEGORIAS.ENTERO;
+                            actualizarVisibilidadCategoria();
+                        }
+                        fijarItbis(0); // Medicamentos 0% exento DGII Art. 343
+                        if (encontradoVad.cadenaFrio) {
+                            UI.Notificaciones.mostrarMensaje(`[CADENA DE FRÍO]: "${encontradoVad.nombreComercial}" requiere 2°C a 8°C.`, 'warning');
+                        } else {
+                            UI.Notificaciones.mostrarMensaje(`[ENLAZADO GS1]: Medicamento de Vademécum (${encontradoVad.laboratorio}). Se enlazará al código escaneado al agregar.`, 'info');
+                        }
+                        calcularEnVivo();
+                        if (el('calcPrecioCaja') && !el('calcPrecioCaja').value) {
+                            el('calcPrecioCaja').focus();
+                        } else {
+                            el('calcCajasCompradas').focus();
+                        }
+                    }
                 }
             });
         }
@@ -1099,10 +1253,10 @@
             });
         }
 
-        el('calcItbis').addEventListener('change', () => {
+        if (el("calcItbis")) el("calcItbis").addEventListener('change', () => {
             fijarItbis(el('calcItbis').checked ? 18 : 0);
         });
-        el('calcRedondeo').addEventListener('change', () => {
+        if (el("calcRedondeo")) el("calcRedondeo").addEventListener('change', () => {
             calcularEnVivo();
             UI.Factura.renderizarTablaProductosActuales();
         });
@@ -1113,7 +1267,7 @@
             try {
                 chkConItbis.checked = localStorage.getItem('farmacia_mostrar_con_itbis') === '1';
             } catch (_) {}
-            chkConItbis.addEventListener('change', () => {
+            if (chkConItbis) chkConItbis.addEventListener('change', () => {
                 try {
                     localStorage.setItem('farmacia_mostrar_con_itbis', chkConItbis.checked ? '1' : '0');
                 } catch (_) {}
@@ -1121,7 +1275,7 @@
             });
         }
 
-        el('btnAgregarProducto').addEventListener('click', agregarProductoAFactura);
+        if (el("btnAgregarProducto")) el("btnAgregarProducto").addEventListener('click', agregarProductoAFactura);
 
         // Copiado con micro-animación táctil y checkmark
         document.querySelectorAll('[data-copiar]').forEach(btn => {

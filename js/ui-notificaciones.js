@@ -67,8 +67,8 @@
         });
     }
 
-    // --- UX-08: Filtro estricto anti-letras para casillas y entradas numéricas ---
-    function configurarFiltroNumerico(input, esDecimal = false) {
+    // --- UX-08: Filtro estricto anti-letras para casillas y entradas numéricas (con soporte opcional de oferta Compradas+Bonificadas) ---
+    function configurarFiltroNumerico(input, esDecimal = false, permitirOferta = false) {
         if (!input) return null;
 
         const onKeyDown = e => {
@@ -102,8 +102,26 @@
                 return;
             }
 
+            // Si permite oferta de droguería (ej: 10+2), permitir el signo + siempre que no exista ya uno
+            if (permitirOferta && e.key === '+') {
+                const tieneMas = input.value.includes('+');
+                if (tieneMas) {
+                    let estaSeleccionado = false;
+                    try {
+                        if (typeof input.selectionStart === 'number' && typeof input.selectionEnd === 'number') {
+                            const sel = input.value.substring(input.selectionStart, input.selectionEnd);
+                            estaSeleccionado = sel.includes('+');
+                        }
+                    } catch (_) {}
+                    if (!estaSeleccionado) {
+                        e.preventDefault();
+                        return;
+                    }
+                }
+                return;
+            }
+
             // Bloquear cualquier carácter que no sea un dígito 0-9
-            // (bloquea letras 'e', 'E', 'a'..'z', signos '-', '+', espacios y símbolos)
             if (!/^[0-9]$/.test(e.key)) {
                 e.preventDefault();
             }
@@ -117,6 +135,12 @@
                 const partes = val.split('.');
                 if (partes.length > 2) {
                     val = partes[0] + '.' + partes.slice(1).join('');
+                }
+            } else if (permitirOferta) {
+                val = val.replace(/[^0-9+]/g, '');
+                const partes = val.split('+');
+                if (partes.length > 2) {
+                    val = partes[0] + '+' + partes.slice(1).join('');
                 }
             } else {
                 val = val.replace(/[^0-9]/g, '');

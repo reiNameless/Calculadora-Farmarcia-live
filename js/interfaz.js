@@ -76,6 +76,12 @@
         el('facFechaEmision').value = sesionActual.fechaEmision;
         el('facFechaVencimiento').value = sesionActual.fechaVencimiento;
         el('facTotalFisico').value = sesionActual.totalFisico || '';
+        if (el('facDescuentoGlobal')) {
+            el('facDescuentoGlobal').value = sesionActual.descuentoGlobalValor || '';
+            if (UI.Factura && typeof UI.Factura.establecerModoDescuentoGlobal === 'function') {
+                UI.Factura.establecerModoDescuentoGlobal(sesionActual.descuentoGlobalTipo || 'monto');
+            }
+        }
         el('avisoEdicion').style.display = sesionActual.id ? 'flex' : 'none';
         el('txtFinalizar').textContent = sesionActual.id ? 'Guardar cambios y cerrar' : 'Finalizar y Guardar';
         el('txtDescartar').textContent = sesionActual.id ? 'Salir de edición' : 'Descartar factura';
@@ -210,10 +216,10 @@
             });
 
             // Eventos IA
-            el('iaApiKey').addEventListener('change', e => {
+            if (el('iaApiKey')) el('iaApiKey').addEventListener('change', e => {
                 sessionStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY, e.target.value.trim());
             });
-            el('iaModelo').addEventListener('change', e => {
+            if (el('iaModelo')) el('iaModelo').addEventListener('change', e => {
                 localStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_MODELO, e.target.value.trim());
             });
 
@@ -259,7 +265,7 @@
                 }
             }
 
-            el('iaImagenInput').addEventListener('change', async e => {
+            if (el('iaImagenInput')) el('iaImagenInput').addEventListener('change', async e => {
                 await procesarArchivosFacturaIA(e.target.files);
                 e.target.value = '';
             });

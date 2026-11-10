@@ -89,7 +89,7 @@
     }
 
     // Validación numérica pura sin expresiones regulares frágiles
-    function validarPrecioCompra(entradaCruda) {
+    function validarPrecioCompra(entradaCruda, opciones = {}) {
         const textoLimpio = String(entradaCruda ?? '').trim().replace(',', '.');
         if (textoLimpio === '') {
             return { esValido: false, error: 'Escribe el precio de compra de 1 caja o frasco.' };
@@ -98,13 +98,146 @@
         const maxPrecio = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS)
             ? AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS.MAX_PRECIO_COMPRA
             : 50000000;
-        if (!Number.isFinite(numero) || numero <= 0) {
-            return { esValido: false, error: 'El precio de compra debe ser un número mayor que 0.' };
+        const permitirCero = Boolean(opciones && (opciones.permitirCero || opciones.esBonificacion));
+        if (!Number.isFinite(numero) || (permitirCero ? numero < 0 : numero <= 0)) {
+            return { esValido: false, error: permitirCero ? 'El precio de compra debe ser un número mayor o igual a 0.' : 'El precio de compra debe ser un número mayor que 0.' };
         }
         if (numero > maxPrecio) {
             return { esValido: false, error: 'El precio de compra no puede superar RD$ ' + maxPrecio.toLocaleString() + '.' };
         }
         return { esValido: true, valor: numero };
+    }
+
+    /**
+     * Parsea expresiones de cajas con soporte para micro-sintaxis de bonificación de droguerías (ej. "10", "10+2", "5+1").
+     * @param {string|number} entrada
+     * @returns {{ esValido: boolean, cajasCompradas: number, cajasBonificadas: number, totalCajasFisicas: number, esOferta: boolean, textoNormalizado: string, error?: string, vacio?: boolean }}
+     */
+    function parsearExpresionCajas(entrada) {
+        if (entrada === null || entrada === undefined) {
+            return { esValido: false, vacio: true, error: 'La cantidad de cajas no puede estar vacía.', cajasCompradas: 1, cajasBonificadas: 0, totalCajasFisicas: 1, esOferta: false, textoNormalizado: '' };
+        }
+        const texto = String(entrada).trim();
+        if (texto === '') {
+            return { esValido: false, vacio: true, error: 'La cantidad de cajas no puede estar vacía.', cajasCompradas: 1, cajasBonificadas: 0, totalCajasFisicas: 1, esOferta: false, textoNormalizado: '' };
+        }
+
+        const maxCajas = (AppFarmacia && AppFarmacia.Configuracion && AppFarmacia.Configuracion.CONSTANTES && AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS)
+            ? AppFarmacia.Configuracion.CONSTANTES.LIMITES_CAMPOS.MAX_CAJAS
+            : 100000;
+
+        // Si contiene más de un signo +, es sintaxis inválida
+        const partesMas = texto.split('+');
+        if (partesMas.length > 2) {
+            return {
+                esValido: false,
+                error: 'Formato de oferta inválido. Usa la estructura Compradas+Bonificadas (ej. 10+2).',
+                cajasCompradas: 1,
+                cajasBonificadas: 0,
+                totalCajasFisicas: 1,
+                esOferta: false,
+                textoNormalizado: texto
+            };
+        }
+
+        // Caso estándar: número entero sin bonificación (ej: "10")
+        if (partesMas.length === 1) {
+            const num = Number(texto);
+            if (!Number.isFinite(num) || !Number.isInteger(num) || texto.includes('.') || texto.includes(',') || num <= 0) {
+                return {
+                    esValido: false,
+                    error: 'La cantidad de cajas debe ser un número entero mayor que cero.',
+                    cajasCompradas: 1,
+                    cajasBonificadas: 0,
+                    totalCajasFisicas: 1,
+                    esOferta: false,
+                    textoNormalizado: texto
+                };
+            }
+            if (num > maxCajas) {
+                return {
+                    esValido: false,
+                    error: 'La cantidad de cajas no puede superar ' + maxCajas.toLocaleString() + '.',
+                    cajasCompradas: 1,
+                    cajasBonificadas: 0,
+                    totalCajasFisicas: 1,
+                    esOferta: false,
+                    textoNormalizado: texto
+                };
+            }
+            return {
+                esValido: true,
+                cajasCompradas: num,
+                cajasBonificadas: 0,
+                totalCajasFisicas: num,
+                esOferta: false,
+                textoNormalizado: String(num)
+            };
+        }
+
+        // Caso oferta: expresión con + (ej: "10+2" o "10 + 2")
+        const strCompradas = partesMas[0].trim();
+        const strBonificadas = partesMas[1].trim();
+
+        if (strCompradas === '') {
+            return {
+                esValido: false,
+                error: 'Indica cuántas cajas fueron compradas antes del signo + (ej. 10+2).',
+                cajasCompradas: 1,
+                cajasBonificadas: 0,
+                totalCajasFisicas: 1,
+                esOferta: false,
+                textoNormalizado: texto
+            };
+        }
+
+        const numCompradas = Number(strCompradas);
+        if (!Number.isFinite(numCompradas) || !Number.isInteger(numCompradas) || strCompradas.includes('.') || strCompradas.includes(',') || numCompradas <= 0) {
+            return {
+                esValido: false,
+                error: 'Las cajas compradas deben ser un número entero mayor que cero.',
+                cajasCompradas: 1,
+                cajasBonificadas: 0,
+                totalCajasFisicas: 1,
+                esOferta: false,
+                textoNormalizado: texto
+            };
+        }
+
+        const numBonificadas = strBonificadas === '' ? 0 : Number(strBonificadas);
+        if (!Number.isFinite(numBonificadas) || !Number.isInteger(numBonificadas) || strBonificadas.includes('.') || strBonificadas.includes(',') || numBonificadas < 0) {
+            return {
+                esValido: false,
+                error: 'Las cajas bonificadas deben ser un número entero mayor o igual a cero.',
+                cajasCompradas: numCompradas,
+                cajasBonificadas: 0,
+                totalCajasFisicas: numCompradas,
+                esOferta: false,
+                textoNormalizado: texto
+            };
+        }
+
+        const totalFisicas = numCompradas + numBonificadas;
+        if (totalFisicas > maxCajas) {
+            return {
+                esValido: false,
+                error: 'El total de cajas físicas no puede superar ' + maxCajas.toLocaleString() + '.',
+                cajasCompradas: numCompradas,
+                cajasBonificadas: numBonificadas,
+                totalCajasFisicas: totalFisicas,
+                esOferta: numBonificadas > 0,
+                textoNormalizado: texto
+            };
+        }
+
+        return {
+            esValido: true,
+            cajasCompradas: numCompradas,
+            cajasBonificadas: numBonificadas,
+            totalCajasFisicas: totalFisicas,
+            esOferta: numBonificadas > 0,
+            textoNormalizado: numBonificadas > 0 ? (numCompradas + '+' + numBonificadas) : String(numCompradas)
+        };
     }
 
     function validarCantidadEnteraPositiva(entradaCruda, descripcionCampo) {
@@ -273,6 +406,8 @@
         const reglasSeguras = sanitizarReglasNegocio(reglas);
         const unidades = Math.max(1, Number(unidadesPorCaja) || 1);
         const cajas = Math.max(1, Number(opciones.cajasCompradas) || 1);
+        const cajasBonificadas = Math.max(0, Number(opciones.cajasBonificadas) || 0);
+        const totalCajasFisicas = cajas + cajasBonificadas;
         const esLeche = Boolean(opciones.esLeche);
         const descuentoValor = Math.max(0, Number(opciones.descuentoValor) || 0);
         const tipoDescuento = opciones.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto';
@@ -290,7 +425,7 @@
             }
         }
 
-        // 2. Factura de Compra (Cuadre con Droguería / Proveedor y DGII 606)
+        // 2. Factura de Compra (Cuadre con Droguería / Proveedor y DGII 606 - Estrictamente sobre cajas cobradas)
         const totalBaseCompra = precioCajaBase * cajas;
         const totalNetoCompra = Math.max(0, totalBaseCompra - descuentoTotalLinea);
         const tasaEfectiva = aplicaItbis ? Number(reglasSeguras.porcentajeItbis) : 0;
@@ -301,14 +436,22 @@
         const montoItbisPorCaja = cajas > 0 ? redondearDecimalExacto(montoItbisTotal / cajas, CONSTANTES.DECIMALES_MONEDA) : 0;
         const costoCajaEfectivo = cajas > 0 ? redondearDecimalExacto(totalNetoCompra / cajas, CONSTANTES.DECIMALES_MONEDA) : 0;
 
-        // 3. Costo Unitario Fiscal REAL (Sin ITBIS): Inversión neta en mercancía entre el total de unidades
-        const totalUnidades = cajas * unidades;
-        const costoUnitarioReal = totalUnidades > 0 ? (totalNetoCompra / totalUnidades) : 0;
+        // 3. Costo Unitario Fiscal REAL (Sin ITBIS): Inversión neta en mercancía entre el total de unidades FÍSICAS recibidas
+        const totalUnidadesFacturadas = cajas * unidades;
+        const totalUnidadesFisicas = totalCajasFisicas * unidades;
+        const costoUnitarioReal = totalUnidadesFisicas > 0 ? (totalNetoCompra / totalUnidadesFisicas) : 0;
         const precioCajaNeto = cajas > 0 ? (totalNetoCompra / cajas) : 0;
 
-        // 4. Precios de Venta (P1, P2, P3): calculados sobre el costo base de compra (sin descuento)
-        const totalBaseVenta = precioCajaBase * cajas;
-        const costoUnitarioBaseVenta = totalUnidades > 0 ? (totalBaseVenta / totalUnidades) : 0;
+        // 4. Precios de Venta (P1, P2, P3): calculados sobre el costo base de compra (sin descuento y sin dilución de oferta)
+        // La farmacia retiene la bonificación como utilidad comercial legítima (a menos que configure 'trasladar')
+        const esBonificacionCruzada = precioCajaBase <= 0;
+        const costoBaseReferencia = (esBonificacionCruzada && Number(opciones.costoReferencia) > 0)
+            ? Number(opciones.costoReferencia)
+            : precioCajaBase;
+        const costoUnitarioBaseVenta = (totalUnidadesFacturadas > 0 || (esBonificacionCruzada && unidades > 0))
+            ? (costoBaseReferencia / unidades)
+            : 0;
+        const costoParaPvp = (reglasSeguras.politicaOferta === 'trasladar' && !esBonificacionCruzada) ? costoUnitarioReal : costoUnitarioBaseVenta;
 
         // Margen P1: Leche usa 10% (costo * 1.10), otros productos usan porcentajePrecio1 activo (ej: +30%)
         const f1 = esLeche ? 0.10 : (reglasSeguras.porcentajePrecio1 / 100);
@@ -316,7 +459,7 @@
         const f3 = reglasSeguras.porcentajePrecio3 / 100;
 
         const calculador = ESTRATEGIAS_DISPATCH[reglasSeguras.estrategia] || ESTRATEGIAS_DISPATCH[ESTRATEGIAS_CALCULO.CASCADA_DESCUENTO];
-        const { p1Bruto: p1Neto, p2Bruto: p2Neto, p3Bruto: p3Neto } = calculador(costoUnitarioBaseVenta, f1, f2, f3);
+        const { p1Bruto: p1Neto, p2Bruto: p2Neto, p3Bruto: p3Neto } = calculador(costoParaPvp, f1, f2, f3);
 
         // 5. ITBIS aplicado al producto en sí (no al costo de compra)
         const factorItbis = (aplicaItbis && tasaEfectiva > 0) ? (1 + (tasaEfectiva / 100)) : 1;
@@ -337,9 +480,20 @@
         const p2Bruto = mostrarConItbis ? p2ConItbis : p2Neto;
         const p3Bruto = mostrarConItbis ? p3ConItbis : p3Neto;
 
+        const ahorroDilucionMonto = redondearDecimalExacto(Math.max(0, costoUnitarioBaseVenta - costoUnitarioReal), 8);
+
         return Object.freeze({
             precioCajaBase,
             precioCajaNeto: redondearDecimalExacto(precioCajaNeto, CONSTANTES.DECIMALES_MONEDA),
+            cajasCompradas: cajas,
+            cajasBonificadas,
+            totalCajasFisicas,
+            totalUnidadesFacturadas,
+            totalUnidadesFisicas,
+            esOfertaBonificacion: cajasBonificadas > 0 || esBonificacionCruzada,
+            esBonificacionCruzada,
+            costoReferencia: Number(opciones.costoReferencia) || 0,
+            ahorroDilucionMonto,
             descuentoValor,
             tipoDescuento,
             descuentoPorCaja: redondearDecimalExacto(descuentoPorCaja, CONSTANTES.DECIMALES_MONEDA),
@@ -389,7 +543,22 @@
         const esEntero = datosEntrada.tipo === CONSTANTES.CATEGORIAS.ENTERO;
         const tipo = esEntero ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
         const unidadesPorCaja = esEntero ? 1 : Number(datosEntrada.unidadesPorCaja);
-        const cajasCompradas = Number(datosEntrada.cajasCompradas);
+
+        // Soporte para micro-sintaxis en datosEntrada.cajasCompradas (ej: "10+2")
+        let cajasCompradas = 1;
+        let cajasBonificadas = Math.max(0, Number(datosEntrada.cajasBonificadas) || 0);
+        if (typeof datosEntrada.cajasCompradas === 'string' && datosEntrada.cajasCompradas.includes('+')) {
+            const p = parsearExpresionCajas(datosEntrada.cajasCompradas);
+            if (p.esValido) {
+                cajasCompradas = p.cajasCompradas;
+                cajasBonificadas = p.cajasBonificadas;
+            } else {
+                cajasCompradas = Math.max(1, Number(datosEntrada.cajasCompradas) || 1);
+            }
+        } else {
+            cajasCompradas = Math.max(1, Number(datosEntrada.cajasCompradas) || 1);
+        }
+
         const precioCajaBase = Number(datosEntrada.precioCajaBase);
         const aplicaItbis = Boolean(datosEntrada.aplicaItbis);
         const tasaItbisEntrada = (datosEntrada.tasaItbis !== undefined && datosEntrada.tasaItbis !== null)
@@ -410,9 +579,11 @@
 
         const calculos = calcularDesglosePrecios(precioCajaBase, unidadesPorCaja, aplicaItbisEfectivo, reglasEfectivas, {
             cajasCompradas,
+            cajasBonificadas,
             esLeche,
             descuentoValor,
-            tipoDescuento
+            tipoDescuento,
+            costoReferencia: datosEntrada.costoReferencia
         });
         const montoItbisLinea = calculos.montoItbisTotal;
         const costoAnteriorCaja = (datosEntrada.costoAnteriorCaja !== undefined && Number(datosEntrada.costoAnteriorCaja) > 0)
@@ -437,7 +608,13 @@
             descuentoPorCaja: calculos.descuentoPorCaja,
             esLeche,
             unidadesPorCaja,
-            cajasCompradas,
+            cajasCompradas: calculos.cajasCompradas,
+            cajasBonificadas: calculos.cajasBonificadas,
+            totalCajasFisicas: calculos.totalCajasFisicas,
+            esOfertaBonificacion: calculos.esOfertaBonificacion,
+            esBonificacionCruzada: Boolean(calculos.esBonificacionCruzada || precioCajaBase === 0),
+            costoReferencia: Number(datosEntrada.costoReferencia) || 0,
+            ahorroDilucionMonto: calculos.ahorroDilucionMonto,
             aplicaItbis: aplicaItbisEfectivo,
             tasaItbis: tasaItbisEfectiva,
             montoItbisPorCaja: calculos.montoItbisPorCaja,
@@ -463,19 +640,19 @@
             p1ConItbisExacto: calculos.p1ConItbisExacto,
             itbisP1Monto: calculos.itbisP1Monto,
             mostrarPreciosConItbis: calculos.mostrarPreciosConItbis,
-            totalUnidadesInventario: cajasCompradas * unidadesPorCaja,
+            totalUnidadesInventario: calculos.totalUnidadesFisicas,
             subtotalFactura: calculos.subtotalFactura
         });
     }
 
-    function calcularResumenCuadreFactura(listaProductos, totalFisicoEsperado) {
+    function calcularResumenCuadreFactura(listaProductos, totalFisicoEsperado, opciones = {}) {
         const productos = listaProductos || [];
         let totalBrutoAcumulado = 0;
         let totalDescuentoAcumulado = 0;
         let totalExentoAcumulado = 0;
         let totalGravadoAcumulado = 0;
         let totalItbisAcumulado = 0;
-        let sumaAcumulada = 0;
+        let sumaAcumuladaLineas = 0;
 
         productos.forEach(prod => {
             const cajas = Math.max(1, Number(prod.cajasCompradas) || 1);
@@ -505,9 +682,22 @@
                 ? Number(prod.subtotalFactura)
                 : redondearDecimalExacto(netoLinea + itbisLinea, CONSTANTES.DECIMALES_MONEDA);
 
-            sumaAcumulada = redondearDecimalExacto(sumaAcumulada + subtotalLinea, CONSTANTES.DECIMALES_MONEDA);
+            sumaAcumuladaLineas = redondearDecimalExacto(sumaAcumuladaLineas + subtotalLinea, CONSTANTES.DECIMALES_MONEDA);
         });
 
+        // Descuento Global a pie de factura (opcional)
+        const descGlobalValor = Math.max(0, Number(opciones.descuentoGlobalValor) || 0);
+        const descGlobalTipo = opciones.descuentoGlobalTipo === 'porcentaje' ? 'porcentaje' : 'monto';
+        let montoDescuentoGlobal = 0;
+        if (descGlobalValor > 0 && sumaAcumuladaLineas > 0) {
+            if (descGlobalTipo === 'porcentaje') {
+                montoDescuentoGlobal = redondearDecimalExacto(sumaAcumuladaLineas * (descGlobalValor / 100), CONSTANTES.DECIMALES_MONEDA);
+            } else {
+                montoDescuentoGlobal = redondearDecimalExacto(Math.min(descGlobalValor, sumaAcumuladaLineas), CONSTANTES.DECIMALES_MONEDA);
+            }
+        }
+
+        const sumaAcumulada = redondearDecimalExacto(Math.max(0, sumaAcumuladaLineas - montoDescuentoGlobal), CONSTANTES.DECIMALES_MONEDA);
         const subtotalBaseAcumulado = redondearDecimalExacto(
             totalExentoAcumulado + totalGravadoAcumulado,
             CONSTANTES.DECIMALES_MONEDA
@@ -523,6 +713,10 @@
             totalGravadoAcumulado,
             totalItbisAcumulado,
             subtotalBaseAcumulado,
+            sumaAcumuladaLineas,
+            descuentoGlobalValor: descGlobalValor,
+            descuentoGlobalTipo: descGlobalTipo,
+            montoDescuentoGlobal,
             sumaAcumulada,
             totalFisico,
             diferencia,
@@ -2095,6 +2289,123 @@
         return c;
     }
 
+    // --- NORMALIZACIÓN EN MAYÚSCULAS Y ESTANDARIZACIÓN DE MEDICAMENTOS ---
+    function normalizarNombreProductoMayusculas(nombreRaw) {
+        if (!nombreRaw || typeof nombreRaw !== 'string') return '';
+        let s = nombreRaw.trim();
+        if (!s) return '';
+
+        // 1. Colapsar espacios múltiples y saltos
+        s = s.replace(/\s+/g, ' ');
+
+        // 2. Normalizar operadores (+, /) con espaciado uniforme
+        s = s.replace(/\s*\/\s*/g, ' / ');
+        s = s.replace(/\s*\+\s*/g, ' + ');
+        s = s.replace(/(\d+(?:\.\d+)?)\s*%/g, '$1%');
+
+        // 3. Normalizar unidades de dosificación en MAYÚSCULAS separadas por espacio: 500mg -> 500 MG, 1g -> 1 G
+        s = s.replace(/(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|l|ui|iu|meq|cm3|mm|kg|µg|ug)\b/gi, (match, num, unit) => {
+            return num + ' ' + unit.toUpperCase();
+        });
+
+        // 4. Formas farmacéuticas abreviadas normalizadas en mayúsculas
+        s = s.replace(/\bTABS?\b/gi, 'TABLETAS');
+        s = s.replace(/\bCAPS?\b/gi, 'CÁPSULAS');
+        s = s.replace(/\bJBE\b/gi, 'JARABE');
+        s = s.replace(/\bSUSP\b/gi, 'SUSPENSIÓN');
+        s = s.replace(/\bAMP\b/gi, 'AMPOLLAS');
+        s = s.replace(/\bCOMP?\b/gi, 'COMPRIMIDOS');
+        s = s.replace(/\bGTS?\b/gi, 'GOTAS');
+        s = s.replace(/\bUNG\b/gi, 'UNGÜENTO');
+        s = s.replace(/\bSOL\b/gi, 'SOLUCIÓN');
+
+        return s.toUpperCase().replace(/\s+/g, ' ').trim();
+    }
+
+    // --- VALIDACIÓN DE DATOS MÍNIMOS OBLIGATORIOS PARA PRODUCTOS ---
+    function validarDatosMinimosProducto(producto) {
+        if (!producto || typeof producto !== 'object') {
+            return { esValido: false, campo: 'nombre', error: 'Datos de producto inválidos.' };
+        }
+
+        const nombre = String(producto.nombre || producto.nombreComercial || '').trim();
+        if (!nombre || nombre.length < 3) {
+            return {
+                esValido: false,
+                campo: 'nombre',
+                error: 'El nombre del producto es obligatorio (mínimo 3 caracteres).'
+            };
+        }
+
+        if (/^Producto(\s*#\d+)?$/i.test(nombre) || nombre.toLowerCase() === 'producto sin nombre') {
+            return {
+                esValido: false,
+                campo: 'nombre',
+                error: 'Debes ingresar un nombre descriptivo real para el producto.'
+            };
+        }
+
+        const esConveniencia = Boolean(
+            producto.aplicaItbis === true ||
+            (producto.categoria && /conveniencia|snack|bebida|helado|higiene|golosina/i.test(producto.categoria))
+        );
+
+        // Si es medicamento (no conveniencia), verificar que tenga dosificación o potencia
+        if (!esConveniencia) {
+            const concentracion = String(producto.concentracion || '').trim();
+            const regexUnidades = /\b(\d+(?:\.\d+)?)\s*(MG|MCG|G|ML|L|UI|IU|MEQ|%)\b/i;
+            const tieneUnidadEnNombre = regexUnidades.test(nombre);
+            const tieneUnidadEnConc = regexUnidades.test(concentracion);
+
+            if (!tieneUnidadEnNombre && !tieneUnidadEnConc) {
+                return {
+                    esValido: false,
+                    campo: 'concentracion',
+                    error: 'En medicamentos es obligatorio especificar la concentración o unidad (ej. 500 MG, 1 G, 250 MG / 5 ML, 10 UI).'
+                };
+            }
+        }
+
+        // Laboratorio o Fabricante obligatorio (a menos que se permita sin laboratorio)
+        const lab = String(producto.laboratorio || '').trim();
+        if ((!lab || lab.length < 2) && producto.permitirSinLaboratorio !== true) {
+            return {
+                esValido: false,
+                campo: 'laboratorio',
+                error: 'Debes indicar el Laboratorio fabricante o Distribuidor del producto.'
+            };
+        }
+
+        // Si se define tipo divisible, unidades por caja debe ser >= 2
+        const tipo = String(producto.tipo || '').toLowerCase();
+        if (tipo === 'divisible' || tipo === 'divide') {
+            const u = Number(producto.unidadesPorCaja);
+            if (!Number.isInteger(u) || u < 2) {
+                return {
+                    esValido: false,
+                    campo: 'unidadesPorCaja',
+                    error: 'Si el producto se divide por pastillas o ampollas, debe traer al menos 2 unidades por caja.'
+                };
+            }
+        }
+
+        // Si se provee precio/costo, debe ser > 0 (o >= 0 si es bonificación cruzada / regalo)
+        const costo = producto.precioCajaBase !== undefined ? producto.precioCajaBase : producto.ultimoPrecioCaja;
+        if (costo !== undefined && costo !== null && costo !== '') {
+            const numCosto = Number(costo);
+            const esCeroPermitido = Boolean(producto.permitirCero || producto.esBonificacionCruzada || numCosto === 0);
+            if (!Number.isFinite(numCosto) || (esCeroPermitido ? numCosto < 0 : numCosto <= 0)) {
+                return {
+                    esValido: false,
+                    campo: 'precioCaja',
+                    error: esCeroPermitido ? 'El costo de adquisición debe ser mayor o igual a 0.' : 'El costo de adquisición debe ser mayor a 0.'
+                };
+            }
+        }
+
+        return { esValido: true };
+    }
+
     function estandarizarNombreFarmaceutico(nombreRaw) {
         if (!nombreRaw || typeof nombreRaw !== 'string') return '';
         let s = nombreRaw.trim();
@@ -2189,6 +2500,8 @@
     }
 
     AppFarmacia.Dominio = Object.freeze({
+        normalizarNombreProductoMayusculas,
+        validarDatosMinimosProducto,
         estandarizarNombreFarmaceutico,
         obtenerMacroCategoria,
         normalizarTextoFoneticoFarmacia,
@@ -2221,6 +2534,7 @@
         formatearCostoFiscalOchoDecimales,
         validarPrecioCompra,
         validarCantidadEnteraPositiva,
+        parsearExpresionCajas,
         normalizarCodigoBarras,
         validarCodigoBarrasEstandar,
         sanitizarReglasNegocio,

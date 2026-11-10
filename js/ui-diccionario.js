@@ -247,11 +247,24 @@
             UI.Factura.actualizarBarraSuperior();
             UI.Calculadora.calcularEnVivo();
 
-            const est = res.estadisticas;
-            UI.Notificaciones.mostrarMensaje(
-                `Catálogo sincronizado: +${est.agregados} nuevos añadidos, ${est.actualizados} actualizados, ${est.conservados} conservados intactos (${est.totalFinal} fármacos en total).`,
-                'success'
-            );
+            if (res.tipo === 'vademecum-digemaps') {
+                UI.Notificaciones.mostrarMensaje(
+                    res.mensaje || `Vademécum Oficial DIGEMAPS cargado con éxito (${res.total} medicamentos). Listo para enlazado en mostrador.`,
+                    'success'
+                );
+            } else if (res.tipo === 'catalogo-conveniencia') {
+                const est = res.estadisticas || { agregados: res.total, actualizados: 0, conservados: 0, totalFinal: res.total };
+                UI.Notificaciones.mostrarMensaje(
+                    `Catálogo de Conveniencia cargado con éxito: +${est.agregados} productos con 18% ITBIS añadidos.`,
+                    'success'
+                );
+            } else {
+                const est = res.estadisticas;
+                UI.Notificaciones.mostrarMensaje(
+                    `Catálogo sincronizado: +${est.agregados} nuevos añadidos, ${est.actualizados} actualizados, ${est.conservados} conservados intactos (${est.totalFinal} fármacos en total).`,
+                    'success'
+                );
+            }
         } catch (error) {
             UI.Notificaciones.mostrarMensaje(error.message, 'error');
         }
@@ -324,20 +337,32 @@
                         btnSubmit.classList.add('btn-loading');
                     }
                     const codigo = el('editProdCodigo').value;
-                const ficha = {
-                    codigoBarras: codigo,
-                    nombre: el('editProdNombre').value,
-                    categoria: el('editProdCategoria').value,
-                    principioActivo: el('editProdPrincipioActivo').value,
-                    laboratorio: el('editProdLaboratorio').value,
-                    tipo: el('editProdTipo').value,
-                    unidadesPorCaja: el('editProdUnidades').value,
-                    tasaItbis: el('editProdTasaItbis').value,
-                    aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
-                    esLeche: Boolean(el('editProdEsLeche') && el('editProdEsLeche').checked),
-                    registroSanitario: el('editProdRegistroSanitario').value,
-                    ubicacion: el('editProdUbicacion').value
-                };
+                    const nombreNormalizado = (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
+                        ? Dominio.normalizarNombreProductoMayusculas(el('editProdNombre').value)
+                        : el('editProdNombre').value.toUpperCase().trim();
+
+                    const ficha = {
+                        codigoBarras: codigo,
+                        nombre: nombreNormalizado,
+                        categoria: el('editProdCategoria').value,
+                        principioActivo: el('editProdPrincipioActivo').value,
+                        laboratorio: el('editProdLaboratorio').value,
+                        tipo: el('editProdTipo').value,
+                        unidadesPorCaja: el('editProdUnidades').value,
+                        tasaItbis: el('editProdTasaItbis').value,
+                        aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
+                        esLeche: Boolean(el('editProdEsLeche') && el('editProdEsLeche').checked),
+                        registroSanitario: el('editProdRegistroSanitario').value,
+                        ubicacion: el('editProdUbicacion').value
+                    };
+
+                    if (Dominio && typeof Dominio.validarDatosMinimosProducto === 'function') {
+                        const valMin = Dominio.validarDatosMinimosProducto(ficha);
+                        if (!valMin.esValido) {
+                            UI.Notificaciones.mostrarMensaje(valMin.error, 'error');
+                            return;
+                        }
+                    }
 
                 const res = Almacenamiento.guardarFichaProductoCatalogo(ficha);
                 if (res.exito) {

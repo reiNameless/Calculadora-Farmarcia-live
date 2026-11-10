@@ -807,6 +807,163 @@
         afirmarIgualdad(Dominio.estandarizarNombreFarmaceutico(''), '', 'Estandar: Cadena vacía');
         afirmarIgualdad(Dominio.estandarizarNombreFarmaceutico(null), '', 'Estandar: Manejo de null');
 
+        // 30. Micro-Sintaxis de Ofertas de Droguerías (Compradas + Bonificadas)
+        const parseEstandar = Dominio.parsearExpresionCajas('10');
+        afirmarIgualdad(parseEstandar.esValido, true, 'Parse Cajas 10: esValido true');
+        afirmarIgualdad(parseEstandar.cajasCompradas, 10, 'Parse Cajas 10: compradas 10');
+        afirmarIgualdad(parseEstandar.cajasBonificadas, 0, 'Parse Cajas 10: bonificadas 0');
+        afirmarIgualdad(parseEstandar.totalCajasFisicas, 10, 'Parse Cajas 10: total 10');
+        afirmarIgualdad(parseEstandar.esOferta, false, 'Parse Cajas 10: no es oferta');
+
+        const parseOferta10Mas2 = Dominio.parsearExpresionCajas('10+2');
+        afirmarIgualdad(parseOferta10Mas2.esValido, true, 'Parse Cajas 10+2: esValido true');
+        afirmarIgualdad(parseOferta10Mas2.cajasCompradas, 10, 'Parse Cajas 10+2: compradas 10');
+        afirmarIgualdad(parseOferta10Mas2.cajasBonificadas, 2, 'Parse Cajas 10+2: bonificadas 2');
+        afirmarIgualdad(parseOferta10Mas2.totalCajasFisicas, 12, 'Parse Cajas 10+2: total 12');
+        afirmarIgualdad(parseOferta10Mas2.esOferta, true, 'Parse Cajas 10+2: es oferta true');
+
+        const parseOfertaEspacios = Dominio.parsearExpresionCajas('  5 + 1  ');
+        afirmarIgualdad(parseOfertaEspacios.esValido, true, 'Parse Cajas con espacios: esValido true');
+        afirmarIgualdad(parseOfertaEspacios.cajasCompradas, 5, 'Parse Cajas con espacios: compradas 5');
+        afirmarIgualdad(parseOfertaEspacios.cajasBonificadas, 1, 'Parse Cajas con espacios: bonificadas 1');
+        afirmarIgualdad(parseOfertaEspacios.totalCajasFisicas, 6, 'Parse Cajas con espacios: total 6');
+
+        afirmarIgualdad(Dominio.parsearExpresionCajas('').esValido, false, 'Parse Cajas vacio: esValido false');
+        afirmarIgualdad(Dominio.parsearExpresionCajas('abc').esValido, false, 'Parse Cajas texto: esValido false');
+        afirmarIgualdad(Dominio.parsearExpresionCajas('-5').esValido, false, 'Parse Cajas negativo: esValido false');
+        afirmarIgualdad(Dominio.parsearExpresionCajas('10+2+1').esValido, false, 'Parse Cajas multiple mas: esValido false');
+        afirmarIgualdad(Dominio.parsearExpresionCajas('10+').esValido, true, 'Parse Cajas 10+: acepta con 0 bonificadas');
+        afirmarIgualdad(Dominio.parsearExpresionCajas('10+').cajasBonificadas, 0, 'Parse Cajas 10+: bonificadas 0');
+
+        // 31. Desglose de Precios con Bonificación (Oferta 10 + 2): Dilución Fiscal y Retención de Margen
+        // 10 compradas a $100 + 2 bonificadas (Total: 12 cajas de 10 pastillas = 120 pastillas)
+        // Total factura: 10 * $100 = $1,000.00
+        // Costo Unitario Real (Diluido): 1,000 / 120 = $8.33333333
+        // Costo Base PVP: $100 / 10 = $10.00000000 -> P1 = $13.00 (+30% sobre lista)
+        const casoOferta10Mas2 = Dominio.calcularDesglosePrecios(100, 10, false, REGLAS_NEGOCIO_POR_DEFECTO, {
+            cajasCompradas: 10,
+            cajasBonificadas: 2
+        });
+        afirmarIgualdad(casoOferta10Mas2.subtotalFactura, 1000, 'Oferta 10+2: Subtotal factura es estrictamente $1000.00 (10 cajas)');
+        afirmarIgualdad(casoOferta10Mas2.totalCajasFisicas, 12, 'Oferta 10+2: Total cajas fisicas es 12');
+        afirmarIgualdad(casoOferta10Mas2.totalUnidadesFisicas, 120, 'Oferta 10+2: Total unidades fisicas es 120');
+        afirmarIgualdad(casoOferta10Mas2.costoUnitario, '8.33333333', 'Oferta 10+2: Costo fiscal diluido es 8.33333333');
+        afirmarIgualdad(casoOferta10Mas2.costoUnitarioVenta, '10.00000000', 'Oferta 10+2: Costo base fijacion PVP protegido en 10.00000000');
+        afirmarIgualdad(casoOferta10Mas2.p1Exacto, '13.00', 'Oferta 10+2: Precio 1 de venta protegido en $13.00 (+30% sobre costo lista)');
+        afirmarIgualdad(casoOferta10Mas2.esOfertaBonificacion, true, 'Oferta 10+2: Flag esOfertaBonificacion es true');
+
+        // Línea inmutable con micro-sintaxis '10+2' embebida
+        const lineaConSintaxis = Dominio.crearLineaProductoInmutable({
+            nombre: 'Amoxicilina 500mg',
+            tipo: 'divisible',
+            cajasCompradas: '10+2',
+            precioCajaBase: 100,
+            unidadesPorCaja: 10,
+            aplicaItbis: false
+        });
+        afirmarIgualdad(lineaConSintaxis.cajasCompradas, 10, 'Linea Inmutable 10+2: cajasCompradas es 10');
+        afirmarIgualdad(lineaConSintaxis.cajasBonificadas, 2, 'Linea Inmutable 10+2: cajasBonificadas es 2');
+        afirmarIgualdad(lineaConSintaxis.totalCajasFisicas, 12, 'Linea Inmutable 10+2: totalCajasFisicas es 12');
+        afirmarIgualdad(lineaConSintaxis.totalUnidadesInventario, 120, 'Linea Inmutable 10+2: totalUnidadesInventario es 120 (Kardex real)');
+        afirmarIgualdad(lineaConSintaxis.subtotalFactura, 1000, 'Linea Inmutable 10+2: subtotalFactura es $1000.00');
+
+        // 32. Descuento Global a Pie de Factura y Cuadre Fiscal DGII
+        const listaFactura = [
+            Dominio.crearLineaProductoInmutable({ nombre: 'Prod A', tipo: 'divisible', cajasCompradas: 2, precioCajaBase: 500, unidadesPorCaja: 10, aplicaItbis: false }), // 1000
+            Dominio.crearLineaProductoInmutable({ nombre: 'Prod B', tipo: 'divisible', cajasCompradas: 1, precioCajaBase: 500, unidadesPorCaja: 10, aplicaItbis: false })  // 500
+        ];
+        // Suma lineas = 1500. Descuento global a pie = $150 (o 10%). Total neto esperado = 1350
+        const cuadreConDescMonto = Dominio.calcularResumenCuadreFactura(listaFactura, 1350, {
+            descuentoGlobalValor: 150,
+            descuentoGlobalTipo: 'monto'
+        });
+        afirmarIgualdad(cuadreConDescMonto.sumaAcumuladaLineas, 1500, 'Cuadre Desc Pie: Suma bruta de lineas es $1500.00');
+        afirmarIgualdad(cuadreConDescMonto.montoDescuentoGlobal, 150, 'Cuadre Desc Pie: Descuento global monto es $150.00');
+        afirmarIgualdad(cuadreConDescMonto.sumaAcumulada, 1350, 'Cuadre Desc Pie: Total neto calculado con descuento pie es $1350.00');
+        afirmarIgualdad(cuadreConDescMonto.cuadreExacto, true, 'Cuadre Desc Pie: Factura cuadra exactamente al centavo con total fisico');
+
+        // Descuento global porcentaje (5% de 1500 = $75 -> Total = $1425)
+        const cuadreConDescPorc = Dominio.calcularResumenCuadreFactura(listaFactura, 1425, {
+            descuentoGlobalValor: 5,
+            descuentoGlobalTipo: 'porcentaje'
+        });
+        afirmarIgualdad(cuadreConDescPorc.montoDescuentoGlobal, 75, 'Cuadre Desc Porc 5%: Monto descontado es $75.00');
+        afirmarIgualdad(cuadreConDescPorc.sumaAcumulada, 1425, 'Cuadre Desc Porc 5%: Total neto calculado es $1425.00');
+        afirmarIgualdad(cuadreConDescPorc.cuadreExacto, true, 'Cuadre Desc Porc 5%: Cuadre exacto true');
+
+        // 33. Normalización en Mayúsculas y Validación de Datos Mínimos de Producto (EGM / DIGEMAPS)
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('amoxicilina 500mg'), 'AMOXICILINA 500 MG', 'Normalizar Mayúsculas: 500mg a 500 MG');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('  ibuprofeno   400   mg  tab  '), 'IBUPROFENO 400 MG TABLETAS', 'Normalizar Mayúsculas: Espacios y TABLETAS');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('acetaminofen 120mg / 5ml jbe'), 'ACETAMINOFEN 120 MG / 5 ML JARABE', 'Normalizar Mayúsculas: JARABE y 120 MG / 5 ML');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas(''), '', 'Normalizar Mayúsculas: Vacío');
+
+        // Validación datos mínimos: Fármaco sin concentración/unidad
+        const valSinConc = Dominio.validarDatosMinimosProducto({
+            nombre: 'AMOXICILINA',
+            laboratorio: 'FELTREX',
+            tipo: 'entero',
+            aplicaItbis: false
+        });
+        afirmarIgualdad(valSinConc.esValido, false, 'Validar Minimos: Rechaza fármaco sin concentración');
+        afirmarIgualdad(valSinConc.campo, 'concentracion', 'Validar Minimos: Campo faltante es concentracion');
+
+        // Validación datos mínimos: Fármaco sin laboratorio
+        const valSinLab = Dominio.validarDatosMinimosProducto({
+            nombre: 'AMOXICILINA 500 MG',
+            laboratorio: '',
+            tipo: 'entero',
+            aplicaItbis: false
+        });
+        afirmarIgualdad(valSinLab.esValido, false, 'Validar Minimos: Rechaza fármaco sin laboratorio');
+
+        // Validación datos mínimos: Fármaco válido con concentración en nombre
+        const valValido = Dominio.validarDatosMinimosProducto({
+            nombre: 'AMOXICILINA 500 MG',
+            laboratorio: 'FELTREX',
+            tipo: 'entero',
+            precioCajaBase: 150,
+            aplicaItbis: false
+        });
+        afirmarIgualdad(valValido.esValido, true, 'Validar Minimos: Fármaco válido aprobado');
+
+        // Validación datos mínimos: Conveniencia (no requiere concentración médica)
+        const valConveniencia = Dominio.validarDatosMinimosProducto({
+            nombre: 'DORITOS MEGA QUESO',
+            laboratorio: 'FRITO-LAY',
+            tipo: 'entero',
+            precioCajaBase: 65,
+            aplicaItbis: true
+        });
+        afirmarIgualdad(valConveniencia.esValido, true, 'Validar Minimos: Conveniencia aprobada');
+
+        // 34. Bonificación Cruzada (Regalo a Costo $0.00 con Precios de Venta Protegidos por Costo de Referencia)
+        const casoBonifCruzada = Dominio.calcularDesglosePrecios(0, 2, false, REGLAS_NEGOCIO_POR_DEFECTO, {
+            costoReferencia: 200,
+            cajasCompradas: 5
+        });
+        afirmarIgualdad(casoBonifCruzada.subtotalFactura, 0, 'Bonif Cruzada: Subtotal factura es exactamente $0.00');
+        afirmarIgualdad(casoBonifCruzada.costoUnitario, '0.00000000', 'Bonif Cruzada: Costo fiscal de inventario es 0.00000000');
+        afirmarIgualdad(casoBonifCruzada.esBonificacionCruzada, true, 'Bonif Cruzada: Flag esBonificacionCruzada es true');
+        afirmarIgualdad(casoBonifCruzada.costoUnitarioVenta, '100.00000000', 'Bonif Cruzada: Costo de referencia para PVP es $100.00000000 ($200 / 2)');
+        afirmarIgualdad(casoBonifCruzada.p1Exacto, '130.00', 'Bonif Cruzada: P1 protegido en $130.00 (+30% sobre costo de lista)');
+
+        // Línea inmutable con costo 0
+        const lineaBonifCruzada = Dominio.crearLineaProductoInmutable({
+            nombre: 'ACETAMINOFEN 120 MG / 5 ML JARABE',
+            laboratorio: 'ROWE',
+            tipo: 'entero',
+            precioCajaBase: 0,
+            costoReferencia: 150,
+            unidadesPorCaja: 1,
+            cajasCompradas: 5,
+            aplicaItbis: false
+        });
+        afirmarIgualdad(lineaBonifCruzada.precioCajaBase, 0, 'Linea Bonif Cruzada: precioCajaBase es 0');
+        afirmarIgualdad(lineaBonifCruzada.subtotalFactura, 0, 'Linea Bonif Cruzada: subtotalFactura es 0');
+        afirmarIgualdad(lineaBonifCruzada.esBonificacionCruzada, true, 'Linea Bonif Cruzada: esBonificacionCruzada es true');
+        afirmarIgualdad(lineaBonifCruzada.p1Exacto, '195.00', 'Linea Bonif Cruzada: P1 calculado sobre costo referencia $150 (+30% = $195.00)');
+
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;

@@ -2550,6 +2550,10 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
     min-width: 0;
 }
 
+#calcNombre, #editProdNombre {
+    text-transform: uppercase;
+}
+
 .fila-valores-compacta {
     display: flex;
     flex-wrap: wrap;
@@ -2564,8 +2568,8 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
 }
 
 .campo-costo {
-    width: 105px;
-    flex: 0 0 105px;
+    width: 110px;
+    flex: 0 0 110px;
 }
 
 .campo-trae {
@@ -2626,16 +2630,33 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
 .badge-radar-costo {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    justify-content: center;
+    gap: 2px;
     font-size: 10px;
     font-weight: 700;
-    padding: 1px 6px;
+    padding: 1px 5px;
     border-radius: 4px;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.2px;
-    line-height: 1.3;
+    line-height: 1.2;
+    white-space: nowrap;
+    flex-shrink: 0;
     transition: all 0.2s ease;
     user-select: none;
+}
+.copy-chip-costo {
+    font-size: 10px;
+    padding: 1px 5px;
+    background: var(--color-superficie-resaltada);
+    border: 1px solid var(--color-borde);
+    color: var(--color-primario);
+    font-family: var(--fuente-mono);
+    border-radius: 4px;
+}
+.copy-chip-costo:hover {
+    border-color: var(--color-accion);
+    color: var(--color-accion);
+    background: var(--color-accion-fondo);
 }
 .badge-radar-costo.alza {
     background: rgba(239, 68, 68, 0.16);
@@ -2657,6 +2678,12 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
     background: rgba(148, 163, 184, 0.12);
     color: var(--color-texto-secundario);
     border: 1px solid rgba(148, 163, 184, 0.25);
+}
+.badge-radar-costo.bonificacion {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--color-exito);
+    border: 1px solid var(--color-exito);
+    animation: fadeInBonif 0.25s ease forwards;
 }
 @keyframes pulsoAlzaCosto {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -2752,3 +2779,49 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
 }
 
 
+
+/* ==========================================================================
+   BADGES DE OFERTAS Y BONIFICACIONES DE DROGUERÍAS (EGM FEAT)
+   ========================================================================== */
+.badge-bonif-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(16, 185, 129, 0.16);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.38);
+    letter-spacing: -0.2px;
+    line-height: 1.3;
+    user-select: none;
+    animation: fadeInBonif 0.2s ease-out;
+}
+[data-tema="claro"] .badge-bonif-pill {
+    background: #e6f4ea;
+    color: #137333;
+    border-color: #a8dab5;
+}
+.badge-bonif-mini {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 3px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    margin-left: 4px;
+    vertical-align: middle;
+}
+[data-tema="claro"] .badge-bonif-mini {
+    background: #e6f4ea;
+    color: #137333;
+    border-color: #a8dab5;
+}
+@keyframes fadeInBonif {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}

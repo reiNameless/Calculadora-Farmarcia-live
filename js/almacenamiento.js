@@ -24,6 +24,7 @@
 
     // Caché en memoria de acceso ultra-rápido (0ms) para operaciones síncronas de UI
     const cacheStorage = new Map();
+    let vademecumCache = [];
 
     // --- CONEXIÓN Y CREACIÓN DE ESQUEMA INDEXEDDB ---
     function abrirBaseDatos() {
@@ -249,6 +250,7 @@
                         const reqGetAllHist = txCargar.objectStore(STORES.HISTORIAL).getAll();
                         const reqGetBorrador = txCargar.objectStore(STORES.BORRADOR).get('activo');
                         const reqGetReglas = txCargar.objectStore(STORES.CONFIGURACION).get('reglas_activas');
+                        const reqGetVademecum = txCargar.objectStore(STORES.CONFIGURACION).get('vademecum_maestro');
 
                         txCargar.oncomplete = () => {
                             const dicMap = {};
@@ -264,8 +266,18 @@
                             if (reqGetReglas.result) {
                                 cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, reqGetReglas.result);
                             }
+                            if (Array.isArray(reqGetVademecum.result) && reqGetVademecum.result.length > 0) {
+                                vademecumCache = reqGetVademecum.result;
+                            } else {
+                                try {
+                                    if (typeof window !== 'undefined' && window.localStorage) {
+                                        const raw = localStorage.getItem('farmacia_vademecum_maestro');
+                                        if (raw) vademecumCache = JSON.parse(raw);
+                                    }
+                                } catch (_) {}
+                            }
 
-                            console.info(`[IndexedDB] Activo: ${Object.keys(dicMap).length} medicamentos y ${(reqGetAllHist.result || []).length} facturas.`);
+                            console.info(`[IndexedDB] Activo: ${Object.keys(dicMap).length} productos en inventario, ${vademecumCache.length} en vademécum y ${(reqGetAllHist.result || []).length} facturas.`);
                             resolve(true);
                         };
                         txCargar.onerror = () => resolve(false);
@@ -387,8 +399,12 @@
             nombreFinal = 'Producto sin nombre';
         }
 
-        if (nombreFinal && nombreFinal !== 'Producto sin nombre' && !/^Producto #\d+$/i.test(nombreFinal) && Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
-            nombreFinal = Dominio.estandarizarNombreFarmaceutico(nombreFinal);
+        if (nombreFinal && nombreFinal !== 'Producto sin nombre' && !/^Producto #\d+$/i.test(nombreFinal)) {
+            if (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function') {
+                nombreFinal = Dominio.normalizarNombreProductoMayusculas(nombreFinal);
+            } else if (Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
+                nombreFinal = Dominio.estandarizarNombreFarmaceutico(nombreFinal);
+            }
         }
 
         const precioCajaActual = Number(lineaProducto.precioCajaBase) || 0;
@@ -451,7 +467,7 @@
             rncProveedor: rncProveedor,
             tipo,
             unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : unidadesPorCaja,
-            ultimoPrecioCaja: precioCajaActual,
+            ultimoPrecioCaja: precioCajaActual > 0 ? precioCajaActual : ((existente && existente.ultimoPrecioCaja) || 0),
             costoAnteriorCaja: costoAnteriorCaja,
             variacionCosto: variacionCosto,
             costoUnitarioFiscal: lineaProducto.costoUnitario || (existente && existente.costoUnitarioFiscal) || (Dominio && Dominio.formatearCostoFiscalOchoDecimales
@@ -555,6 +571,8 @@
             fechaEmision,
             fechaVencimiento: Dominio.sumarDiasAFechaISO(fechaEmision, 30),
             totalFisico: 0,
+            descuentoGlobalValor: 0,
+            descuentoGlobalTipo: 'monto',
             productos: []
         };
     }
@@ -569,6 +587,8 @@
             ...borrador,
             fechaEmision,
             fechaVencimiento,
+            descuentoGlobalValor: Number(borrador.descuentoGlobalValor) || 0,
+            descuentoGlobalTipo: borrador.descuentoGlobalTipo === 'porcentaje' ? 'porcentaje' : 'monto',
             productos: Array.isArray(borrador.productos) ? borrador.productos : []
         };
     }
@@ -869,6 +889,55 @@
         return { exito: true, producto: fichaActualizada };
     }
 
+    // --- VADEMÉCUM MAESTRO OFICIAL DIGEMAPS (CATÁLOGO DE REFERENCIA RD) ---
+    function guardarVademecumMaestro(listaMedicamentos) {
+        if (!Array.isArray(listaMedicamentos)) return { exito: false, error: 'Formato de Vademécum inválido' };
+        vademecumCache = listaMedicamentos.filter(m => m && (m.nombreComercial || m.nombre));
+
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                localStorage.setItem('farmacia_vademecum_maestro', JSON.stringify(vademecumCache));
+            }
+        } catch (e) {
+            console.warn('[Almacenamiento] No se pudo guardar Vademécum en localStorage:', e);
+        }
+
+        ejecutarConDb(db => {
+            try {
+                const tx = db.transaction([STORES.CONFIGURACION], 'readwrite');
+                tx.objectStore(STORES.CONFIGURACION).put(vademecumCache, 'vademecum_maestro');
+            } catch (err) {
+                console.warn('[IndexedDB] Error persistiendo vademecum_maestro:', err);
+            }
+        });
+
+        return { exito: true, total: vademecumCache.length };
+    }
+
+    function obtenerVademecumMaestro() {
+        return [...vademecumCache];
+    }
+
+    function buscarEnVademecum(termino, limite = 10) {
+        if (!termino || typeof termino !== 'string') return [];
+        const q = termino.trim().toLowerCase();
+        if (q.length < 2) return [];
+
+        const resultados = [];
+        for (const med of vademecumCache) {
+            const nom = (med.nombreComercial || med.nombre || '').toLowerCase();
+            const act = (med.principioActivo || '').toLowerCase();
+            const lab = (med.laboratorio || '').toLowerCase();
+            const reg = (med.registroSanitario || '').toLowerCase();
+
+            if (nom.includes(q) || act.includes(q) || lab.includes(q) || reg.includes(q)) {
+                resultados.push(med);
+                if (resultados.length >= limite) break;
+            }
+        }
+        return resultados;
+    }
+
     // --- SINCRONIZACIÓN Y FUSIÓN DE CATÁLOGO ENTRE COMPUTADORAS (SMART DELTA) ---
     function exportarParcheParaOtraCaja() {
         const diccionario = obtenerDiccionarioCodigos();
@@ -895,6 +964,20 @@
                 return { exito: false, error: verif.error, codigo: verif.codigo };
             }
         }
+
+        // 1. Detección polimórfica de Vademécum Oficial DIGEMAPS (sin códigos de barras obligatorios iniciales)
+        if (datos.tipo === 'vademecum-digemaps' || (Array.isArray(datos.medicamentos) && datos.medicamentos.length > 0)) {
+            const medicamentos = datos.medicamentos || [];
+            const resVad = guardarVademecumMaestro(medicamentos);
+            return {
+                exito: true,
+                tipo: 'vademecum-digemaps',
+                total: resVad.total,
+                mensaje: `Vademécum Oficial DIGEMAPS cargado con éxito (${resVad.total} medicamentos). Listo para enlazado en mostrador.`
+            };
+        }
+
+        const esConveniencia = datos.tipo === 'catalogo-conveniencia';
 
         // Extracción flexible de productos según esquema
         let items = null;
@@ -925,11 +1008,16 @@
 
         return {
             exito: true,
+            tipo: esConveniencia ? 'catalogo-conveniencia' : 'diccionario',
+            total: Object.keys(items).length,
             estadisticas: resultadoFusion.estadisticas
         };
     }
 
     AppFarmacia.Almacenamiento = Object.freeze({
+        guardarVademecumMaestro,
+        obtenerVademecumMaestro,
+        buscarEnVademecum,
         guardarFichaProductoCatalogo,
         descargarTextoComoArchivo,
         exportarCatalogoMaestroCsv,

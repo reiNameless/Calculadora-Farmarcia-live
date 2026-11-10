@@ -21,6 +21,222 @@
         return limpia ? (limpia.charAt(0).toUpperCase() + limpia.slice(1)) : subCat;
     }
 
+    // Población estructurada del <select> de categorías con <optgroup> por Macrocategoría clínica
+    function poblarSelectorCategoriasEdicion(categoriaSeleccionada = '') {
+        const sel = el('editProdCategoria');
+        if (!sel) return;
+        const inputNueva = el('editProdCategoriaNueva');
+        if (inputNueva) {
+            inputNueva.style.display = 'none';
+            inputNueva.value = '';
+        }
+
+        const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
+        const todosLosItems = Object.values(diccionario || {});
+        const catMap = new Map();
+
+        // Lista base de macrocategorías canónicas
+        const macrosBase = [
+            'Antibióticos', 'Antidiabéticos', 'Cardiovascular & Hipertensión',
+            'Analgésicos & Antiinflamatorios', 'Antialérgicos & Respiratorio',
+            'Gastrointestinal & Digestivo', 'Pediatría & Cuidado Infantil',
+            'Cuidado Personal & Cosmética', 'Salud Bucodental',
+            'Primeros Auxilios & Material Médico', 'Vitaminas & Suplementos',
+            'Conveniencia & Bebidas', 'General / Otros'
+        ];
+        macrosBase.forEach(m => catMap.set(m, new Set()));
+
+        todosLosItems.forEach(p => {
+            const sub = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+            const macro = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
+                ? Dominio.obtenerMacroCategoria(sub)
+                : 'General / Otros';
+            if (!catMap.has(macro)) catMap.set(macro, new Set());
+            catMap.get(macro).add(sub);
+        });
+
+        // Asegurar que la categoría del producto actual esté contemplada
+        let encontrada = false;
+        if (categoriaSeleccionada) {
+            const macroActual = Dominio.obtenerMacroCategoria(categoriaSeleccionada);
+            if (!catMap.has(macroActual)) catMap.set(macroActual, new Set());
+            catMap.get(macroActual).add(categoriaSeleccionada);
+        }
+
+        let html = '<option value="">-- Selecciona Categoría Terapéutica --</option>';
+        Array.from(catMap.keys()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })).forEach(macro => {
+            const subs = Array.from(catMap.get(macro)).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+            if (subs.length > 0) {
+                html += `<optgroup label="${escaparHtml(macro)}">`;
+                subs.forEach(s => {
+                    const isSel = (s.toLowerCase() === (categoriaSeleccionada || '').toLowerCase());
+                    if (isSel) encontrada = true;
+                    html += `<option value="${escaparHtml(s)}"${isSel ? ' selected' : ''}>${escaparHtml(s)}</option>`;
+                });
+                html += '</optgroup>';
+            }
+        });
+
+        // Opción especial para agregar una categoría que no exista
+        html += `<option value="__NUEVA__"${(!encontrada && categoriaSeleccionada) ? ' selected' : ''}>+ Escribir nueva categoría...</option>`;
+        sel.innerHTML = html;
+
+        if (!encontrada && categoriaSeleccionada && inputNueva) {
+            sel.value = '__NUEVA__';
+            inputNueva.style.display = 'block';
+            inputNueva.value = categoriaSeleccionada;
+        }
+    }
+
+    // Actualización de Datalists para autocompletar en mostrador y formularios
+    function actualizarDatalistsDirectorios() {
+        const dlLabs = el('listaLaboratoriosSugeridos');
+        if (dlLabs) {
+            const labs = Almacenamiento.obtenerDirectorioLaboratorios();
+            dlLabs.innerHTML = labs.map(l => `<option value="${escaparHtml(l.nombre)}">${escaparHtml(l.origen || '')} — ${escaparHtml(l.razonSocial || '')}</option>`).join('');
+        }
+        const dlProvsHab = el('listaProveedoresHabitualesSugeridos');
+        if (dlProvsHab) {
+            const provs = Almacenamiento.obtenerDirectorioProveedores();
+            dlProvsHab.innerHTML = provs.map(p => `<option value="${escaparHtml(p.nombre)}">${escaparHtml(p.rnc ? p.rnc + ' — ' : '')}${escaparHtml(p.razonSocial || '')}</option>`).join('');
+        }
+        if (typeof UI.Factura?.actualizarDatalistProveedores === 'function') {
+            UI.Factura.actualizarDatalistProveedores();
+        }
+    }
+
+    // Renderizado del Directorio de Proveedores / Droguerías
+    function renderizarProveedoresUI(terminoFiltro = '') {
+        const contenedor = el('contenedorProveedores');
+        if (!contenedor) return;
+        const lista = Almacenamiento.obtenerDirectorioProveedores();
+        const term = terminoFiltro.toLowerCase().trim();
+
+        const filtrados = lista.filter(p => {
+            if (!term) return true;
+            return (p.nombre && p.nombre.toLowerCase().includes(term)) ||
+                   (p.rnc && p.rnc.includes(term)) ||
+                   (p.razonSocial && p.razonSocial.toLowerCase().includes(term)) ||
+                   (p.contacto && p.contacto.toLowerCase().includes(term));
+        });
+
+        if (filtrados.length === 0) {
+            contenedor.innerHTML = `<div style="text-align:center;padding:24px;color:var(--color-texto-secundario);">
+                <svg class="ico ico-lg" style="opacity:0.4;margin-bottom:8px;"><use href="#i-box"/></svg>
+                <div style="font-weight:600;">No se encontraron droguerías o proveedores.</div>
+                <div class="fs-xs" style="margin-top:4px;">Presiona "+ Nueva Droguería" para registrar un distribuidor.</div>
+            </div>`;
+            return;
+        }
+
+        const filas = filtrados.map(p => {
+            const idEsc = escaparHtml(p.id);
+            const rncFmt = p.rnc ? `<span class="badge-radar-costo igual">${escaparHtml(p.rnc)}</span>` : '<span class="text-muted fs-xs">Sin RNC</span>';
+            return `<tr>
+                <td class="mono" style="font-weight:600;">${rncFmt}</td>
+                <td>
+                    <strong>${escaparHtml(p.nombre)}</strong>
+                    ${p.razonSocial ? `<div class="fs-xs text-muted">${escaparHtml(p.razonSocial)}</div>` : ''}
+                </td>
+                <td>
+                    <div>${escaparHtml(p.telefono || '—')}</div>
+                    ${p.contacto ? `<div class="fs-xs text-muted">Cont: ${escaparHtml(p.contacto)}</div>` : ''}
+                </td>
+                <td class="mono" style="text-align:center;">${p.diasCredito || 30} días</td>
+                <td class="mono" style="text-align:right;">${(p.descuentoHabitual || 0).toFixed(2)}%</td>
+                <td style="white-space:nowrap;text-align:center;">
+                    <div style="display:flex;gap:4px;justify-content:center;">
+                        <button type="button" class="action-icon-btn" data-editar-proveedor="${idEsc}" title="Editar Proveedor" aria-label="Editar ${escaparHtml(p.nombre)}">${iconoSvg('edit')}</button>
+                        <button type="button" class="action-icon-btn text-danger" data-borrar-proveedor="${idEsc}" title="Eliminar Proveedor" aria-label="Eliminar ${escaparHtml(p.nombre)}">${iconoSvg('trash')}</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+
+        contenedor.innerHTML = `
+            <div style="font-size:12px;color:var(--color-texto-secundario);padding:6px 0;">
+                ${filtrados.length} droguerías y proveedores registrados.
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>RNC</th>
+                            <th>Droguería / Razón Social</th>
+                            <th>Teléfono / Contacto</th>
+                            <th style="text-align:center;">Crédito</th>
+                            <th style="text-align:right;">Desc. Base</th>
+                            <th style="text-align:center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>`;
+    }
+
+    // Renderizado del Directorio de Laboratorios Fabricantes
+    function renderizarLaboratoriosUI(terminoFiltro = '') {
+        const contenedor = el('contenedorLaboratorios');
+        if (!contenedor) return;
+        const lista = Almacenamiento.obtenerDirectorioLaboratorios();
+        const term = terminoFiltro.toLowerCase().trim();
+
+        const filtrados = lista.filter(l => {
+            if (!term) return true;
+            return (l.nombre && l.nombre.toLowerCase().includes(term)) ||
+                   (l.razonSocial && l.razonSocial.toLowerCase().includes(term)) ||
+                   (l.titularRegistro && l.titularRegistro.toLowerCase().includes(term));
+        });
+
+        if (filtrados.length === 0) {
+            contenedor.innerHTML = `<div style="text-align:center;padding:24px;color:var(--color-texto-secundario);">
+                <svg class="ico ico-lg" style="opacity:0.4;margin-bottom:8px;"><use href="#i-check"/></svg>
+                <div style="font-weight:600;">No se encontraron laboratorios fabricantes.</div>
+                <div class="fs-xs" style="margin-top:4px;">Presiona "+ Nuevo Laboratorio" para dar de alta una marca.</div>
+            </div>`;
+            return;
+        }
+
+        const filas = filtrados.map(l => {
+            const idEsc = escaparHtml(l.id);
+            const origenClase = (l.origen === 'Nacional RD') ? 'badge-radar-costo baja' : 'badge-radar-costo igual';
+            return `<tr>
+                <td>
+                    <strong>${escaparHtml(l.nombre)}</strong>
+                    ${l.razonSocial ? `<div class="fs-xs text-muted">${escaparHtml(l.razonSocial)}</div>` : ''}
+                </td>
+                <td><span class="${origenClase}">${escaparHtml(l.origen || 'Nacional RD')}</span></td>
+                <td>${escaparHtml(l.titularRegistro || l.razonSocial || '—')}</td>
+                <td>${escaparHtml(l.telefono || '—')}</td>
+                <td style="white-space:nowrap;text-align:center;">
+                    <div style="display:flex;gap:4px;justify-content:center;">
+                        <button type="button" class="action-icon-btn" data-editar-laboratorio="${idEsc}" title="Editar Laboratorio" aria-label="Editar ${escaparHtml(l.nombre)}">${iconoSvg('edit')}</button>
+                        <button type="button" class="action-icon-btn text-danger" data-borrar-laboratorio="${idEsc}" title="Eliminar Laboratorio" aria-label="Eliminar ${escaparHtml(l.nombre)}">${iconoSvg('trash')}</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+
+        contenedor.innerHTML = `
+            <div style="font-size:12px;color:var(--color-texto-secundario);padding:6px 0;">
+                ${filtrados.length} laboratorios y fabricantes registrados.
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Laboratorio / Marca</th>
+                            <th>Origen</th>
+                            <th>Titular / Razón Social</th>
+                            <th>Teléfono</th>
+                            <th style="text-align:center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>`;
+    }
+
     function renderizarDiccionarioUI(filtroTermino = '', filtroCategoria = '') {
         const contenedor = el('contenedorDiccionario');
         if (!contenedor) return;
@@ -341,19 +557,30 @@
                         ? Dominio.normalizarNombreProductoMayusculas(el('editProdNombre').value)
                         : el('editProdNombre').value.toUpperCase().trim();
 
+                    const catSelVal = el('editProdCategoria').value;
+                    const catFinal = (catSelVal === '__NUEVA__')
+                        ? (el('editProdCategoriaNueva') ? el('editProdCategoriaNueva').value.trim() : 'General / Otros')
+                        : catSelVal;
+
                     const ficha = {
                         codigoBarras: codigo,
                         nombre: nombreNormalizado,
-                        categoria: el('editProdCategoria').value,
-                        principioActivo: el('editProdPrincipioActivo').value,
-                        laboratorio: el('editProdLaboratorio').value,
+                        categoria: catFinal || 'General / Otros',
+                        principioActivo: el('editProdPrincipioActivo').value.trim(),
+                        concentracion: el('editProdConcentracion') ? el('editProdConcentracion').value.trim() : '',
+                        laboratorio: el('editProdLaboratorio').value.trim(),
+                        proveedorHabitual: el('editProdProveedorHabitual') ? el('editProdProveedorHabitual').value.trim() : '',
+                        formaFarmaceutica: el('editProdForma') ? el('editProdForma').value : '',
+                        presentacion: el('editProdPresentacion') ? el('editProdPresentacion').value.trim() : '',
                         tipo: el('editProdTipo').value,
                         unidadesPorCaja: el('editProdUnidades').value,
+                        ultimoPrecioCaja: el('editProdUltimoCosto') ? parseFloat(el('editProdUltimoCosto').value) || 0 : 0,
                         tasaItbis: el('editProdTasaItbis').value,
                         aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
+                        condicionVenta: el('editProdCondicion') ? el('editProdCondicion').value : 'OTC',
                         esLeche: Boolean(el('editProdEsLeche') && el('editProdEsLeche').checked),
-                        registroSanitario: el('editProdRegistroSanitario').value,
-                        ubicacion: el('editProdUbicacion').value
+                        registroSanitario: el('editProdRegistroSanitario').value.trim(),
+                        ubicacion: el('editProdUbicacion').value.trim()
                     };
 
                     if (Dominio && typeof Dominio.validarDatosMinimosProducto === 'function') {
@@ -451,15 +678,22 @@
                 if (prod && el('modalEditarProductoDiccionario')) {
                     el('editProdCodigo').value = prod.codigoBarras || cod;
                     el('editProdNombre').value = prod.nombre || '';
-                    el('editProdCategoria').value = prod.categoria || '';
+                    poblarSelectorCategoriasEdicion(prod.categoria || '');
                     el('editProdPrincipioActivo').value = prod.principioActivo || '';
+                    if (el('editProdConcentracion')) el('editProdConcentracion').value = prod.concentracion || '';
                     el('editProdLaboratorio').value = prod.laboratorio || '';
+                    if (el('editProdProveedorHabitual')) el('editProdProveedorHabitual').value = prod.proveedorHabitual || '';
+                    if (el('editProdForma')) el('editProdForma').value = prod.formaFarmaceutica || '';
+                    if (el('editProdPresentacion')) el('editProdPresentacion').value = prod.presentacion || '';
                     el('editProdTipo').value = prod.tipo || 'divisible';
                     el('editProdUnidades').value = prod.unidadesPorCaja || 1;
+                    if (el('editProdUltimoCosto')) el('editProdUltimoCosto').value = (prod.ultimoPrecioCaja !== undefined) ? Number(prod.ultimoPrecioCaja).toFixed(2) : '0.00';
                     el('editProdTasaItbis').value = String(prod.tasaItbis !== undefined ? prod.tasaItbis : (prod.aplicaItbis ? 18 : 0));
+                    if (el('editProdCondicion')) el('editProdCondicion').value = prod.condicionVenta || 'OTC';
                     if (el('editProdEsLeche')) el('editProdEsLeche').checked = Boolean(prod.esLeche);
                     el('editProdRegistroSanitario').value = prod.registroSanitario || '';
                     el('editProdUbicacion').value = prod.ubicacion || '';
+                    actualizarDatalistsDirectorios();
                     el('modalEditarProductoDiccionario').showModal();
                 }
                 return;
@@ -474,10 +708,230 @@
                 }
             }
         });
+
+        // Listener para cambio en selector de categoría terapéutica (desplegar input nueva)
+        const selCatModal = el('editProdCategoria');
+        if (selCatModal) {
+            selCatModal.addEventListener('change', () => {
+                const inputNueva = el('editProdCategoriaNueva');
+                if (!inputNueva) return;
+                if (selCatModal.value === '__NUEVA__') {
+                    inputNueva.style.display = 'block';
+                    inputNueva.focus();
+                } else {
+                    inputNueva.style.display = 'none';
+                    inputNueva.value = '';
+                }
+            });
+        }
+
+        // Conmutador de Subtabs de Catálogos (Fármacos, Proveedores, Laboratorios)
+        const subtabsBtns = document.querySelectorAll('.subtabs-catalogo [data-subtab-cat]');
+        subtabsBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const subtab = btn.dataset.subtabCat;
+                subtabsBtns.forEach(b => b.classList.remove('activo'));
+                btn.classList.add('activo');
+
+                const panelProds = el('panelCatalogoProductos');
+                const panelProvs = el('panelCatalogoProveedores');
+                const panelLabs = el('panelCatalogoLaboratorios');
+
+                if (panelProds) panelProds.style.display = (subtab === 'productos') ? 'block' : 'none';
+                if (panelProvs) panelProvs.style.display = (subtab === 'proveedores') ? 'block' : 'none';
+                if (panelLabs) panelLabs.style.display = (subtab === 'laboratorios') ? 'block' : 'none';
+
+                if (subtab === 'proveedores') renderizarProveedoresUI();
+                if (subtab === 'laboratorios') renderizarLaboratoriosUI();
+            });
+        });
+
+        // Búsquedas en tiempo real para Proveedores y Laboratorios
+        const inputFiltroProvs = el('filtroBuscadorProveedores');
+        if (inputFiltroProvs) inputFiltroProvs.addEventListener('input', () => renderizarProveedoresUI(inputFiltroProvs.value));
+
+        const inputFiltroLabs = el('filtroBuscadorLaboratorios');
+        if (inputFiltroLabs) inputFiltroLabs.addEventListener('input', () => renderizarLaboratoriosUI(inputFiltroLabs.value));
+
+        // Gestión Modal: Proveedores / Droguerías
+        const modalProv = el('modalEditarProveedor');
+        const formProv = el('formEditarProveedor');
+        const btnNuevoProv = el('btnNuevoProveedor');
+        const btnCerrarProv = el('btnCerrarModalProveedor');
+        const btnCancelarProv = el('btnCancelarEditarProveedor');
+
+        const cerrarModalProv = () => { if (modalProv && typeof modalProv.close === 'function') modalProv.close(); };
+        if (btnCerrarProv) btnCerrarProv.addEventListener('click', cerrarModalProv);
+        if (btnCancelarProv) btnCancelarProv.addEventListener('click', cerrarModalProv);
+
+        if (btnNuevoProv) {
+            btnNuevoProv.addEventListener('click', () => {
+                if (formProv) formProv.reset();
+                if (el('editProvId')) el('editProvId').value = '';
+                if (el('tituloModalProveedor')) el('tituloModalProveedor').textContent = 'Nueva Droguería / Proveedor';
+                if (modalProv) modalProv.showModal();
+            });
+        }
+
+        if (formProv) {
+            formProv.addEventListener('submit', e => {
+                e.preventDefault();
+                const rnc = el('editProvRnc').value.trim();
+                const nombre = el('editProvNombre').value.trim();
+                if (!nombre) return UI.Notificaciones.mostrarMensaje('El nombre de la droguería es obligatorio.', 'error');
+
+                const provData = {
+                    id: el('editProvId') ? el('editProvId').value : '',
+                    rnc,
+                    nombre,
+                    razonSocial: el('editProvRazonSocial') ? el('editProvRazonSocial').value.trim() : '',
+                    telefono: el('editProvTelefono') ? el('editProvTelefono').value.trim() : '',
+                    contacto: el('editProvContacto') ? el('editProvContacto').value.trim() : '',
+                    diasCredito: el('editProvDiasCredito') ? parseInt(el('editProvDiasCredito').value, 10) || 30 : 30,
+                    descuentoHabitual: el('editProvDescuento') ? parseFloat(el('editProvDescuento').value) || 0 : 0
+                };
+
+                const res = Almacenamiento.guardarProveedorEnDirectorio(provData);
+                if (res) {
+                    cerrarModalProv();
+                    renderizarProveedoresUI();
+                    actualizarDatalistsDirectorios();
+                    UI.Notificaciones.mostrarMensaje('Proveedor "' + provData.nombre + '" guardado con éxito.', 'success');
+                } else {
+                    UI.Notificaciones.mostrarMensaje('No se pudo guardar el proveedor.', 'error');
+                }
+            });
+        }
+
+        // Click delegation en tabla de proveedores
+        const contProvs = el('contenedorProveedores');
+        if (contProvs) {
+            contProvs.addEventListener('click', async e => {
+                const btnEdit = e.target.closest('[data-editar-proveedor]');
+                if (btnEdit) {
+                    const idProv = btnEdit.dataset.editarProveedor;
+                    const provs = Almacenamiento.obtenerDirectorioProveedores();
+                    const prov = provs.find(p => p.id === idProv);
+                    if (prov && modalProv) {
+                        if (el('editProvId')) el('editProvId').value = prov.id || '';
+                        if (el('editProvRnc')) el('editProvRnc').value = prov.rnc || '';
+                        if (el('editProvNombre')) el('editProvNombre').value = prov.nombre || '';
+                        if (el('editProvRazonSocial')) el('editProvRazonSocial').value = prov.razonSocial || '';
+                        if (el('editProvTelefono')) el('editProvTelefono').value = prov.telefono || '';
+                        if (el('editProvContacto')) el('editProvContacto').value = prov.contacto || '';
+                        if (el('editProvDiasCredito')) el('editProvDiasCredito').value = prov.diasCredito || 30;
+                        if (el('editProvDescuento')) el('editProvDescuento').value = (prov.descuentoHabitual || 0).toFixed(2);
+                        if (el('tituloModalProveedor')) el('tituloModalProveedor').textContent = 'Editar Droguería / Proveedor';
+                        modalProv.showModal();
+                    }
+                    return;
+                }
+                const btnBorrar = e.target.closest('[data-borrar-proveedor]');
+                if (btnBorrar) {
+                    const idProv = btnBorrar.dataset.borrarProveedor;
+                    const confirmar = await UI.Notificaciones.mostrarConfirmacion('¿Deseas eliminar este proveedor del directorio?', 'Eliminar Proveedor');
+                    if (confirmar) {
+                        Almacenamiento.eliminarProveedorDeDirectorio(idProv);
+                        renderizarProveedoresUI();
+                        actualizarDatalistsDirectorios();
+                        UI.Notificaciones.mostrarMensaje('Proveedor eliminado.', 'info');
+                    }
+                }
+            });
+        }
+
+        // Gestión Modal: Laboratorios Fabricantes
+        const modalLab = el('modalEditarLaboratorio');
+        const formLab = el('formEditarLaboratorio');
+        const btnNuevoLab = el('btnNuevoLaboratorio');
+        const btnCerrarLab = el('btnCerrarModalLaboratorio');
+        const btnCancelarLab = el('btnCancelarEditarLaboratorio');
+
+        const cerrarModalLab = () => { if (modalLab && typeof modalLab.close === 'function') modalLab.close(); };
+        if (btnCerrarLab) btnCerrarLab.addEventListener('click', cerrarModalLab);
+        if (btnCancelarLab) btnCancelarLab.addEventListener('click', cerrarModalLab);
+
+        if (btnNuevoLab) {
+            btnNuevoLab.addEventListener('click', () => {
+                if (formLab) formLab.reset();
+                if (el('editLabId')) el('editLabId').value = '';
+                if (el('tituloModalLaboratorio')) el('tituloModalLaboratorio').textContent = 'Nuevo Laboratorio Fabricante';
+                if (modalLab) modalLab.showModal();
+            });
+        }
+
+        if (formLab) {
+            formLab.addEventListener('submit', e => {
+                e.preventDefault();
+                const nombre = el('editLabNombre').value.trim();
+                if (!nombre) return UI.Notificaciones.mostrarMensaje('El nombre del laboratorio es obligatorio.', 'error');
+
+                const labData = {
+                    id: el('editLabId') ? el('editLabId').value : '',
+                    nombre,
+                    razonSocial: el('editLabRazonSocial') ? el('editLabRazonSocial').value.trim() : '',
+                    origen: el('editLabOrigen') ? el('editLabOrigen').value : 'Nacional RD',
+                    telefono: el('editLabTelefono') ? el('editLabTelefono').value.trim() : '',
+                    titularRegistro: el('editLabTitular') ? el('editLabTitular').value.trim() : ''
+                };
+
+                const res = Almacenamiento.guardarLaboratorioEnDirectorio(labData);
+                if (res) {
+                    cerrarModalLab();
+                    renderizarLaboratoriosUI();
+                    actualizarDatalistsDirectorios();
+                    UI.Notificaciones.mostrarMensaje('Laboratorio "' + labData.nombre + '" guardado con éxito.', 'success');
+                } else {
+                    UI.Notificaciones.mostrarMensaje('No se pudo guardar el laboratorio.', 'error');
+                }
+            });
+        }
+
+        // Click delegation en tabla de laboratorios
+        const contLabs = el('contenedorLaboratorios');
+        if (contLabs) {
+            contLabs.addEventListener('click', async e => {
+                const btnEdit = e.target.closest('[data-editar-laboratorio]');
+                if (btnEdit) {
+                    const idLab = btnEdit.dataset.editarLaboratorio;
+                    const labs = Almacenamiento.obtenerDirectorioLaboratorios();
+                    const lab = labs.find(l => l.id === idLab);
+                    if (lab && modalLab) {
+                        if (el('editLabId')) el('editLabId').value = lab.id || '';
+                        if (el('editLabNombre')) el('editLabNombre').value = lab.nombre || '';
+                        if (el('editLabRazonSocial')) el('editLabRazonSocial').value = lab.razonSocial || '';
+                        if (el('editLabOrigen')) el('editLabOrigen').value = lab.origen || 'Nacional RD';
+                        if (el('editLabTelefono')) el('editLabTelefono').value = lab.telefono || '';
+                        if (el('editLabTitular')) el('editLabTitular').value = lab.titularRegistro || '';
+                        if (el('tituloModalLaboratorio')) el('tituloModalLaboratorio').textContent = 'Editar Laboratorio Fabricante';
+                        modalLab.showModal();
+                    }
+                    return;
+                }
+                const btnBorrar = e.target.closest('[data-borrar-laboratorio]');
+                if (btnBorrar) {
+                    const idLab = btnBorrar.dataset.borrarLaboratorio;
+                    const confirmar = await UI.Notificaciones.mostrarConfirmacion('¿Deseas eliminar este laboratorio del directorio?', 'Eliminar Laboratorio');
+                    if (confirmar) {
+                        Almacenamiento.eliminarLaboratorioDeDirectorio(idLab);
+                        renderizarLaboratoriosUI();
+                        actualizarDatalistsDirectorios();
+                        UI.Notificaciones.mostrarMensaje('Laboratorio eliminado.', 'info');
+                    }
+                }
+            });
+        }
+
+        // Inicializar Datalists
+        actualizarDatalistsDirectorios();
     }
 
     UI.Diccionario = Object.freeze({
         renderizarDiccionarioUI,
+        renderizarProveedoresUI,
+        renderizarLaboratoriosUI,
+        actualizarDatalistsDirectorios,
+        poblarSelectorCategoriasEdicion,
         descargarDiccionarioJson,
         restaurarDiccionarioJson,
         inicializarEventosDiccionario

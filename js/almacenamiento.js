@@ -11,12 +11,14 @@
         : (global.indexedDB || null);
 
     const DB_NOMBRE = 'CalculadoraFarmaciaDB';
-    const DB_VERSION = 2;
+    const DB_VERSION = 3;
     const STORES = Object.freeze({
         BORRADOR: 'borrador',
         HISTORIAL: 'historial_facturas',
         DICCIONARIO: 'diccionario_productos',
-        CONFIGURACION: 'configuracion_reglas'
+        CONFIGURACION: 'configuracion_reglas',
+        PROVEEDORES: 'directorio_proveedores',
+        LABORATORIOS: 'directorio_laboratorios'
     });
 
     let dbInstancia = null;
@@ -83,6 +85,22 @@
                     // 4. Configuración y reglas fiscales
                     if (!db.objectStoreNames.contains(STORES.CONFIGURACION)) {
                         db.createObjectStore(STORES.CONFIGURACION);
+                    }
+
+                    // 5. Directorio de Proveedores / Droguerías (Versión 3)
+                    if (!db.objectStoreNames.contains(STORES.PROVEEDORES)) {
+                        const storeProv = db.createObjectStore(STORES.PROVEEDORES, { keyPath: 'id' });
+                        storeProv.createIndex('rnc', 'rnc', { unique: false });
+                        storeProv.createIndex('nombre', 'nombre', { unique: false });
+                        storeProv.createIndex('actualizadoEn', 'actualizadoEn', { unique: false });
+                    }
+
+                    // 6. Directorio de Laboratorios Fabricantes (Versión 3)
+                    if (!db.objectStoreNames.contains(STORES.LABORATORIOS)) {
+                        const storeLab = db.createObjectStore(STORES.LABORATORIOS, { keyPath: 'id' });
+                        storeLab.createIndex('nombre', 'nombre', { unique: false });
+                        storeLab.createIndex('origen', 'origen', { unique: false });
+                        storeLab.createIndex('actualizadoEn', 'actualizadoEn', { unique: false });
                     }
                 };
 
@@ -208,9 +226,12 @@
 
         return new Promise((resolve) => {
             try {
-                const tx = db.transaction([STORES.BORRADOR, STORES.HISTORIAL, STORES.DICCIONARIO, STORES.CONFIGURACION], 'readonly');
+                const storesRequeridos = [STORES.BORRADOR, STORES.HISTORIAL, STORES.DICCIONARIO, STORES.CONFIGURACION, STORES.PROVEEDORES, STORES.LABORATORIOS];
+                const tx = db.transaction(storesRequeridos, 'readonly');
                 const reqCountDic = tx.objectStore(STORES.DICCIONARIO).count();
                 const reqCountHist = tx.objectStore(STORES.HISTORIAL).count();
+                const reqCountProv = tx.objectStore(STORES.PROVEEDORES).count();
+                const reqCountLab = tx.objectStore(STORES.LABORATORIOS).count();
 
                 tx.oncomplete = () => {
                     const cantDic = reqCountDic.result || 0;
@@ -245,14 +266,45 @@
                         txMigrar.onerror = () => resolve(false);
                     } else {
                         // Cargar los registros autoritativos de IndexedDB a la caché síncrona
-                        const txCargar = db.transaction([STORES.BORRADOR, STORES.HISTORIAL, STORES.DICCIONARIO, STORES.CONFIGURACION], 'readonly');
+                        const txCargar = db.transaction(storesRequeridos, 'readonly');
                         const reqGetAllDic = txCargar.objectStore(STORES.DICCIONARIO).getAll();
                         const reqGetAllHist = txCargar.objectStore(STORES.HISTORIAL).getAll();
+                        const reqGetAllProv = txCargar.objectStore(STORES.PROVEEDORES).getAll();
+                        const reqGetAllLab = txCargar.objectStore(STORES.LABORATORIOS).getAll();
                         const reqGetBorrador = txCargar.objectStore(STORES.BORRADOR).get('activo');
                         const reqGetReglas = txCargar.objectStore(STORES.CONFIGURACION).get('reglas_activas');
                         const reqGetVademecum = txCargar.objectStore(STORES.CONFIGURACION).get('vademecum_maestro');
 
                         txCargar.oncomplete = () => {
+                            const listaProv = (reqGetAllProv.result && reqGetAllProv.result.length > 0)
+                                ? reqGetAllProv.result
+                                : obtenerDirectorioProveedores();
+                            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProv);
+
+                            const listaLab = (reqGetAllLab.result && reqGetAllLab.result.length > 0)
+                                ? reqGetAllLab.result
+                                : obtenerDirectorioLaboratorios();
+                            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
+
+                            // Si las tablas de proveedores o laboratorios están vacías en IDB, sembrarlas
+                            if (!reqGetAllProv.result || reqGetAllProv.result.length === 0) {
+                                abrirBaseDatos().then(dbRef => {
+                                    if (!dbRef) return;
+                                    try {
+                                        const txSeed = dbRef.transaction([STORES.PROVEEDORES], 'readwrite');
+                                        listaProv.forEach(p => txSeed.objectStore(STORES.PROVEEDORES).put(p));
+                                    } catch (_) {}
+                                });
+                            }
+                            if (!reqGetAllLab.result || reqGetAllLab.result.length === 0) {
+                                abrirBaseDatos().then(dbRef => {
+                                    if (!dbRef) return;
+                                    try {
+                                        const txSeed = dbRef.transaction([STORES.LABORATORIOS], 'readwrite');
+                                        listaLab.forEach(l => txSeed.objectStore(STORES.LABORATORIOS).put(l));
+                                    } catch (_) {}
+                                });
+                            }
                             const dicMap = {};
                             (reqGetAllDic.result || []).forEach(item => {
                                 if (item && item.codigoBarras) dicMap[item.codigoBarras] = item;
@@ -684,7 +736,9 @@
                 diccionario,
                 historial,
                 borrador,
-                reglas
+                reglas,
+                proveedores: obtenerDirectorioProveedores(),
+                laboratorios: obtenerDirectorioLaboratorios()
             }
         };
 
@@ -734,6 +788,28 @@
         if (datos.reglas && typeof datos.reglas === 'object') {
             guardarReglasNegocio(datos.reglas);
         }
+        if (Array.isArray(datos.proveedores)) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, datos.proveedores);
+            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, datos.proveedores);
+            abrirBaseDatos().then(db => {
+                if (!db) return;
+                try {
+                    const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
+                    datos.proveedores.forEach(p => tx.objectStore(STORES.PROVEEDORES).put(p));
+                } catch (_) {}
+            });
+        }
+        if (Array.isArray(datos.laboratorios)) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, datos.laboratorios);
+            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, datos.laboratorios);
+            abrirBaseDatos().then(db => {
+                if (!db) return;
+                try {
+                    const tx = db.transaction([STORES.LABORATORIOS], 'readwrite');
+                    datos.laboratorios.forEach(l => tx.objectStore(STORES.LABORATORIOS).put(l));
+                } catch (_) {}
+            });
+        }
 
         return {
             exito: true,
@@ -743,40 +819,68 @@
     }
 
 
-    // --- DIRECTORIO DE PROVEEDORES Y LABORATORIOS (RD) ---
+    // --- DIRECTORIO DE PROVEEDORES / DROGUERÍAS (RD) ---
     const PROVEEDORES_SEMILLA = Object.freeze([
-        { rnc: '101023456', nombre: 'Droguería Betances', razonSocial: 'Droguería Betances, S.A.S.' },
-        { rnc: '101012345', nombre: 'Droguería Farach', razonSocial: 'Droguería Farach, S.A.' },
-        { rnc: '101098765', nombre: 'Laboratorios Rowe', razonSocial: 'Laboratorios Rowe, S.R.L.' },
-        { rnc: '101054321', nombre: 'Ethical Farmacéutica', razonSocial: 'Ethical Farmacéutica, S.A.' },
-        { rnc: '130123456', nombre: 'Suiphar Dominicana', razonSocial: 'Suiphar de la República Dominicana, S.R.L.' },
-        { rnc: '101045678', nombre: 'Alfa Farmacéutica', razonSocial: 'Laboratorios Alfa, S.R.L.' }
+        { id: 'prov_betances', rnc: '101023456', nombre: 'Droguería Betances', razonSocial: 'Droguería Betances, S.A.S.', telefono: '(809) 565-1234', contacto: 'Ventas Institucionales', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_farach', rnc: '101012345', nombre: 'Droguería Farach', razonSocial: 'Droguería Farach, S.A.', telefono: '(809) 567-5678', contacto: 'Despacho Farmacias', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_ethical', rnc: '101054321', nombre: 'Ethical Farmacéutica', razonSocial: 'Ethical Farmacéutica, S.A.', telefono: '(809) 530-1122', contacto: 'Servicio al Cliente', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_suiphar', rnc: '130123456', nombre: 'Suiphar Dominicana', razonSocial: 'Suiphar de la República Dominicana, S.R.L.', telefono: '(809) 540-3344', contacto: 'Representante Médico', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_corripio', rnc: '101002233', nombre: 'Distribuidora Corripio', razonSocial: 'Distribuidora Corripio, S.A.S.', telefono: '(809) 227-2000', contacto: 'Consumo Masivo / Conveniencia', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'prov_mallas', rnc: '101004455', nombre: 'Mallas y Enlaces', razonSocial: 'Mallas y Enlaces Farmacéuticos, S.R.L.', telefono: '(809) 688-9900', contacto: 'Distribución Nacional', diasCredito: 30, descuentoHabitual: 0, actualizadoEn: '2026-11-09T00:00:00.000Z' }
+    ]);
+
+    // --- DIRECTORIO DE LABORATORIOS FABRICANTES (RD E INTERNACIONALES) ---
+    const LABORATORIOS_SEMILLA = Object.freeze([
+        { id: 'lab_rowe', nombre: 'Laboratorios Rowe', razonSocial: 'Laboratorios Rowe, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Laboratorios Rowe', telefono: '(809) 560-6000', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_lam', nombre: 'Laboratorios LAM', razonSocial: 'Laboratorios de Aplicaciones Médicas (LAM), S.R.L.', origen: 'Nacional RD', titularRegistro: 'LAM Dominicana', telefono: '(809) 565-5555', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_magnachem', nombre: 'Magnachem International', razonSocial: 'Magnachem International Pharmaceuticals, S.A.', origen: 'Nacional RD', titularRegistro: 'Magnachem Corp', telefono: '(809) 560-1200', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_alfa', nombre: 'Laboratorios Alfa', razonSocial: 'Laboratorios Alfa, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Alfa Farmacéutica', telefono: '(809) 534-7121', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_sued', nombre: 'Sued Farmacéutica', razonSocial: 'Sued Farmacéutica, S.R.L.', origen: 'Nacional RD', titularRegistro: 'Sued Fargesa', telefono: '(809) 582-4141', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_bayer', nombre: 'Bayer', razonSocial: 'Bayer S.A. / Consumer Health', origen: 'Importado', titularRegistro: 'Bayer AG Alemania', telefono: '(809) 544-2400', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_pfizer', nombre: 'Pfizer', razonSocial: 'Pfizer Free Zone Panamá / RD', origen: 'Importado', titularRegistro: 'Pfizer Inc.', telefono: '(809) 562-4111', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_novartis', nombre: 'Novartis', razonSocial: 'Novartis Pharma AG', origen: 'Importado', titularRegistro: 'Novartis Pharma', telefono: '(809) 563-7111', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_abbott', nombre: 'Abbott Laboratories', razonSocial: 'Abbott Laboratories Dominicana', origen: 'Importado', titularRegistro: 'Abbott USA', telefono: '(809) 567-2200', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_sanofi', nombre: 'Sanofi', razonSocial: 'Sanofi-Aventis de la República Dominicana', origen: 'Importado', titularRegistro: 'Sanofi Francia', telefono: '(809) 540-0202', actualizadoEn: '2026-11-09T00:00:00.000Z' },
+        { id: 'lab_philips_avent', nombre: 'Philips Avent', razonSocial: 'Philips Consumer Lifestyle B.V.', origen: 'Importado', titularRegistro: 'Philips Puericultura', telefono: '(809) 565-1122', actualizadoEn: '2026-11-09T00:00:00.000Z' }
     ]);
 
     function obtenerDirectorioProveedores() {
+        if (cacheStorage.has(CONSTANTES.CLAVES_STORAGE.PROVEEDORES)) {
+            return cacheStorage.get(CONSTANTES.CLAVES_STORAGE.PROVEEDORES);
+        }
         const guardados = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, null);
         if (Array.isArray(guardados) && guardados.length > 0) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, guardados);
             return guardados;
         }
-        return [...PROVEEDORES_SEMILLA];
+        const iniciales = PROVEEDORES_SEMILLA.map(p => ({ ...p }));
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, iniciales);
+        return iniciales;
     }
 
     function guardarProveedorEnDirectorio(proveedor) {
         if (!proveedor || (!proveedor.rnc && !proveedor.nombre)) return false;
-        const directorio = obtenerDirectorioProveedores();
+        const directorio = obtenerDirectorioProveedores().map(p => ({ ...p }));
         const rncLimpio = String(proveedor.rnc || '').replace(/\D/g, '');
         const nombreLimpio = String(proveedor.nombre || proveedor.razonSocial || '').trim();
 
+        const idTarget = proveedor.id || (rncLimpio ? ('prov_' + rncLimpio) : ('prov_' + Dominio.generarIdUnico()));
         const idx = directorio.findIndex(p => {
+            if (proveedor.id && p.id === proveedor.id) return true;
             const rncP = String(p.rnc || '').replace(/\D/g, '');
             const nomP = String(p.nombre || p.razonSocial || '').toLowerCase().trim();
             return (rncLimpio && rncP === rncLimpio) || (nombreLimpio && nomP === nombreLimpio.toLowerCase());
         });
 
         const registro = {
+            id: (idx >= 0 ? directorio[idx].id : idTarget),
             rnc: rncLimpio || (idx >= 0 ? directorio[idx].rnc : ''),
             nombre: nombreLimpio || (idx >= 0 ? directorio[idx].nombre : ''),
             razonSocial: String(proveedor.razonSocial || proveedor.nombre || (idx >= 0 ? directorio[idx].razonSocial : '')).trim(),
+            telefono: String(proveedor.telefono || (idx >= 0 ? (directorio[idx].telefono || '') : '')).trim(),
+            contacto: String(proveedor.contacto || (idx >= 0 ? (directorio[idx].contacto || '') : '')).trim(),
+            diasCredito: parseInt(proveedor.diasCredito !== undefined ? proveedor.diasCredito : (idx >= 0 ? directorio[idx].diasCredito : 30), 10) || 30,
+            descuentoHabitual: parseFloat(proveedor.descuentoHabitual !== undefined ? proveedor.descuentoHabitual : (idx >= 0 ? directorio[idx].descuentoHabitual : 0)) || 0,
             actualizadoEn: new Date().toISOString()
         };
 
@@ -786,7 +890,36 @@
             directorio.push(registro);
         }
 
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
+
+        abrirBaseDatos().then(db => {
+            if (!db) return;
+            try {
+                const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
+                tx.objectStore(STORES.PROVEEDORES).put(registro);
+            } catch (e) {
+                console.warn('[IndexedDB] Error guardando proveedor:', e);
+            }
+        });
+        return true;
+    }
+
+    function eliminarProveedorDeDirectorio(idProveedor) {
+        if (!idProveedor) return false;
+        const directorio = obtenerDirectorioProveedores().filter(p => p.id !== idProveedor);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
+
+        abrirBaseDatos().then(db => {
+            if (!db) return;
+            try {
+                const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
+                tx.objectStore(STORES.PROVEEDORES).delete(idProveedor);
+            } catch (e) {
+                console.warn('[IndexedDB] Error eliminando proveedor:', e);
+            }
+        });
         return true;
     }
 
@@ -804,6 +937,91 @@
         return directorio.find(p =>
             String(p.nombre || '').toLowerCase().trim() === termino ||
             String(p.razonSocial || '').toLowerCase().trim() === termino
+        ) || null;
+    }
+
+    // --- CRUD DE LABORATORIOS FABRICANTES ---
+    function obtenerDirectorioLaboratorios() {
+        if (cacheStorage.has(CONSTANTES.CLAVES_STORAGE.LABORATORIOS)) {
+            return cacheStorage.get(CONSTANTES.CLAVES_STORAGE.LABORATORIOS);
+        }
+        const guardados = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, null);
+        if (Array.isArray(guardados) && guardados.length > 0) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, guardados);
+            return guardados;
+        }
+        const iniciales = LABORATORIOS_SEMILLA.map(l => ({ ...l }));
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, iniciales);
+        return iniciales;
+    }
+
+    function guardarLaboratorioEnDirectorio(lab) {
+        if (!lab || !lab.nombre) return false;
+        const directorio = obtenerDirectorioLaboratorios().map(l => ({ ...l }));
+        const nombreLimpio = String(lab.nombre || '').trim();
+        const idTarget = lab.id || ('lab_' + Dominio.generarIdUnico());
+
+        const idx = directorio.findIndex(l => {
+            if (lab.id && l.id === lab.id) return true;
+            return l.nombre.toLowerCase().trim() === nombreLimpio.toLowerCase();
+        });
+
+        const registro = {
+            id: (idx >= 0 ? directorio[idx].id : idTarget),
+            nombre: nombreLimpio,
+            razonSocial: String(lab.razonSocial || (idx >= 0 ? directorio[idx].razonSocial : nombreLimpio)).trim(),
+            origen: String(lab.origen || (idx >= 0 ? directorio[idx].origen : 'Nacional RD')).trim(),
+            titularRegistro: String(lab.titularRegistro || (idx >= 0 ? (directorio[idx].titularRegistro || '') : '')).trim(),
+            telefono: String(lab.telefono || (idx >= 0 ? (directorio[idx].telefono || '') : '')).trim(),
+            actualizadoEn: new Date().toISOString()
+        };
+
+        if (idx >= 0) {
+            directorio[idx] = { ...directorio[idx], ...registro };
+        } else {
+            directorio.push(registro);
+        }
+
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, directorio);
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, directorio);
+
+        abrirBaseDatos().then(db => {
+            if (!db) return;
+            try {
+                const tx = db.transaction([STORES.LABORATORIOS], 'readwrite');
+                tx.objectStore(STORES.LABORATORIOS).put(registro);
+            } catch (e) {
+                console.warn('[IndexedDB] Error guardando laboratorio:', e);
+            }
+        });
+        return true;
+    }
+
+    function eliminarLaboratorioDeDirectorio(idLab) {
+        if (!idLab) return false;
+        const directorio = obtenerDirectorioLaboratorios().filter(l => l.id !== idLab);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, directorio);
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, directorio);
+
+        abrirBaseDatos().then(db => {
+            if (!db) return;
+            try {
+                const tx = db.transaction([STORES.LABORATORIOS], 'readwrite');
+                tx.objectStore(STORES.LABORATORIOS).delete(idLab);
+            } catch (e) {
+                console.warn('[IndexedDB] Error eliminando laboratorio:', e);
+            }
+        });
+        return true;
+    }
+
+    function buscarLaboratorioPorNombre(nombreCrudo) {
+        const termino = String(nombreCrudo || '').toLowerCase().trim();
+        if (!termino) return null;
+        const directorio = obtenerDirectorioLaboratorios();
+        return directorio.find(l =>
+            l.nombre.toLowerCase().trim() === termino ||
+            String(l.razonSocial || '').toLowerCase().trim() === termino
         ) || null;
     }
 
@@ -864,6 +1082,8 @@
             registroSanitario: String(ficha.registroSanitario || '').trim(),
             condicionVenta: String(ficha.condicionVenta || 'OTC').trim(),
             ubicacion: String(ficha.ubicacion || '').trim(),
+            proveedorHabitual: String(ficha.proveedorHabitual || existente.proveedorHabitual || '').trim(),
+            rncProveedor: String(ficha.rncProveedor || existente.rncProveedor || '').trim(),
             tipo,
             unidadesPorCaja,
             aplicaItbis: tasaItbis > 0,
@@ -872,6 +1092,27 @@
             ultimoPrecioCaja: Number(ficha.ultimoPrecioCaja !== undefined ? ficha.ultimoPrecioCaja : (existente.ultimoPrecioCaja || 0)),
             actualizadoEn: new Date().toISOString()
         };
+
+        // Auto-alimentación inteligente: Registrar laboratorio si es nuevo
+        if (fichaActualizada.laboratorio && fichaActualizada.laboratorio.length >= 2) {
+            const labExistente = buscarLaboratorioPorNombre(fichaActualizada.laboratorio);
+            if (!labExistente) {
+                guardarLaboratorioEnDirectorio({
+                    nombre: fichaActualizada.laboratorio,
+                    origen: 'Nacional RD'
+                });
+            }
+        }
+        // Auto-alimentación inteligente: Registrar proveedor si es nuevo
+        if (fichaActualizada.proveedorHabitual && fichaActualizada.proveedorHabitual.length >= 2) {
+            const provExistente = buscarProveedorPorNombre(fichaActualizada.proveedorHabitual);
+            if (!provExistente) {
+                guardarProveedorEnDirectorio({
+                    nombre: fichaActualizada.proveedorHabitual,
+                    rnc: fichaActualizada.rncProveedor || ''
+                });
+            }
+        }
 
         diccionario[codigo] = fichaActualizada;
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
@@ -1026,8 +1267,13 @@
 
         obtenerDirectorioProveedores,
         guardarProveedorEnDirectorio,
+        eliminarProveedorDeDirectorio,
         buscarProveedorPorRnc,
         buscarProveedorPorNombre,
+        obtenerDirectorioLaboratorios,
+        guardarLaboratorioEnDirectorio,
+        eliminarLaboratorioDeDirectorio,
+        buscarLaboratorioPorNombre,
         leerJsonSeguro,
         escribirJsonSeguro,
         invalidarCacheStorage,

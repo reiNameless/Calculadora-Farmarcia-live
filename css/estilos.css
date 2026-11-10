@@ -2825,3 +2825,47 @@ body.modo-compacto-forzado .cockpit-col-calc .grid-operativo {
     from { opacity: 0; transform: scale(0.95); }
     to { opacity: 1; transform: scale(1); }
 }
+
+/* ==========================================================================
+   SUB-PESTAÑAS DE CATÁLOGOS RELACIONALES (PRODUCTOS, PROVEEDORES, LABS)
+   ========================================================================== */
+.subtabs-catalogo {
+    display: flex;
+    gap: 6px;
+    margin-bottom: var(--espacio-2);
+    border-bottom: 1px solid var(--color-borde);
+    padding-bottom: 8px;
+    flex-wrap: wrap;
+}
+.subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--radio-sm);
+    border: 1px solid var(--color-borde);
+    background: var(--color-fondo-panel);
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.subtab-btn:hover {
+    color: var(--color-primario);
+    border-color: var(--color-primario);
+    background: var(--color-superficie-resaltada);
+}
+.subtab-btn.activo {
+    color: #fff;
+    background: var(--color-primario);
+    border-color: var(--color-primario);
+}
+.panel-subtab-catalogo {
+    animation: fadeInSubtab 0.2s ease-out;
+}
+@keyframes fadeInSubtab {
+    from { opacity: 0; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
+}

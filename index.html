@@ -782,18 +782,65 @@
                         </div>
                     </div>
 
-                    <div style="display:flex;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
-                        <div style="flex:1;min-width:220px;">
-                            <input type="text" id="filtroBuscadorDiccionario" class="input-control" placeholder="Buscar por nombre, código o laboratorio..." autocomplete="off">
+                    <!-- Selector de Sub-Catálogos Relacionales -->
+                    <div class="subtabs-catalogo">
+                        <button type="button" class="subtab-btn activo" data-subtab-cat="productos" id="tabCatProductos">
+                            <svg class="ico ico-sm"><use href="#i-barcode"/></svg>
+                            <span>1. Fármacos & Productos</span>
+                        </button>
+                        <button type="button" class="subtab-btn" data-subtab-cat="proveedores" id="tabCatProveedores">
+                            <svg class="ico ico-sm"><use href="#i-box"/></svg>
+                            <span>2. Droguerías & Proveedores</span>
+                        </button>
+                        <button type="button" class="subtab-btn" data-subtab-cat="laboratorios" id="tabCatLaboratorios">
+                            <svg class="ico ico-sm"><use href="#i-check"/></svg>
+                            <span>3. Laboratorios Fabricantes</span>
+                        </button>
+                    </div>
+
+                    <!-- Panel 1: Catálogo de Productos y Medicamentos -->
+                    <div id="panelCatalogoProductos" class="panel-subtab-catalogo">
+                        <div style="display:flex;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
+                            <div style="flex:1;min-width:220px;">
+                                <input type="text" id="filtroBuscadorDiccionario" class="input-control" placeholder="Buscar por nombre, código o laboratorio..." autocomplete="off">
+                            </div>
+                            <div style="min-width:180px;">
+                                <select id="filtroCategoriaDiccionario" class="input-control" aria-label="Filtrar por categoría">
+                                    <option value="">Todas las categorías (A-Z)</option>
+                                </select>
+                            </div>
                         </div>
-                        <div style="min-width:180px;">
-                            <select id="filtroCategoriaDiccionario" class="input-control" aria-label="Filtrar por categoría">
-                                <option value="">Todas las categorías (A-Z)</option>
-                            </select>
+                        <div id="contenedorDiccionario">
+                            <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
                         </div>
                     </div>
-                    <div id="contenedorDiccionario">
-                        <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
+
+                    <!-- Panel 2: Directorio de Proveedores / Droguerías -->
+                    <div id="panelCatalogoProveedores" class="panel-subtab-catalogo" style="display:none;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
+                            <div style="flex:1;min-width:220px;">
+                                <input type="text" id="filtroBuscadorProveedores" class="input-control" placeholder="Buscar proveedor por nombre, RNC o contacto..." autocomplete="off">
+                            </div>
+                            <button type="button" class="btn-icono" id="btnNuevoProveedor" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                                <svg class="ico ico-sm"><use href="#i-plus"/></svg>
+                                <span>+ Nueva Droguería</span>
+                            </button>
+                        </div>
+                        <div id="contenedorProveedores"></div>
+                    </div>
+
+                    <!-- Panel 3: Directorio de Laboratorios Fabricantes -->
+                    <div id="panelCatalogoLaboratorios" class="panel-subtab-catalogo" style="display:none;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
+                            <div style="flex:1;min-width:220px;">
+                                <input type="text" id="filtroBuscadorLaboratorios" class="input-control" placeholder="Buscar laboratorio o fabricante..." autocomplete="off">
+                            </div>
+                            <button type="button" class="btn-icono" id="btnNuevoLaboratorio" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                                <svg class="ico ico-sm"><use href="#i-plus"/></svg>
+                                <span>+ Nuevo Laboratorio</span>
+                            </button>
+                        </div>
+                        <div id="contenedorLaboratorios"></div>
                     </div>
                 </section>
 
@@ -1037,48 +1084,96 @@
                 </button>
             </div>
             <form id="formEditarFichaProducto" style="display:flex;flex-direction:column;gap:var(--espacio-2);">
+                <!-- Fila 1: Código + Categoría con Selector Jerárquico y Opción Dinámica -->
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                     <div class="campo" style="flex:1;min-width:140px;">
                         <label class="campo-label" for="editProdCodigo">Código de Barras</label>
                         <input type="text" id="editProdCodigo" class="input-control input-mono" readonly style="background:var(--color-fondo-panel);">
                     </div>
-                    <div class="campo" style="flex:1;min-width:140px;">
+                    <div class="campo" style="flex:1;min-width:180px;">
                         <label class="campo-label" for="editProdCategoria">Categoría Terapéutica</label>
-                        <input type="text" id="editProdCategoria" class="input-control" placeholder="Ej. Analgésico / Antipirético">
+                        <select id="editProdCategoria" class="input-control" aria-label="Seleccionar categoría"></select>
+                        <input type="text" id="editProdCategoriaNueva" class="input-control" style="display:none;margin-top:4px;" placeholder="Escribe el nombre de la nueva categoría...">
                     </div>
                 </div>
 
+                <!-- Fila 2: Nombre del Producto -->
                 <div class="campo">
                     <label class="campo-label" for="editProdNombre">Nombre del Producto *</label>
-                    <input type="text" id="editProdNombre" class="input-control" required placeholder="Nombre oficial y presentación">
+                    <input type="text" id="editProdNombre" class="input-control" required placeholder="Nombre comercial oficial y presentación">
                 </div>
 
+                <!-- Fila 3: Principio Activo + Concentración / Dosis -->
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
-                    <div class="campo" style="flex:1;min-width:140px;">
+                    <div class="campo" style="flex:2;min-width:160px;">
                         <label class="campo-label" for="editProdPrincipioActivo">Principio Activo</label>
-                        <input type="text" id="editProdPrincipioActivo" class="input-control" placeholder="Ej. Paracetamol, Amoxicilina">
+                        <input type="text" id="editProdPrincipioActivo" class="input-control" placeholder="Ej. Amoxicilina, Paracetamol">
                     </div>
-                    <div class="campo" style="flex:1;min-width:140px;">
-                        <label class="campo-label" for="editProdLaboratorio">Laboratorio / Marca</label>
-                        <input type="text" id="editProdLaboratorio" class="input-control" placeholder="Ej. Rowe, Betances, Pfizer">
+                    <div class="campo" style="flex:1;min-width:120px;">
+                        <label class="campo-label" for="editProdConcentracion">Dosis / Concentración</label>
+                        <input type="text" id="editProdConcentracion" class="input-control" placeholder="Ej. 500 MG, 10 ML, 1%">
                     </div>
                 </div>
 
+                <!-- Fila 4: Laboratorio Fabricante + Droguería / Proveedor Habitual -->
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:150px;">
+                        <label class="campo-label" for="editProdLaboratorio">Laboratorio Fabricante</label>
+                        <input type="text" id="editProdLaboratorio" class="input-control" list="listaLaboratoriosSugeridos" placeholder="Ej. Laboratorios Rowe, LAM">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:150px;">
+                        <label class="campo-label" for="editProdProveedorHabitual">Droguería / Proveedor Habitual</label>
+                        <input type="text" id="editProdProveedorHabitual" class="input-control" list="listaProveedoresHabitualesSugeridos" placeholder="Ej. Droguería Betances">
+                    </div>
+                </div>
+
+                <!-- Fila 5: Forma Farmacéutica + Presentación Comercial -->
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                     <div class="campo" style="flex:1;min-width:140px;">
-                        <label class="campo-label" for="editProdTipo">Forma de Venta</label>
-                        <select id="editProdTipo" class="input-control">
-                            <option value="divisible">Divisible (se vende por pastillas/blister)</option>
-                            <option value="entero">Entero (se vende solo caja/frasco)</option>
+                        <label class="campo-label" for="editProdForma">Forma Farmacéutica</label>
+                        <select id="editProdForma" class="input-control">
+                            <option value="">Selecciona forma farmacéutica...</option>
+                            <option value="Comprimidos">Comprimidos / Tabletas</option>
+                            <option value="Cápsulas">Cápsulas</option>
+                            <option value="Jarabe">Jarabe</option>
+                            <option value="Suspensión">Suspensión Oral</option>
+                            <option value="Gotas">Gotas Orales / Oftálmicas</option>
+                            <option value="Ampollas">Ampollas Inyectables</option>
+                            <option value="Crema / Gel">Crema / Ungüento / Gel</option>
+                            <option value="Óvulos">Óvulos / Supositorios</option>
+                            <option value="Polvo / Sobres">Polvo / Granulado / Sobres</option>
+                            <option value="Solución">Solución Tópica / Externa</option>
+                            <option value="Inhalador">Inhalador / Aerosol</option>
+                            <option value="Accesorio / Consumo">Accesorio / Puericultura / Consumo</option>
                         </select>
                     </div>
-                    <div class="campo" style="flex:1;min-width:100px;" id="boxEditProdUnidades">
-                        <label class="campo-label" for="editProdUnidades">Unidades x Caja</label>
-                        <input type="number" id="editProdUnidades" class="input-control input-mono" min="1" value="1">
+                    <div class="campo" style="flex:1;min-width:140px;">
+                        <label class="campo-label" for="editProdPresentacion">Presentación Comercial</label>
+                        <input type="text" id="editProdPresentacion" class="input-control" placeholder="Ej. Caja con 30 comprimidos">
                     </div>
                 </div>
 
+                <!-- Fila 6: Forma de Venta + Unidades x Caja + Último Costo Caja -->
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editProdTipo">Forma de Venta</label>
+                        <select id="editProdTipo" class="input-control">
+                            <option value="divisible">Divisible (pastillas/blíster)</option>
+                            <option value="entero">Entero (caja/frasco)</option>
+                        </select>
+                    </div>
+                    <div class="campo" style="flex:1;min-width:90px;" id="boxEditProdUnidades">
+                        <label class="campo-label" for="editProdUnidades">Trae x Caja</label>
+                        <input type="number" id="editProdUnidades" class="input-control input-mono" min="1" value="1">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:120px;">
+                        <label class="campo-label" for="editProdUltimoCosto">Último Costo ($)</label>
+                        <input type="number" id="editProdUltimoCosto" class="input-control input-mono" step="0.01" min="0" placeholder="0.00" title="Costo histórico para cálculo del radar de variación">
+                    </div>
+                </div>
+
+                <!-- Fila 7: Régimen ITBIS + Condición de Venta + Es Leche -->
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;align-items:flex-end;">
                     <div class="campo" style="flex:1;min-width:140px;">
                         <label class="campo-label" for="editProdTasaItbis">Régimen ITBIS (DGII)</label>
                         <select id="editProdTasaItbis" class="input-control">
@@ -1087,14 +1182,23 @@
                             <option value="16">Gravado 16% Derivados</option>
                         </select>
                     </div>
-                    <div class="campo" style="flex:1;min-width:140px;display:flex;align-items:flex-end;padding-bottom:8px;">
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editProdCondicion">Condición de Venta</label>
+                        <select id="editProdCondicion" class="input-control">
+                            <option value="OTC">Venta Libre (OTC)</option>
+                            <option value="Receta">Bajo Receta Médica</option>
+                            <option value="Controlado">Medicamento Controlado</option>
+                        </select>
+                    </div>
+                    <div class="campo" style="flex:1;min-width:140px;padding-bottom:8px;">
                         <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
                             <input type="checkbox" id="editProdEsLeche">
-                            <span>Es Leche / Fórmula (10% Margen)</span>
+                            <span>Es Leche / Fórmula (10%)</span>
                         </label>
                     </div>
                 </div>
 
+                <!-- Fila 8: Registro Sanitario + Ubicación / Anaquel -->
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                     <div class="campo" style="flex:1;min-width:140px;">
                         <label class="campo-label" for="editProdRegistroSanitario">Registro Sanitario</label>
@@ -1115,6 +1219,115 @@
                 </div>
             </form>
         </dialog>
+
+        <!-- Modal Accesible: Alta y Edición de Proveedor / Droguería -->
+        <dialog id="modalEditarProveedor" class="farmacia-modal" style="max-width:520px;" aria-labelledby="tituloModalProveedor" aria-modal="true">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
+                    <svg class="ico"><use href="#i-box"/></svg>
+                    <span id="tituloModalProveedor">Ficha de Proveedor / Droguería</span>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarModalProveedor" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
+                </button>
+            </div>
+            <form id="formEditarProveedor" style="display:flex;flex-direction:column;gap:var(--espacio-2);">
+                <input type="hidden" id="editProvId">
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editProvRnc">RNC Fiscal *</label>
+                        <input type="text" id="editProvRnc" class="input-control input-mono" required placeholder="Ej. 101023456" maxlength="11">
+                    </div>
+                    <div class="campo" style="flex:2;min-width:160px;">
+                        <label class="campo-label" for="editProvNombre">Nombre Comercial *</label>
+                        <input type="text" id="editProvNombre" class="input-control" required placeholder="Ej. Droguería Betances">
+                    </div>
+                </div>
+                <div class="campo">
+                    <label class="campo-label" for="editProvRazonSocial">Razón Social Oficial</label>
+                    <input type="text" id="editProvRazonSocial" class="input-control" placeholder="Ej. Droguería Betances, S.A.S.">
+                </div>
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editProvTelefono">Teléfono</label>
+                        <input type="text" id="editProvTelefono" class="input-control" placeholder="(809) 000-0000">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editProvContacto">Persona / Área de Contacto</label>
+                        <input type="text" id="editProvContacto" class="input-control" placeholder="Ej. Despacho Farmacias">
+                    </div>
+                </div>
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:120px;">
+                        <label class="campo-label" for="editProvDiasCredito">Días de Crédito</label>
+                        <input type="number" id="editProvDiasCredito" class="input-control input-mono" value="30" min="0">
+                    </div>
+                    <div class="campo" style="flex:1;min-width:120px;">
+                        <label class="campo-label" for="editProvDescuento">Descuento Comercial (%)</label>
+                        <input type="number" id="editProvDescuento" class="input-control input-mono" step="0.01" min="0" value="0.00">
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:var(--espacio-2);margin-top:var(--espacio-2);">
+                    <button type="button" class="btn-icono" id="btnCancelarEditarProveedor">Cancelar</button>
+                    <button type="submit" class="btn-icono" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                        <svg class="ico ico-sm"><use href="#i-check"/></svg>
+                        <span>Guardar Proveedor</span>
+                    </button>
+                </div>
+            </form>
+        </dialog>
+
+        <!-- Modal Accesible: Alta y Edición de Laboratorio Fabricante -->
+        <dialog id="modalEditarLaboratorio" class="farmacia-modal" style="max-width:500px;" aria-labelledby="tituloModalLaboratorio" aria-modal="true">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
+                    <svg class="ico"><use href="#i-check"/></svg>
+                    <span id="tituloModalLaboratorio">Ficha de Laboratorio Fabricante</span>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarModalLaboratorio" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
+                </button>
+            </div>
+            <form id="formEditarLaboratorio" style="display:flex;flex-direction:column;gap:var(--espacio-2);">
+                <input type="hidden" id="editLabId">
+                <div class="campo">
+                    <label class="campo-label" for="editLabNombre">Nombre del Laboratorio / Marca *</label>
+                    <input type="text" id="editLabNombre" class="input-control" required placeholder="Ej. Laboratorios Rowe, LAM, Bayer">
+                </div>
+                <div class="campo">
+                    <label class="campo-label" for="editLabRazonSocial">Razón Social</label>
+                    <input type="text" id="editLabRazonSocial" class="input-control" placeholder="Ej. Laboratorios Rowe, S.R.L.">
+                </div>
+                <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editLabOrigen">Origen</label>
+                        <select id="editLabOrigen" class="input-control">
+                            <option value="Nacional RD">Nacional RD</option>
+                            <option value="Importado">Importado</option>
+                        </select>
+                    </div>
+                    <div class="campo" style="flex:1;min-width:130px;">
+                        <label class="campo-label" for="editLabTelefono">Teléfono</label>
+                        <input type="text" id="editLabTelefono" class="input-control" placeholder="(809) 000-0000">
+                    </div>
+                </div>
+                <div class="campo">
+                    <label class="campo-label" for="editLabTitular">Titular de Registro Sanitario</label>
+                    <input type="text" id="editLabTitular" class="input-control" placeholder="Ej. Rowe Pharmaceuticals Corp.">
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:var(--espacio-2);margin-top:var(--espacio-2);">
+                    <button type="button" class="btn-icono" id="btnCancelarEditarLaboratorio">Cancelar</button>
+                    <button type="submit" class="btn-icono" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                        <svg class="ico ico-sm"><use href="#i-check"/></svg>
+                        <span>Guardar Laboratorio</span>
+                    </button>
+                </div>
+            </form>
+        </dialog>
+
+        <!-- Datalists de Autocompletado Cruzado para Mostrador -->
+        <datalist id="listaProveedoresHabitualesSugeridos"></datalist>
+        <datalist id="listaLaboratoriosSugeridos"></datalist>
 
         <!-- Elemento de compatibilidad con barra de navegación del código original -->
         <nav id="barraNavegacion" style="display:none;" aria-hidden="true">

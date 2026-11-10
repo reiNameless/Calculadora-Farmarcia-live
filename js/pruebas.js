@@ -963,6 +963,12 @@
         afirmarIgualdad(lineaBonifCruzada.esBonificacionCruzada, true, 'Linea Bonif Cruzada: esBonificacionCruzada es true');
         afirmarIgualdad(lineaBonifCruzada.p1Exacto, '195.00', 'Linea Bonif Cruzada: P1 calculado sobre costo referencia $150 (+30% = $195.00)');
 
+        // 35. Arquitectura de Catálogos Relacionales y Normalización de Categorías Terapéuticas
+        if (Dominio && typeof Dominio.obtenerMacroCategoria === 'function') {
+            afirmarIgualdad(Dominio.obtenerMacroCategoria('Antibiótico Oral'), 'Antibióticos', 'Macrocategoría: Antibiótico mapea a Antibióticos');
+            afirmarIgualdad(Dominio.obtenerMacroCategoria('Antihipertensivo'), 'Cardiovascular & Hipertensión', 'Macrocategoría: Antihipertensivo mapea a Cardiovascular');
+            afirmarIgualdad(Dominio.obtenerMacroCategoria('Vitamina C'), 'Vitaminas & Suplementos', 'Macrocategoría: Vitamina mapea a Vitaminas & Suplementos');
+        }
 
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();

@@ -31,6 +31,8 @@
         TIPO_ARCHIVO_DICCIONARIO_CODIGOS: 'respaldo-farmacia-diccionario',
         TIPO_ARCHIVO_RESPALDO_COMPLETO: 'respaldo-farmacia-completo',
         TIPO_ARCHIVO_PARCHE_CATALOGO: 'parche-farmacia-catalogo',
+        TIPO_ARCHIVO_DIRECTORIO_PROVEEDORES: 'respaldo-farmacia-proveedores',
+        TIPO_ARCHIVO_DIRECTORIO_LABORATORIOS: 'respaldo-farmacia-laboratorios',
         DECIMALES_COSTO_UNITARIO: 8,
         DECIMALES_MONEDA: 2,
         DECIMALES_AUDITORIA: 4,
@@ -93,6 +95,7 @@
             HISTORIAL_7DIAS: 'farmacia_historial_7dias',
             DICCIONARIO_CODIGOS: 'farmacia_diccionario_codigos_v1',
             PROVEEDORES: 'farmacia_proveedores_v1',
+            LABORATORIOS: 'farmacia_laboratorios_v1',
             REGLAS_NEGOCIO: 'farmacia_reglas_calculo_v2',
             IA_API_KEY: 'farmacia_gemini_api_key', // Se almacena en sessionStorage por seguridad
             IA_MODELO: 'farmacia_gemini_modelo'

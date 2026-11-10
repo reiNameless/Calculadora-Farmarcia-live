@@ -115,10 +115,15 @@
         if (el('facRnc')) Estado.sesionActual.rnc = san(el('facRnc').value, 20);
         Estado.sesionActual.numeroFactura = san(el('facNumero').value, 50);
         Estado.sesionActual.fechaEmision = el('facFechaEmision').value;
-        if (!el('facFechaVencimiento').value && el('facFechaEmision').value) {
-            el('facFechaVencimiento').value = Dominio.sumarDiasAFechaISO(el('facFechaEmision').value, 30);
+        const inputVenc = el('facFechaVencimiento');
+        if (inputVenc) {
+            if (!inputVenc.value && el('facFechaEmision').value) {
+                inputVenc.value = Dominio.sumarDiasAFechaISO(el('facFechaEmision').value, 30);
+            }
+            Estado.sesionActual.fechaVencimiento = inputVenc.value;
+        } else {
+            Estado.sesionActual.fechaVencimiento = '';
         }
-        Estado.sesionActual.fechaVencimiento = el('facFechaVencimiento').value;
         Estado.sesionActual.totalFisico = parseFloat(el('facTotalFisico').value) || 0;
         if (el('facDescuentoGlobal')) {
             Estado.sesionActual.descuentoGlobalValor = Math.max(0, parseFloat(el('facDescuentoGlobal').value) || 0);
@@ -426,7 +431,7 @@
 
             return '<tr>' +
                 '<td class="celda-edit" ' + attrId + ' data-campo="nombre">' +
-                    '<strong>' + escaparHtml(p.nombre) + '</strong>' + badgeLeche +
+                    '<strong>' + escaparHtml(p.nombre || p.nombreComercial || 'Producto') + '</strong>' + badgeLeche +
                     badgeFefo +
                     etiquetaCodigo +
                     '<div class="fs-xs text-muted" style="font-size:10px;margin-top:2px;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">' + chipCostoFiscal + '</div>' +
@@ -730,7 +735,7 @@
             }
         }
     }
-    function finalizarYGuardarFactura() {
+    async function finalizarYGuardarFactura() {
         if (operacionGuardadoEnCurso) return;
         const btnFinalizar = el('btnFinalizarFactura');
         try {
@@ -738,6 +743,13 @@
             if (btnFinalizar) {
                 btnFinalizar.disabled = true;
                 btnFinalizar.classList.add('btn-loading');
+            }
+
+            if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
+                const desbloqueado = UI.Seguridad ? await UI.Seguridad.solicitarDesbloqueoSiNecesario() : false;
+                if (!desbloqueado) {
+                    return UI.Notificaciones.mostrarMensaje('Bóveda cifrada bloqueada: ingresa la contraseña de administrador para archivar la factura.', 'warning');
+                }
             }
 
             const Estado = AppFarmacia.Estado;
@@ -773,6 +785,9 @@
             else historial.unshift(facturaCerrada);
 
             const guardado = Almacenamiento.guardarHistorialFacturas(historial);
+            if (!guardado.exito) {
+                return UI.Notificaciones.mostrarMensaje(guardado.error || 'Error al guardar la factura en el historial.', 'error');
+            }
 
             if (Estado.sesionActual.proveedor || Estado.sesionActual.rnc) {
                 Almacenamiento.guardarProveedorEnDirectorio({
@@ -781,12 +796,9 @@
                 });
                 actualizarDatalistProveedores();
             }
-            if (!guardado.exito) {
-                return UI.Notificaciones.mostrarMensaje(guardado.error || 'Error al guardar la factura en el historial.', 'error');
-            }
 
             Estado.vaciarSesion();
-            UI.Notificaciones.mostrarMensaje('Factura guardada correctamente en el historial.', 'success');
+            UI.Notificaciones.mostrarMensaje('Factura archivada de forma segura en el historial.', 'success');
         } finally {
             operacionGuardadoEnCurso = false;
             if (btnFinalizar) {
@@ -800,7 +812,7 @@
         const Estado = AppFarmacia.Estado;
 
         ['facProveedor', 'facRnc', 'facNumero', 'facTotalFisico', 'facFechaEmision', 'facFechaVencimiento', 'facDescuentoGlobal'].forEach(id => {
-            el(id).addEventListener('input', actualizarCabeceraFacturaDesdeUI);
+            if (el(id)) el(id).addEventListener('input', actualizarCabeceraFacturaDesdeUI);
         });
 
                 const inputProveedor = el('facProveedor');

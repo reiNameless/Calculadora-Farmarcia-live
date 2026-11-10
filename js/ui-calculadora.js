@@ -568,7 +568,10 @@
         } else if (nombreProcesado && Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
             nombreProcesado = Dominio.estandarizarNombreFarmaceutico(nombreProcesado);
         }
-        const nombreFinalLinea = nombreProcesado || `Producto #${sesionActual.productos.length + 1}`;
+        const nombreFinalLinea = nombreProcesado
+            || (fichaVademecumSeleccionada && (fichaVademecumSeleccionada.nombreComercial || fichaVademecumSeleccionada.nombre))
+            || (prodDic && (prodDic.nombre || prodDic.nombreComercial))
+            || `Producto #${sesionActual.productos.length + 1}`;
 
         // Validación obligatoria de datos mínimos (nombre, concentración/unidad, laboratorio, tipo)
         const datosParaValidar = {
@@ -944,11 +947,15 @@
         if (el("btnToggleCandadoReglas")) el("btnToggleCandadoReglas").addEventListener('click', async () => {
             const estaBloqueado = el('fieldsetReglas').disabled;
             if (estaBloqueado) {
-                const desbloquear = await UI.Notificaciones.mostrarConfirmacion('¿Deseas desbloquear la configuración de fórmulas matemáticas para editarlas?', 'Desbloquear Fórmulas');
-                if (desbloquear) {
-                    borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
-                    establecerBloqueoReglas(false);
+                if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
+                    const ok = UI.Seguridad ? await UI.Seguridad.solicitarDesbloqueoSiNecesario() : false;
+                    if (!ok) return;
+                } else {
+                    const desbloquear = await UI.Notificaciones.mostrarConfirmacion('¿Deseas desbloquear la configuración de fórmulas matemáticas para editarlas?', 'Desbloquear Fórmulas');
+                    if (!desbloquear) return;
                 }
+                borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
+                establecerBloqueoReglas(false);
             } else {
                 borradorPerfilesEdicion = Dominio.clonarObjetoSeguro(Estado.reglasActivas.perfiles);
                 actualizarEtiquetasReglasUI(Estado.reglasActivas);

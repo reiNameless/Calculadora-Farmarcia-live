@@ -1948,7 +1948,88 @@
         };
     }
 
-    // --- EXPORTADOR RELACIONAL DE CATÁLOGO MAESTRO PARA ERP (26 COLUMNAS) ---
+    const CAMPOS_PUBLICOS_CATALOGO_DEFECTO = Object.freeze([
+        'codigoBarras',
+        'nombre',
+        'nombreComercial',
+        'principioActivo',
+        'concentracion',
+        'formaFarmaceutica',
+        'presentacion',
+        'laboratorio',
+        'categoria',
+        'tipo',
+        'unidadesPorCaja',
+        'aplicaItbis',
+        'tasaItbis',
+        'esLeche',
+        'condicionVenta',
+        'registroSanitario',
+        'ubicacion',
+        'actualizadoEn'
+    ]);
+
+    /**
+     * Purga en caliente (Allowlist estricta): extrae exclusivamente campos sanitarios públicos
+     * y erradica costos de compra, márgenes, proveedores, RNCs e historiales financieros.
+     * @param {Object} producto
+     * @returns {Object|null}
+     */
+    function sanitizarFichaPublicaCatalogo(producto) {
+        if (!producto || typeof producto !== 'object') return null;
+        const allowlist = (CONSTANTES && Array.isArray(CONSTANTES.CAMPOS_PUBLICOS_CATALOGO))
+            ? CONSTANTES.CAMPOS_PUBLICOS_CATALOGO
+            : CAMPOS_PUBLICOS_CATALOGO_DEFECTO;
+
+        const limpia = {};
+        for (const campo of allowlist) {
+            if (!Object.prototype.hasOwnProperty.call(producto, campo)) continue;
+            const val = producto[campo];
+            if (campo === 'codigoBarras') {
+                limpia.codigoBarras = normalizarCodigoBarras(val);
+            } else if (campo === 'unidadesPorCaja') {
+                limpia.unidadesPorCaja = Math.max(1, parseInt(val, 10) || 1);
+            } else if (campo === 'aplicaItbis' || campo === 'esLeche') {
+                limpia[campo] = Boolean(val);
+            } else if (campo === 'tasaItbis') {
+                limpia.tasaItbis = Number.isFinite(Number(val)) ? Number(val) : (producto.aplicaItbis ? 18 : 0);
+            } else if (campo === 'tipo') {
+                limpia.tipo = (val === CONSTANTES.CATEGORIAS.ENTERO)
+                    ? CONSTANTES.CATEGORIAS.ENTERO
+                    : CONSTANTES.CATEGORIAS.DIVISIBLE;
+            } else if (typeof val === 'string') {
+                limpia[campo] = sanitizarEntradaTexto(val, 255);
+            } else if (val !== undefined && val !== null) {
+                limpia[campo] = clonarObjetoSeguro(val);
+            }
+        }
+        return limpia;
+    }
+
+    /**
+     * Sanitiza un diccionario completo dejando únicamente fichas públicas sanitarias.
+     * @param {Object} diccionario
+     * @returns {Object}
+     */
+    function sanitizarDiccionarioPublico(diccionario) {
+        const origen = (diccionario && typeof diccionario === 'object' && !Array.isArray(diccionario))
+            ? diccionario
+            : {};
+        const resultado = {};
+        for (const [cod, item] of Object.entries(origen)) {
+            if (cod === '__proto__' || cod === 'constructor' || cod === 'prototype') continue;
+            const limpia = sanitizarFichaPublicaCatalogo(item);
+            const codNormalizado = normalizarCodigoBarras(cod || (limpia && limpia.codigoBarras));
+            if (!codNormalizado || codNormalizado === '__proto__' || codNormalizado === 'constructor' || codNormalizado === 'prototype') continue;
+            if (limpia) {
+                limpia.codigoBarras = codNormalizado;
+                resultado[codNormalizado] = limpia;
+            }
+        }
+        return resultado;
+    }
+
+    // --- EXPORTADOR SANITARIO PÚBLICO DE CATÁLOGO MAESTRO (.CSV - PURGA EN CALIENTE DE COSTOS) ---
     function generarCsvCatalogoMaestro(diccionario) {
         const columnas = [
             'codigo_barras',
@@ -1959,17 +2040,9 @@
             'forma_farmaceutica',
             'presentacion',
             'laboratorio',
-            'proveedor_habitual',
-            'rnc_proveedor',
+            'categoria',
             'tipo',
             'unidades_por_caja',
-            'costo_caja_actual',
-            'costo_caja_anterior',
-            'variacion_costo_porc',
-            'costo_unitario_fiscal',
-            'precio_p1_detalle',
-            'precio_p2_farmacia',
-            'precio_p3_mayorista',
             'aplica_itbis',
             'tasa_itbis',
             'es_leche',
@@ -1981,36 +2054,32 @@
 
         const escapeCsv = (val) => {
             if (val === null || val === undefined) return '""';
-            const str = String(val).replace(/"/g, '""');
-            return `"${str}"`;
+            let str = String(val);
+            // Mitigación contra CSV Formula Injection (CWE-1236) en Excel/LibreOffice
+            if (/^[=+\-@\t\r]/.test(str)) {
+                str = "'" + str;
+            }
+            return `"${str.replace(/"/g, '""')}"`;
         };
 
         const filas = [columnas.join(',')];
         const items = Object.values(diccionario || {});
 
-        items.forEach(p => {
+        items.forEach(itemCrudo => {
+            const p = sanitizarFichaPublicaCatalogo(itemCrudo);
             if (!p) return;
-            const pVenta = p.preciosVenta || {};
             const fila = [
-                escapeCsv(p.codigoBarras),
-                escapeCsv(p.nombre),
-                escapeCsv(p.nombreComercial || p.nombre),
+                escapeCsv(p.codigoBarras || ''),
+                escapeCsv(p.nombre || ''),
+                escapeCsv(p.nombreComercial || p.nombre || ''),
                 escapeCsv(p.principioActivo || ''),
                 escapeCsv(p.concentracion || ''),
                 escapeCsv(p.formaFarmaceutica || ''),
                 escapeCsv(p.presentacion || ''),
                 escapeCsv(p.laboratorio || ''),
-                escapeCsv(p.proveedorHabitual || ''),
-                escapeCsv(p.rncProveedor || ''),
+                escapeCsv(p.categoria || 'General / Otros'),
                 escapeCsv(p.tipo || 'divisible'),
                 escapeCsv(p.unidadesPorCaja || 1),
-                escapeCsv((Number(p.ultimoPrecioCaja) || 0).toFixed(2)),
-                escapeCsv((Number(p.costoAnteriorCaja) || 0).toFixed(2)),
-                escapeCsv((Number(p.variacionCosto) || 0).toFixed(2) + '%'),
-                escapeCsv(p.costoUnitarioFiscal || (p.ultimoPrecioCaja / (p.unidadesPorCaja || 1)).toFixed(8)),
-                escapeCsv(pVenta.p1Exacto || ''),
-                escapeCsv(pVenta.p2Exacto || ''),
-                escapeCsv(pVenta.p3Exacto || ''),
                 escapeCsv(p.aplicaItbis ? 'SÍ' : 'NO'),
                 escapeCsv(p.tasaItbis || 0),
                 escapeCsv(p.esLeche ? 'SÍ' : 'NO'),
@@ -2199,7 +2268,7 @@
                 const baseFuente = entranteEsMasReciente ? item : existente;
                 const baseSecundaria = entranteEsMasReciente ? existente : item;
 
-                local[codigoLimpio] = {
+                const fusionado = {
                     ...clonarObjetoSeguro(baseSecundaria),
                     ...clonarObjetoSeguro(baseFuente),
                     codigoBarras: codigoLimpio,
@@ -2208,6 +2277,28 @@
                     historialCostos: historialCombinado,
                     actualizadoEn: new Date(Math.max(fechaLocal || 0, fechaEntrante || 0, Date.now())).toISOString()
                 };
+
+                // Protección ante parches públicos purgados: jamás sobreescribir secretos comerciales locales con vacíos/ceros
+                if (existente.ultimoPrecioCaja > 0 && !(item.ultimoPrecioCaja > 0)) {
+                    fusionado.ultimoPrecioCaja = existente.ultimoPrecioCaja;
+                    fusionado.costoAnteriorCaja = existente.costoAnteriorCaja || 0;
+                    fusionado.variacionCosto = existente.variacionCosto || 0;
+                    fusionado.costoUnitarioFiscal = existente.costoUnitarioFiscal || '';
+                }
+                if (existente.preciosVenta && !item.preciosVenta) {
+                    fusionado.preciosVenta = clonarObjetoSeguro(existente.preciosVenta);
+                }
+                if (existente.proveedorHabitual && !item.proveedorHabitual) {
+                    fusionado.proveedorHabitual = existente.proveedorHabitual;
+                }
+                if (existente.rncProveedor && !item.rncProveedor) {
+                    fusionado.rncProveedor = existente.rncProveedor;
+                }
+                if (existente._segCifrado && !item._segCifrado) {
+                    fusionado._segCifrado = clonarObjetoSeguro(existente._segCifrado);
+                }
+
+                local[codigoLimpio] = fusionado;
 
                 actualizados++;
             }
@@ -2230,32 +2321,26 @@
     }
 
     /**
-     * Construye un sobre seguro de intercambio para transferir el catálogo a otra computadora.
+     * Construye un sobre público sanitario seguro para transferir catálogo a otra computadora.
+     * Aplica purga en caliente eliminando costos, proveedores, RNCs e historiales confidenciales.
      * @param {Object} diccionario - Diccionario actual
      * @param {Object} [opciones={}] - Opciones adicionales
-     * @returns {Object} Sobre de datos estandarizado
+     * @returns {Object} Sobre de datos estandarizado y purgado
      */
     function generarSobreParcheCatalogo(diccionario, opciones = {}) {
-        const dic = diccionario || {};
+        const productos = sanitizarDiccionarioPublico(diccionario || {});
+        const total = Object.keys(productos).length;
         const fechaIso = obtenerFechaLocalISO();
-        const productos = {};
-        let total = 0;
-
-        for (const [cod, p] of Object.entries(dic)) {
-            if (p && typeof p === 'object') {
-                productos[cod] = clonarObjetoSeguro(p);
-                total++;
-            }
-        }
 
         return {
             tipo: CONSTANTES.TIPO_ARCHIVO_PARCHE_CATALOGO,
             version: CONSTANTES.VERSION_ESQUEMA_RESPALDO || 2,
             fechaGeneracion: new Date().toISOString(),
-            descripcion: 'Parche de Sincronización de Catálogo Farmacéutico (Smart Delta)',
+            descripcion: 'Parche Sanitario Público de Catálogo Farmacéutico (Cero Costos / Cero Proveedores)',
             resumen: {
                 totalProductos: total,
-                fechaCorte: fechaIso
+                fechaCorte: fechaIso,
+                sanitizadoPublico: true
             },
             datos: {
                 diccionario: productos
@@ -2512,6 +2597,8 @@
         ESTADOS_FEFO,
         evaluarSemaforoFefo,
         parsearCodigoGs1DataMatrix,
+        sanitizarFichaPublicaCatalogo,
+        sanitizarDiccionarioPublico,
         generarCsvCatalogoMaestro,
         generarTextoFormato606,
         fusionarDiccionarios,

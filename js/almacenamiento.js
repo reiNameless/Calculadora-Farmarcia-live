@@ -11,22 +11,143 @@
         : (global.indexedDB || null);
 
     const DB_NOMBRE = 'CalculadoraFarmaciaDB';
-    const DB_VERSION = 3;
+    const DB_VERSION = 4;
     const STORES = Object.freeze({
         BORRADOR: 'borrador',
         HISTORIAL: 'historial_facturas',
         DICCIONARIO: 'diccionario_productos',
         CONFIGURACION: 'configuracion_reglas',
         PROVEEDORES: 'directorio_proveedores',
-        LABORATORIOS: 'directorio_laboratorios'
+        LABORATORIOS: 'directorio_laboratorios',
+        SEGURIDAD: 'seguridad_boveda'
     });
 
     let dbInstancia = null;
     let dbPromesa = null;
 
-    // Caché en memoria de acceso ultra-rápido (0ms) para operaciones síncronas de UI
+    // Caché en memoria de acceso ultra-rápido (0ms) únicamente en el cierre del módulo (nunca en window/localStorage)
     const cacheStorage = new Map();
+    // Conserva sobres cifrados por código mientras la bóveda está bloqueada para nunca sobreescribir secretos al editar campos públicos
+    const encDiccionarioBlobs = new Map();
     let vademecumCache = [];
+    let colaEscriturasIdb = Promise.resolve();
+
+    function obtenerSeguridad() {
+        return AppFarmacia.Seguridad || null;
+    }
+
+    function encolarOperacionIdb(fnAsync) {
+        const tarea = colaEscriturasIdb.then(async () => {
+            try {
+                return await fnAsync();
+            } catch (e) {
+                console.warn('[Almacenamiento/Cripto] Error en operación asíncrona:', e);
+                return { exito: false, error: e.message };
+            }
+        });
+        colaEscriturasIdb = tarea.catch(() => {});
+        return tarea;
+    }
+
+    function limpiarLocalStorageSensible() {
+        if (typeof localStorage !== 'undefined') {
+            [
+                CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO,
+                CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS,
+                CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS,
+                CONSTANTES.CLAVES_STORAGE.PROVEEDORES,
+                CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO,
+                CONSTANTES.CLAVES_STORAGE.IA_API_KEY,
+                CONSTANTES.CLAVES_STORAGE.IA_MODELO
+            ].forEach(clave => {
+                try { localStorage.removeItem(clave); } catch (_) {}
+            });
+        }
+        if (typeof sessionStorage !== 'undefined') {
+            try { sessionStorage.removeItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY); } catch (_) {}
+        }
+    }
+
+    function extraerCamposSensiblesProducto(item) {
+        if (!item || typeof item !== 'object') return null;
+        const campos = (CONSTANTES && Array.isArray(CONSTANTES.CAMPOS_SENSIBLES_CATALOGO))
+            ? CONSTANTES.CAMPOS_SENSIBLES_CATALOGO
+            : [
+                'ultimoPrecioCaja', 'costoAnteriorCaja', 'variacionCosto',
+                'costoUnitarioFiscal', 'costoUnitario', 'costoUnitarioVenta',
+                'costoReferencia', 'preciosVenta', 'historialCostos',
+                'descuentoValor', 'tipoDescuento', 'descuentoTotalLinea',
+                'proveedorHabitual', 'rncProveedor', 'numeroFactura'
+            ];
+        const sensible = {};
+        let tieneDatos = false;
+        for (const c of campos) {
+            const val = item[c];
+            if (val === undefined || val === null || val === '') continue;
+            if (Array.isArray(val) && val.length === 0) continue;
+            if (typeof val === 'number' && val === 0 && (c === 'ultimoPrecioCaja' || c === 'costoAnteriorCaja' || c === 'variacionCosto' || c === 'descuentoValor')) {
+                continue;
+            }
+            sensible[c] = Dominio.clonarObjetoSeguro(val);
+            tieneDatos = true;
+        }
+        return tieneDatos ? sensible : null;
+    }
+
+    async function empaquetarProductoParaIdb(item) {
+        const publico = Dominio.sanitizarFichaPublicaCatalogo(item);
+        if (!publico || !publico.codigoBarras) return null;
+
+        const Seg = obtenerSeguridad();
+        const sensible = extraerCamposSensiblesProducto(item);
+
+        if (Seg && Seg.estaConfigurado()) {
+            if (!Seg.estaBloqueado()) {
+                if (sensible) {
+                    const env = await Seg.cifrarJson(sensible);
+                    encDiccionarioBlobs.set(publico.codigoBarras, env);
+                    return { ...publico, _segCifrado: env };
+                }
+                encDiccionarioBlobs.delete(publico.codigoBarras);
+                return publico;
+            }
+            // Bóveda bloqueada: preservar intacto el sobre cifrado previo en disco
+            const previo = encDiccionarioBlobs.get(publico.codigoBarras);
+            return previo ? { ...publico, _segCifrado: previo } : publico;
+        }
+
+        // Sin cifrado configurado todavía: mantener formato plano completo en IDB hasta que el dueño configure contraseña
+        return { ...Dominio.clonarObjetoSeguro(item), ...publico };
+    }
+
+    async function desempaquetarProductoDesdeIdb(registro) {
+        if (!registro || typeof registro !== 'object' || !registro.codigoBarras) return null;
+        const publico = Dominio.sanitizarFichaPublicaCatalogo(registro);
+        const Seg = obtenerSeguridad();
+
+        if (registro._segCifrado) {
+            encDiccionarioBlobs.set(publico.codigoBarras, registro._segCifrado);
+            if (Seg && !Seg.estaBloqueado()) {
+                try {
+                    const descifrado = await Seg.descifrarJson(registro._segCifrado);
+                    return { ...publico, ...descifrado };
+                } catch (e) {
+                    console.warn(`[Cripto] No se pudieron descifrar costos de ${publico.codigoBarras}:`, e);
+                    return publico;
+                }
+            }
+            // Bloqueado: solo retornar campos sanitarios públicos
+            return publico;
+        }
+
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return publico;
+        }
+
+        const copia = Dominio.clonarObjetoSeguro(registro);
+        delete copia._segCifrado;
+        return copia;
+    }
 
     // --- CONEXIÓN Y CREACIÓN DE ESQUEMA INDEXEDDB ---
     function abrirBaseDatos() {
@@ -102,6 +223,11 @@
                         storeLab.createIndex('origen', 'origen', { unique: false });
                         storeLab.createIndex('actualizadoEn', 'actualizadoEn', { unique: false });
                     }
+
+                    // 7. Metadatos de Bóveda Cifrada y Contraseña Maestra (Versión 4)
+                    if (!db.objectStoreNames.contains(STORES.SEGURIDAD)) {
+                        db.createObjectStore(STORES.SEGURIDAD);
+                    }
                 };
 
                 peticion.onsuccess = event => {
@@ -122,10 +248,24 @@
         return dbPromesa;
     }
 
-    // --- LECTURA Y ESCRITURA EN CACHÉ / LOCALSTORAGE FALLBACK ---
+    // --- LECTURA Y ESCRITURA EN CACHÉ DE RAM (SIN EXPOSICIÓN EN LOCALSTORAGE PARA SECRETOS) ---
+    function esClaveDatosSensibles(claveStorage) {
+        return [
+            CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO,
+            CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS,
+            CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS,
+            CONSTANTES.CLAVES_STORAGE.PROVEEDORES,
+            CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO
+        ].includes(claveStorage);
+    }
+
     function leerJsonSeguro(claveStorage, valorPorDefecto) {
         if (cacheStorage.has(claveStorage)) {
             return Dominio.clonarObjetoSeguro(cacheStorage.get(claveStorage));
+        }
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && esClaveDatosSensibles(claveStorage)) {
+            return Dominio.clonarObjetoSeguro(valorPorDefecto);
         }
         try {
             if (typeof localStorage === 'undefined') {
@@ -148,13 +288,17 @@
 
     function escribirJsonSeguro(claveStorage, datos) {
         cacheStorage.set(claveStorage, Dominio.clonarObjetoSeguro(datos));
+        const Seg = obtenerSeguridad();
+        // Prohibición AppSec: datos sensibles jamás se duplican en texto plano en localStorage cuando hay IndexedDB o cifrado activo
+        if (esClaveDatosSensibles(claveStorage) && (indexedDBRef !== null || (Seg && Seg.estaConfigurado()))) {
+            return { exito: true };
+        }
         try {
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem(claveStorage, JSON.stringify(datos));
             }
             return { exito: true };
         } catch (error) {
-            // Si localStorage excede su cuota (5MB), IndexedDB mantiene los datos a salvo
             console.info('[Almacenamiento] Cuota de localStorage alcanzada; persistiendo en IndexedDB...');
             return { exito: true, advertencia: 'Cuota de localStorage superada, persistido en base de datos local.' };
         }
@@ -179,15 +323,18 @@
             if (typeof fetch !== "function") {
                 return { sembrado: false, motivo: "Entorno sin soporte de fetch.", totalProductos: 0 };
             }
-            const respuesta = await fetch("./catalogo_rd_inicial.json");
-            if (!respuesta.ok) {
-                return { sembrado: false, motivo: "HTTP " + respuesta.status + " al leer catalogo_rd_inicial.json", totalProductos: 0 };
+            let respuesta = await fetch("./catalogo_farmacia_extenso.json").catch(() => null);
+            if (!respuesta || !respuesta.ok) {
+                respuesta = await fetch("./catalogo_rd_inicial.json").catch(() => null);
+            }
+            if (!respuesta || !respuesta.ok) {
+                return { sembrado: false, motivo: "No se encontró archivo de catálogo inicial en el servidor.", totalProductos: 0 };
             }
             const contenido = await respuesta.json();
             if (!contenido || !contenido.diccionario || typeof contenido.diccionario !== "object") {
                 return { sembrado: false, motivo: "Estructura inválida en archivo de catálogo.", totalProductos: 0 };
             }
-            const dicSemilla = Dominio.sanitizarJsonSeguro(contenido.diccionario);
+            const dicSemilla = Dominio.sanitizarDiccionarioPublico(Dominio.sanitizarJsonSeguro(contenido.diccionario));
             const totalSemilla = Object.keys(dicSemilla).length;
             if (totalSemilla === 0) {
                 return { sembrado: false, motivo: "Catálogo semilla sin productos.", totalProductos: 0 };
@@ -215,7 +362,7 @@
         return false;
     }
 
-    // --- INICIALIZACIÓN ASÍNCRONA Y MIGRACIÓN AUTOMÁTICA ---
+    // --- INICIALIZACIÓN ASÍNCRONA, SEGURIDAD Y MIGRACIÓN AUTOMÁTICA ---
     async function inicializarPersistencia() {
         const db = await abrirBaseDatos();
         solicitarPersistenciaAlmacenamiento();
@@ -224,142 +371,160 @@
             return false;
         }
 
-        return new Promise((resolve) => {
+        const claveMeta = (CONSTANTES.SEGURIDAD_BOVEDA && CONSTANTES.SEGURIDAD_BOVEDA.CLAVE_META_BOVEDA) || 'vault_meta';
+        const storesRequeridos = [
+            STORES.BORRADOR, STORES.HISTORIAL, STORES.DICCIONARIO,
+            STORES.CONFIGURACION, STORES.PROVEEDORES, STORES.LABORATORIOS, STORES.SEGURIDAD
+        ];
+
+        const snapshot = await new Promise((resolve) => {
             try {
-                const storesRequeridos = [STORES.BORRADOR, STORES.HISTORIAL, STORES.DICCIONARIO, STORES.CONFIGURACION, STORES.PROVEEDORES, STORES.LABORATORIOS];
                 const tx = db.transaction(storesRequeridos, 'readonly');
-                const reqCountDic = tx.objectStore(STORES.DICCIONARIO).count();
-                const reqCountHist = tx.objectStore(STORES.HISTORIAL).count();
-                const reqCountProv = tx.objectStore(STORES.PROVEEDORES).count();
-                const reqCountLab = tx.objectStore(STORES.LABORATORIOS).count();
+                const reqMeta = tx.objectStore(STORES.SEGURIDAD).get(claveMeta);
+                const reqGetAllDic = tx.objectStore(STORES.DICCIONARIO).getAll();
+                const reqGetAllHist = tx.objectStore(STORES.HISTORIAL).getAll();
+                const reqGetAllProv = tx.objectStore(STORES.PROVEEDORES).getAll();
+                const reqGetAllLab = tx.objectStore(STORES.LABORATORIOS).getAll();
+                const reqGetBorrador = tx.objectStore(STORES.BORRADOR).get('activo');
+                const reqGetReglas = tx.objectStore(STORES.CONFIGURACION).get('reglas_activas');
+                const reqGetVademecum = tx.objectStore(STORES.CONFIGURACION).get('vademecum_maestro');
 
-                tx.oncomplete = () => {
-                    const cantDic = reqCountDic.result || 0;
-                    const cantHist = reqCountHist.result || 0;
-
-                    // Si IndexedDB está vacía, migrar automáticamente los datos previos de localStorage
-                    if (cantDic === 0 && cantHist === 0) {
-                        const dicPrevio = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
-                        const histPrevio = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
-                        const borradorPrevio = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, null);
-                        const reglasPrevias = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, null);
-
-                        const txMigrar = db.transaction([STORES.BORRADOR, STORES.HISTORIAL, STORES.DICCIONARIO, STORES.CONFIGURACION], 'readwrite');
-                        if (borradorPrevio) txMigrar.objectStore(STORES.BORRADOR).put(borradorPrevio, 'activo');
-                        if (reglasPrevias) txMigrar.objectStore(STORES.CONFIGURACION).put(reglasPrevias, 'reglas_activas');
-                        (histPrevio || []).forEach(fac => {
-                            if (fac && fac.id) txMigrar.objectStore(STORES.HISTORIAL).put(fac);
-                        });
-                        Object.values(dicPrevio || {}).forEach(item => {
-                            if (item && item.codigoBarras) txMigrar.objectStore(STORES.DICCIONARIO).put(item);
-                        });
-
-                        txMigrar.oncomplete = () => {
-                            console.info('[IndexedDB] Migración transparente completada.');
-                            const tieneDicPrevio = Object.keys(dicPrevio || {}).length > 0;
-                            if (!tieneDicPrevio) {
-                                sembrarCatalogoInicial(false).then(res => resolve(res.sembrado)).catch(() => resolve(false));
-                            } else {
-                                resolve(false);
-                            }
-                        };
-                        txMigrar.onerror = () => resolve(false);
-                    } else {
-                        // Cargar los registros autoritativos de IndexedDB a la caché síncrona
-                        const txCargar = db.transaction(storesRequeridos, 'readonly');
-                        const reqGetAllDic = txCargar.objectStore(STORES.DICCIONARIO).getAll();
-                        const reqGetAllHist = txCargar.objectStore(STORES.HISTORIAL).getAll();
-                        const reqGetAllProv = txCargar.objectStore(STORES.PROVEEDORES).getAll();
-                        const reqGetAllLab = txCargar.objectStore(STORES.LABORATORIOS).getAll();
-                        const reqGetBorrador = txCargar.objectStore(STORES.BORRADOR).get('activo');
-                        const reqGetReglas = txCargar.objectStore(STORES.CONFIGURACION).get('reglas_activas');
-                        const reqGetVademecum = txCargar.objectStore(STORES.CONFIGURACION).get('vademecum_maestro');
-
-                        txCargar.oncomplete = () => {
-                            const listaProv = fusionarSemillasConGuardados(reqGetAllProv.result || [], PROVEEDORES_SEMILLA);
-                            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProv);
-                            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProv);
-
-                            const listaLab = fusionarSemillasConGuardados(reqGetAllLab.result || [], LABORATORIOS_SEMILLA);
-                            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
-                            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
-
-                            // Si las tablas de proveedores o laboratorios están vacías en IDB, sembrarlas
-                            if (!reqGetAllProv.result || reqGetAllProv.result.length === 0) {
-                                abrirBaseDatos().then(dbRef => {
-                                    if (!dbRef) return;
-                                    try {
-                                        const txSeed = dbRef.transaction([STORES.PROVEEDORES], 'readwrite');
-                                        listaProv.forEach(p => txSeed.objectStore(STORES.PROVEEDORES).put(p));
-                                    } catch (_) {}
-                                });
-                            }
-                            if (!reqGetAllLab.result || reqGetAllLab.result.length === 0) {
-                                abrirBaseDatos().then(dbRef => {
-                                    if (!dbRef) return;
-                                    try {
-                                        const txSeed = dbRef.transaction([STORES.LABORATORIOS], 'readwrite');
-                                        listaLab.forEach(l => txSeed.objectStore(STORES.LABORATORIOS).put(l));
-                                    } catch (_) {}
-                                });
-                            }
-                            const dicMap = {};
-                            (reqGetAllDic.result || []).forEach(item => {
-                                if (item && item.codigoBarras) dicMap[item.codigoBarras] = item;
-                            });
-                            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
-                            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, reqGetAllHist.result || []);
-
-                            if (reqGetBorrador.result) {
-                                cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, reqGetBorrador.result);
-                            }
-                            if (reqGetReglas.result) {
-                                cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, reqGetReglas.result);
-                            }
-                            if (Array.isArray(reqGetVademecum.result) && reqGetVademecum.result.length > 0) {
-                                vademecumCache = reqGetVademecum.result;
-                            } else {
-                                try {
-                                    if (typeof window !== 'undefined' && window.localStorage) {
-                                        const raw = localStorage.getItem('farmacia_vademecum_maestro');
-                                        if (raw) vademecumCache = JSON.parse(raw);
-                                    }
-                                } catch (_) {}
-                            }
-
-                            console.info(`[IndexedDB] Activo: ${Object.keys(dicMap).length} productos en inventario, ${vademecumCache.length} en vademécum y ${(reqGetAllHist.result || []).length} facturas.`);
-                            resolve(true);
-                        };
-                        txCargar.onerror = () => resolve(false);
-                    }
-                };
-
-                tx.onerror = () => resolve(false);
+                tx.oncomplete = () => resolve({
+                    ok: true,
+                    vaultMeta: reqMeta.result || null,
+                    dic: reqGetAllDic.result || [],
+                    hist: reqGetAllHist.result || [],
+                    prov: reqGetAllProv.result || [],
+                    lab: reqGetAllLab.result || [],
+                    borrador: reqGetBorrador.result || null,
+                    reglas: reqGetReglas.result || null,
+                    vademecum: reqGetVademecum.result || null
+                });
+                tx.onerror = () => resolve({ ok: false });
             } catch (error) {
-                console.warn('[IndexedDB] Error en inicialización de persistencia:', error);
-                resolve(false);
+                console.warn('[IndexedDB] Error leyendo stores iniciales:', error);
+                resolve({ ok: false });
             }
         });
+
+        if (!snapshot.ok) return false;
+
+        const Seg = obtenerSeguridad();
+        if (Seg) {
+            Seg.establecerMetadatosPersistidos(snapshot.vaultMeta);
+        }
+
+        // Siempre erradicar copias planas heredadas de localStorage cuando IndexedDB está activa
+        limpiarLocalStorageSensible();
+
+        // Poblar Vademécum y Laboratorios (datos sanitarios públicos)
+        if (Array.isArray(snapshot.vademecum) && snapshot.vademecum.length > 0) {
+            vademecumCache = snapshot.vademecum;
+        }
+        const listaLab = fusionarSemillasConGuardados(snapshot.lab, LABORATORIOS_SEMILLA);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
+        if (snapshot.lab.length === 0) {
+            try {
+                const txSeedLab = db.transaction([STORES.LABORATORIOS], 'readwrite');
+                listaLab.forEach(l => txSeedLab.objectStore(STORES.LABORATORIOS).put(l));
+            } catch (_) {}
+        }
+
+        // Si IndexedDB está vacía por primera vez y no hay contraseña configurada aún
+        if (snapshot.dic.length === 0 && snapshot.hist.length === 0 && !(Seg && Seg.estaConfigurado())) {
+            const listaProvInit = fusionarSemillasConGuardados(snapshot.prov, PROVEEDORES_SEMILLA);
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProvInit);
+            if (snapshot.prov.length === 0) {
+                try {
+                    const txSeedProv = db.transaction([STORES.PROVEEDORES], 'readwrite');
+                    listaProvInit.forEach(p => txSeedProv.objectStore(STORES.PROVEEDORES).put(p));
+                } catch (_) {}
+            }
+            const resSeed = await sembrarCatalogoInicial(false);
+            return Boolean(resSeed && resSeed.sembrado);
+        }
+
+        // Depuración segura de facturas caducadas (> 7 días) por timestampGuardado sin perder vigentes
+        const ahora = Date.now();
+        const idsExpirados = snapshot.hist
+            .filter(fac => fac && fac.id && (ahora - (Number(fac.timestampGuardado) || ahora)) > CONSTANTES.DIAS_RETENCION_HISTORIAL_MS)
+            .map(fac => fac.id);
+        if (idsExpirados.length > 0) {
+            try {
+                const txPurge = db.transaction([STORES.HISTORIAL], 'readwrite');
+                const storeHist = txPurge.objectStore(STORES.HISTORIAL);
+                idsExpirados.forEach(idExp => storeHist.delete(idExp));
+            } catch (_) {}
+        }
+        const histVigente = snapshot.hist.filter(fac => !idsExpirados.includes(fac?.id));
+
+        // Desempaquetar catálogo: si está bloqueado, SOLO carga fichas sanitarias públicas y guarda sobres cifrados
+        const dicMap = {};
+        for (const item of snapshot.dic) {
+            const proc = await desempaquetarProductoDesdeIdb(item);
+            if (proc && proc.codigoBarras) {
+                dicMap[proc.codigoBarras] = proc;
+            }
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
+
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            // Modo Cifrado Bloqueado: secretos comerciales inaccesibles hasta contraseña maestra
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, []);
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, crearSesionVacia());
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, Dominio.clonarObjetoSeguro(REGLAS_NEGOCIO_POR_DEFECTO));
+            console.info(`[IndexedDB/Cripto] Modo Protegido Bloqueado: ${Object.keys(dicMap).length} fichas públicas cargadas. Secretos cifrados en reposo.`);
+            return true;
+        }
+
+        // Modo sin cifrado aún (o desbloqueado)
+        const listaProv = fusionarSemillasConGuardados(snapshot.prov, PROVEEDORES_SEMILLA);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProv);
+        if (snapshot.prov.length === 0) {
+            try {
+                const txSeedProv = db.transaction([STORES.PROVEEDORES], 'readwrite');
+                listaProv.forEach(p => txSeedProv.objectStore(STORES.PROVEEDORES).put(p));
+            } catch (_) {}
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, histVigente);
+        if (snapshot.borrador && !snapshot.borrador._segCifrado) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, snapshot.borrador);
+        }
+        if (snapshot.reglas && !snapshot.reglas._segCifrado) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, snapshot.reglas);
+        }
+
+        console.info(`[IndexedDB] Activo: ${Object.keys(dicMap).length} productos, ${vademecumCache.length} en vademécum y ${histVigente.length} facturas.`);
+        return true;
     }
 
     // --- GESTIÓN DE REGLAS DE CÁLCULO ---
     function obtenerReglasNegocio() {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return Dominio.sanitizarReglasNegocio(REGLAS_NEGOCIO_POR_DEFECTO);
+        }
         const guardadas = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, REGLAS_NEGOCIO_POR_DEFECTO);
         return Dominio.sanitizarReglasNegocio(guardadas);
     }
 
     function guardarReglasNegocio(nuevasReglas) {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return { exito: false, bloqueado: true, error: 'Bóveda bloqueada. Desbloquea con contraseña de administrador para guardar reglas.' };
+        }
         const sanitizadas = Dominio.sanitizarReglasNegocio(nuevasReglas);
         const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, sanitizadas);
 
-        abrirBaseDatos().then(db => {
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.CONFIGURACION], 'readwrite');
-                tx.objectStore(STORES.CONFIGURACION).put(sanitizadas, 'reglas_activas');
-            } catch (e) {
-                console.warn('[IndexedDB] Error guardando reglas:', e);
-            }
+            const payload = (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado())
+                ? await Seg.cifrarJson(sanitizadas)
+                : sanitizadas;
+            const tx = db.transaction([STORES.CONFIGURACION], 'readwrite');
+            tx.objectStore(STORES.CONFIGURACION).put(payload, 'reglas_activas');
         });
 
         return {
@@ -382,22 +547,22 @@
                 }
             }
         }
-        const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
+        const Seg = obtenerSeguridad();
+        const dicParaRam = (Seg && Seg.estaConfigurado() && Seg.estaBloqueado())
+            ? Dominio.sanitizarDiccionarioPublico(diccionario)
+            : diccionario;
 
-        abrirBaseDatos().then(db => {
+        const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicParaRam);
+        const snapshotItems = Object.values(dicParaRam || {}).map(x => Dominio.clonarObjetoSeguro(x));
+
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                const store = tx.objectStore(STORES.DICCIONARIO);
-                store.clear();
-                Object.values(diccionario || {}).forEach(item => {
-                    if (item && item.codigoBarras) {
-                        store.put(item);
-                    }
-                });
-            } catch (e) {
-                console.warn('[IndexedDB] Error guardando diccionario:', e);
-            }
+            const empaquetados = (await Promise.all(snapshotItems.map(empaquetarProductoParaIdb))).filter(Boolean);
+            const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+            const store = tx.objectStore(STORES.DICCIONARIO);
+            store.clear();
+            empaquetados.forEach(item => store.put(item));
         });
 
         return resultado;
@@ -418,10 +583,10 @@
 
         const diccionario = obtenerDiccionarioCodigos();
         const existente = diccionario[codigo];
+        const Seg = obtenerSeguridad();
+        const estaBloqueado = Boolean(Seg && Seg.estaConfigurado() && Seg.estaBloqueado());
 
         // PROTECCIÓN DE INTEGRIDAD DE CATÁLOGO MAESTRO:
-        // Si el producto ya está registrado en el catálogo, su nombre y configuración taxonómica
-        // quedan blindados para impedir sobreescritura accidental desde el cockpit de cálculo.
         let nombreFinal = nombreCandidato;
         let tipo = lineaProducto.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
         let tasaItbis = (lineaProducto.tasaItbis !== undefined && Number.isFinite(Number(lineaProducto.tasaItbis)))
@@ -431,7 +596,6 @@
         let esLeche = Boolean(lineaProducto.esLeche);
 
         if (existente && existente.nombre && !lineaProducto._esEdicionCatalogo) {
-            // Producto preexistente en catálogo: preservar nombre oficial y atributos de empaque
             nombreFinal = existente.nombre;
             if (existente.tipo) tipo = existente.tipo;
             if (existente.unidadesPorCaja && existente.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
@@ -457,6 +621,43 @@
             }
         }
 
+        // Si la bóveda está bloqueada, SOLO aprender/preservar ficha sanitaria pública (preservando _segCifrado intacto)
+        if (estaBloqueado) {
+            const fichaPublica = Dominio.sanitizarFichaPublicaCatalogo({
+                ...(existente || {}),
+                codigoBarras: codigo,
+                nombre: nombreFinal,
+                nombreComercial: lineaProducto.nombreComercial || (existente && existente.nombreComercial) || nombreFinal,
+                principioActivo: lineaProducto.principioActivo || (existente && existente.principioActivo) || '',
+                laboratorio: lineaProducto.laboratorio || (existente && existente.laboratorio) || '',
+                concentracion: lineaProducto.concentracion || (existente && existente.concentracion) || '',
+                categoria: lineaProducto.categoria || (existente && existente.categoria) || '',
+                presentacion: lineaProducto.presentacion || (existente && existente.presentacion) || '',
+                formaFarmaceutica: lineaProducto.formaFarmaceutica || (existente && existente.formaFarmaceutica) || '',
+                registroSanitario: lineaProducto.registroSanitario || (existente && existente.registroSanitario) || '',
+                condicionVenta: lineaProducto.condicionVenta || (existente && existente.condicionVenta) || 'OTC',
+                ubicacion: lineaProducto.ubicacion || (existente && existente.ubicacion) || '',
+                tipo,
+                unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : unidadesPorCaja,
+                aplicaItbis: tasaItbis > 0,
+                tasaItbis,
+                esLeche,
+                actualizadoEn: new Date().toISOString()
+            });
+            diccionario[codigo] = fichaPublica;
+            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
+
+            encolarOperacionIdb(async () => {
+                const db = await abrirBaseDatos();
+                if (!db) return;
+                const reg = await empaquetarProductoParaIdb(fichaPublica);
+                if (!reg) return;
+                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                tx.objectStore(STORES.DICCIONARIO).put(reg);
+            });
+            return true;
+        }
+
         const precioCajaActual = Number(lineaProducto.precioCajaBase) || 0;
         const costoAnteriorCaja = (existente && existente.ultimoPrecioCaja && Number(existente.ultimoPrecioCaja) > 0)
             ? Number(existente.ultimoPrecioCaja)
@@ -475,7 +676,6 @@
         const rncProveedor = (contextoFactura && contextoFactura.rnc) || lineaProducto.rncProveedor || (existente && existente.rncProveedor) || '';
         const numeroFactura = (contextoFactura && contextoFactura.numeroFactura) || lineaProducto.numeroFactura || '';
 
-        // Trazabilidad de costos históricos (hasta 20 registros)
         const historialCostos = Array.isArray(existente && existente.historialCostos)
             ? [...existente.historialCostos]
             : [];
@@ -543,14 +743,14 @@
         diccionario[codigo] = fichaActualizada;
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
 
-        abrirBaseDatos().then(db => {
+        const clonSnapshot = Dominio.clonarObjetoSeguro(fichaActualizada);
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                tx.objectStore(STORES.DICCIONARIO).put(fichaActualizada);
-            } catch (e) {
-                console.warn('[IndexedDB] Error persistiendo producto aprendido:', e);
-            }
+            const regIdb = await empaquetarProductoParaIdb(clonSnapshot);
+            if (!regIdb) return;
+            const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+            tx.objectStore(STORES.DICCIONARIO).put(regIdb);
         });
 
         return true;
@@ -561,55 +761,72 @@
         const diccionario = obtenerDiccionarioCodigos();
         if (!diccionario[codigo]) return false;
         delete diccionario[codigo];
+        encDiccionarioBlobs.delete(codigo);
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
 
-        abrirBaseDatos().then(db => {
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                tx.objectStore(STORES.DICCIONARIO).delete(codigo);
-            } catch (e) {
-                console.warn('[IndexedDB] Error eliminando código:', e);
-            }
+            const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+            tx.objectStore(STORES.DICCIONARIO).delete(codigo);
         });
 
         return true;
     }
 
-    // --- HISTORIAL (7 DÍAS O MÁS) Y BORRADOR ACTIVO ---
+    // --- HISTORIAL (7 DÍAS) Y BORRADOR ACTIVO ---
     function obtenerHistorialFacturas() {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return [];
+        }
         const lista = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
         return Array.isArray(lista) ? lista : [];
     }
 
     function guardarHistorialFacturas(listaFacturas) {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return { exito: false, bloqueado: true, error: 'Bóveda bloqueada. Desbloquea con contraseña de administrador para guardar facturas.' };
+        }
         const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, listaFacturas);
+        const listaClonada = (listaFacturas || []).map(f => Dominio.clonarObjetoSeguro(f)).filter(f => f && f.id);
 
-        abrirBaseDatos().then(db => {
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.HISTORIAL], 'readwrite');
-                const store = tx.objectStore(STORES.HISTORIAL);
-                store.clear();
-                (listaFacturas || []).forEach(fac => {
-                    if (fac && fac.id) {
-                        store.put(fac);
-                    }
-                });
-            } catch (e) {
-                console.warn('[IndexedDB] Error guardando historial:', e);
+            let payloads = listaClonada;
+            if (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado()) {
+                payloads = await Promise.all(listaClonada.map(async fac => {
+                    const env = await Seg.cifrarJson(fac);
+                    return {
+                        id: fac.id,
+                        timestampGuardado: fac.timestampGuardado || Date.now(),
+                        ...env
+                    };
+                }));
             }
+            const tx = db.transaction([STORES.HISTORIAL], 'readwrite');
+            const store = tx.objectStore(STORES.HISTORIAL);
+            store.clear();
+            payloads.forEach(reg => store.put(reg));
         });
 
         return resultado;
     }
 
     function limpiarHistorialExpirado7Dias() {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) return;
         const ahora = Date.now();
-        const vigentes = obtenerHistorialFacturas().filter(
+        const actual = obtenerHistorialFacturas();
+        if (!actual.length) return;
+        const vigentes = actual.filter(
             fac => (ahora - (Number(fac.timestampGuardado) || ahora)) <= CONSTANTES.DIAS_RETENCION_HISTORIAL_MS
         );
-        guardarHistorialFacturas(vigentes);
+        if (vigentes.length !== actual.length) {
+            guardarHistorialFacturas(vigentes);
+        }
     }
 
     function crearSesionVacia() {
@@ -628,6 +845,10 @@
     }
 
     function cargarBorradorActivo() {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return crearSesionVacia();
+        }
         const borrador = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, null);
         if (!borrador || typeof borrador !== 'object') return crearSesionVacia();
         const fechaEmision = borrador.fechaEmision || Dominio.obtenerFechaLocalISO();
@@ -644,16 +865,21 @@
     }
 
     function guardarBorradorActivo(sesionActual) {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return { exito: false, bloqueado: true };
+        }
         const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, sesionActual);
+        const clon = Dominio.clonarObjetoSeguro(sesionActual);
 
-        abrirBaseDatos().then(db => {
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.BORRADOR], 'readwrite');
-                tx.objectStore(STORES.BORRADOR).put(sesionActual, 'activo');
-            } catch (e) {
-                console.warn('[IndexedDB] Error guardando borrador:', e);
-            }
+            const payload = (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado())
+                ? await Seg.cifrarJson(clon)
+                : clon;
+            const tx = db.transaction([STORES.BORRADOR], 'readwrite');
+            tx.objectStore(STORES.BORRADOR).put(payload, 'activo');
         });
 
         return resultado;
@@ -713,106 +939,21 @@
             lector.readAsText(archivo);
         });
     }
-// --- RESIDENCIA COMPLETA DE INDEXEDDB: RESPALDO Y RESTAURACIÓN MAESTRA ---
+
+    // --- BLOQUEO LEGAL DE EXPORTACIÓN TOTAL DE BASE DE DATOS ---
     function exportarBaseCompleta() {
-        const diccionario = obtenerDiccionarioCodigos();
-        const historial = obtenerHistorialFacturas();
-        const borrador = cargarBorradorActivo();
-        const reglas = obtenerReglasNegocio();
-
-        const fechaIso = Dominio.obtenerFechaLocalISO();
-        const objetoRespaldo = {
-            tipo: CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO,
-            version: CONSTANTES.VERSION_ESQUEMA_RESPALDO,
-            fechaExportacion: new Date().toISOString(),
-            descripcion: 'Copia de Seguridad Completa del Sistema (IndexedDB)',
-            resumen: {
-                totalProductosDiccionario: Object.keys(diccionario).length,
-                totalFacturasHistorial: historial.length
-            },
-            datos: {
-                diccionario,
-                historial,
-                borrador,
-                reglas,
-                proveedores: obtenerDirectorioProveedores(),
-                laboratorios: obtenerDirectorioLaboratorios()
-            }
+        return {
+            exito: false,
+            bloqueadoPorLegalidad: true,
+            error: 'La exportación completa del sistema fue eliminada por cumplimiento legal y protección de secretos comerciales.'
         };
-
-        descargarObjetoComoJson(objetoRespaldo, `respaldo-completo-farmacia-${fechaIso}.json`, CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO);
     }
 
-    function restaurarBaseCompleta(objetoCandidato) {
-        if (!objetoCandidato || typeof objetoCandidato !== 'object') {
-            return { exito: false, error: 'El archivo de respaldo no es válido.' };
-        }
-        let objetoRespaldo = objetoCandidato;
-        if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
-            const verif = Dominio.verificarSobreDatos(objetoCandidato, CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO);
-            if (!verif.esValido) {
-                if (verif.esLegacy && objetoCandidato.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
-                    objetoRespaldo = objetoCandidato;
-                } else {
-                    return { exito: false, error: verif.error, codigo: verif.codigo };
-                }
-            } else {
-                objetoRespaldo = verif.datos;
-            }
-        }
-        if (objetoRespaldo.tipo !== CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
-            if (objetoRespaldo.tipo === CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS) {
-                return { exito: false, error: 'Has seleccionado un archivo de Diccionario de Códigos. Para restaurarlo, usa la opción "Cargar Diccionario (.json)" de arriba.' };
-            }
-            if (objetoRespaldo.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) {
-                return { exito: false, error: 'Has seleccionado un archivo de Historial de Facturas. Para restaurarlo, ve a la Bóveda de la Farmacia.' };
-            }
-            return { exito: false, error: 'El archivo no corresponde a una Copia de Seguridad Completa del Sistema.' };
-        }
-        const datos = objetoRespaldo.datos;
-        if (!datos || typeof datos !== 'object') {
-            return { exito: false, error: 'El archivo no contiene los datos del sistema.' };
-        }
-
-        if (datos.diccionario && typeof datos.diccionario === 'object') {
-            guardarDiccionarioCodigos(datos.diccionario);
-        }
-        if (Array.isArray(datos.historial)) {
-            guardarHistorialFacturas(datos.historial);
-        }
-        if (datos.borrador && typeof datos.borrador === 'object') {
-            guardarBorradorActivo(datos.borrador);
-        }
-        if (datos.reglas && typeof datos.reglas === 'object') {
-            guardarReglasNegocio(datos.reglas);
-        }
-        if (Array.isArray(datos.proveedores)) {
-            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, datos.proveedores);
-            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, datos.proveedores);
-            abrirBaseDatos().then(db => {
-                if (!db) return;
-                try {
-                    const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
-                    datos.proveedores.forEach(p => tx.objectStore(STORES.PROVEEDORES).put(p));
-                } catch (_) {}
-            });
-        }
-        if (Array.isArray(datos.laboratorios)) {
-            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, datos.laboratorios);
-            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, datos.laboratorios);
-            abrirBaseDatos().then(db => {
-                if (!db) return;
-                try {
-                    const tx = db.transaction([STORES.LABORATORIOS], 'readwrite');
-                    datos.laboratorios.forEach(l => tx.objectStore(STORES.LABORATORIOS).put(l));
-                } catch (_) {}
-            });
-        }
-
+    function restaurarBaseCompleta() {
         return {
-            exito: true,
-            totalProductos: Object.keys(datos.diccionario || {}).length,
-            totalFacturas: (datos.historial || []).length
+            exito: false,
+            bloqueadoPorLegalidad: true,
+            error: 'La restauración de respaldos totales fue deshabilitada. Utiliza los importadores de Catálogo Sanitario Público.'
         };
     }
 
@@ -905,6 +1046,10 @@
     }
 
     function obtenerDirectorioProveedores() {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return [];
+        }
         if (cacheStorage.has(CONSTANTES.CLAVES_STORAGE.PROVEEDORES)) {
             return cacheStorage.get(CONSTANTES.CLAVES_STORAGE.PROVEEDORES);
         }
@@ -916,6 +1061,10 @@
     }
 
     function guardarProveedorEnDirectorio(proveedor) {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return false;
+        }
         if (!proveedor || (!proveedor.rnc && !proveedor.nombre)) return false;
         const directorio = obtenerDirectorioProveedores().map(p => ({ ...p }));
         const rncLimpio = String(proveedor.rnc || '').replace(/\D/g, '');
@@ -950,32 +1099,34 @@
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
 
-        abrirBaseDatos().then(db => {
+        const regClon = Dominio.clonarObjetoSeguro(registro);
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
-                tx.objectStore(STORES.PROVEEDORES).put(registro);
-            } catch (e) {
-                console.warn('[IndexedDB] Error guardando proveedor:', e);
-            }
+            const regIdb = (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado())
+                ? { id: regClon.id, ...(await Seg.cifrarJson(regClon)) }
+                : regClon;
+            const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
+            tx.objectStore(STORES.PROVEEDORES).put(regIdb);
         });
         return true;
     }
 
     function eliminarProveedorDeDirectorio(idProveedor) {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            return false;
+        }
         if (!idProveedor) return false;
         const directorio = obtenerDirectorioProveedores().filter(p => p.id !== idProveedor);
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, directorio);
 
-        abrirBaseDatos().then(db => {
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
-                tx.objectStore(STORES.PROVEEDORES).delete(idProveedor);
-            } catch (e) {
-                console.warn('[IndexedDB] Error eliminando proveedor:', e);
-            }
+            const tx = db.transaction([STORES.PROVEEDORES], 'readwrite');
+            tx.objectStore(STORES.PROVEEDORES).delete(idProveedor);
         });
         return true;
     }
@@ -1094,10 +1245,11 @@
     }
 
     function exportarCatalogoMaestroCsv() {
+        // Purga en caliente obligatoria dentro de Dominio.generarCsvCatalogoMaestro
         const diccionario = obtenerDiccionarioCodigos();
         const csvContenido = Dominio.generarCsvCatalogoMaestro(diccionario);
         const fechaIso = Dominio.obtenerFechaLocalISO();
-        descargarTextoComoArchivo(csvContenido, `catalogo-maestro-farmacia-${fechaIso}.csv`, 'text/csv;charset=utf-8;');
+        descargarTextoComoArchivo(csvContenido, `catalogo-sanitario-farmacia-${fechaIso}.csv`, 'text/csv;charset=utf-8;');
         return {
             exito: true,
             totalProductos: Object.keys(diccionario || {}).length
@@ -1112,18 +1264,20 @@
 
         const diccionario = obtenerDiccionarioCodigos();
         const existente = diccionario[codigo] || {};
+        const Seg = obtenerSeguridad();
+        const estaBloqueado = Boolean(Seg && Seg.estaConfigurado() && Seg.estaBloqueado());
 
         const tipo = ficha.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
         const unidadesPorCaja = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Math.max(1, parseInt(ficha.unidadesPorCaja, 10) || 1);
         const tasaItbis = Number(ficha.tasaItbis) || (ficha.aplicaItbis ? 18 : 0);
 
-        const nombreCrudo = String(ficha.nombre || existente.nombre || 'Producto sin nombre').trim();
+        const nombreCrudo = String(ficha.nombre || ficha.nombreComercial || existente.nombre || existente.nombreComercial || 'Producto sin nombre').trim();
         const nombreFinal = (Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function' && nombreCrudo !== 'Producto sin nombre')
             ? Dominio.estandarizarNombreFarmaceutico(nombreCrudo)
             : nombreCrudo;
 
-        const fichaActualizada = {
-            ...existente,
+        const basePublica = {
+            ...(estaBloqueado ? Dominio.sanitizarFichaPublicaCatalogo(existente) : existente),
             codigoBarras: codigo,
             nombre: nombreFinal,
             nombreComercial: String(ficha.nombreComercial || ficha.nombre || existente.nombreComercial || nombreFinal).trim(),
@@ -1136,18 +1290,24 @@
             registroSanitario: String(ficha.registroSanitario || '').trim(),
             condicionVenta: String(ficha.condicionVenta || 'OTC').trim(),
             ubicacion: String(ficha.ubicacion || '').trim(),
-            proveedorHabitual: String(ficha.proveedorHabitual || existente.proveedorHabitual || '').trim(),
-            rncProveedor: String(ficha.rncProveedor || existente.rncProveedor || '').trim(),
             tipo,
             unidadesPorCaja,
             aplicaItbis: tasaItbis > 0,
             tasaItbis,
             esLeche: Boolean(ficha.esLeche),
-            ultimoPrecioCaja: Number(ficha.ultimoPrecioCaja !== undefined ? ficha.ultimoPrecioCaja : (existente.ultimoPrecioCaja || 0)),
             actualizadoEn: new Date().toISOString()
         };
 
-        // Auto-alimentación inteligente: Registrar laboratorio si es nuevo
+        const fichaActualizada = estaBloqueado
+            ? Dominio.sanitizarFichaPublicaCatalogo(basePublica)
+            : {
+                ...basePublica,
+                proveedorHabitual: String(ficha.proveedorHabitual || existente.proveedorHabitual || '').trim(),
+                rncProveedor: String(ficha.rncProveedor || existente.rncProveedor || '').trim(),
+                ultimoPrecioCaja: Number(ficha.ultimoPrecioCaja !== undefined ? ficha.ultimoPrecioCaja : (existente.ultimoPrecioCaja || 0))
+            };
+
+        // Auto-alimentación inteligente: Registrar laboratorio si es nuevo (público)
         if (fichaActualizada.laboratorio && fichaActualizada.laboratorio.length >= 2) {
             const labExistente = buscarLaboratorioPorNombre(fichaActualizada.laboratorio);
             if (!labExistente) {
@@ -1157,8 +1317,8 @@
                 });
             }
         }
-        // Auto-alimentación inteligente: Registrar proveedor si es nuevo
-        if (fichaActualizada.proveedorHabitual && fichaActualizada.proveedorHabitual.length >= 2) {
+        // Auto-alimentación inteligente de proveedor solo si bóveda está desbloqueada/disponible
+        if (!estaBloqueado && fichaActualizada.proveedorHabitual && fichaActualizada.proveedorHabitual.length >= 2) {
             const provExistente = buscarProveedorPorNombre(fichaActualizada.proveedorHabitual);
             if (!provExistente) {
                 guardarProveedorEnDirectorio({
@@ -1171,14 +1331,14 @@
         diccionario[codigo] = fichaActualizada;
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
 
-        abrirBaseDatos().then(db => {
+        const clonSnapshot = Dominio.clonarObjetoSeguro(fichaActualizada);
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
             if (!db) return;
-            try {
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                tx.objectStore(STORES.DICCIONARIO).put(fichaActualizada);
-            } catch (e) {
-                console.warn('[IndexedDB] Error guardando ficha en catálogo:', e);
-            }
+            const regIdb = await empaquetarProductoParaIdb(clonSnapshot);
+            if (!regIdb) return;
+            const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+            tx.objectStore(STORES.DICCIONARIO).put(regIdb);
         });
 
         return { exito: true, producto: fichaActualizada };
@@ -1189,15 +1349,8 @@
         if (!Array.isArray(listaMedicamentos)) return { exito: false, error: 'Formato de Vademécum inválido' };
         vademecumCache = listaMedicamentos.filter(m => m && (m.nombreComercial || m.nombre));
 
-        try {
-            if (typeof window !== 'undefined' && window.localStorage) {
-                localStorage.setItem('farmacia_vademecum_maestro', JSON.stringify(vademecumCache));
-            }
-        } catch (e) {
-            console.warn('[Almacenamiento] No se pudo guardar Vademécum en localStorage:', e);
-        }
-
-        ejecutarConDb(db => {
+        abrirBaseDatos().then(db => {
+            if (!db) return;
             try {
                 const tx = db.transaction([STORES.CONFIGURACION], 'readwrite');
                 tx.objectStore(STORES.CONFIGURACION).put(vademecumCache, 'vademecum_maestro');
@@ -1215,15 +1368,16 @@
 
     function buscarEnVademecum(termino, limite = 10) {
         if (!termino || typeof termino !== 'string') return [];
-        const q = termino.trim().toLowerCase();
+        const norm = str => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const q = norm(termino.trim());
         if (q.length < 2) return [];
 
         const resultados = [];
         for (const med of vademecumCache) {
-            const nom = (med.nombreComercial || med.nombre || '').toLowerCase();
-            const act = (med.principioActivo || '').toLowerCase();
-            const lab = (med.laboratorio || '').toLowerCase();
-            const reg = (med.registroSanitario || '').toLowerCase();
+            const nom = norm(med.nombreComercial || med.nombre);
+            const act = norm(med.principioActivo);
+            const lab = norm(med.laboratorio);
+            const reg = norm(med.registroSanitario);
 
             if (nom.includes(q) || act.includes(q) || lab.includes(q) || reg.includes(q)) {
                 resultados.push(med);
@@ -1233,12 +1387,13 @@
         return resultados;
     }
 
-    // --- SINCRONIZACIÓN Y FUSIÓN DE CATÁLOGO ENTRE COMPUTADORAS (SMART DELTA) ---
+    // --- SINCRONIZACIÓN Y FUSIÓN DE CATÁLOGO ENTRE COMPUTADORAS (SOLO SANITARIO PÚBLICO) ---
     function exportarParcheParaOtraCaja() {
         const diccionario = obtenerDiccionarioCodigos();
+        // Purga en caliente obligatoria dentro de generarSobreParcheCatalogo
         const sobre = Dominio.generarSobreParcheCatalogo(diccionario);
         const fechaIso = Dominio.obtenerFechaLocalISO();
-        descargarObjetoComoJson(sobre, `parche-catalogo-farmacia-${fechaIso}.json`, CONSTANTES.TIPO_ARCHIVO_PARCHE_CATALOGO);
+        descargarObjetoComoJson(sobre, `parche-sanitario-farmacia-${fechaIso}.json`, CONSTANTES.TIPO_ARCHIVO_PARCHE_CATALOGO);
     }
 
     function fusionarCatalogoDesdeArchivo(objetoCandidato, opciones = { modo: 'fusion' }) {
@@ -1250,8 +1405,7 @@
         if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
             const verif = Dominio.verificarSobreDatos(objetoCandidato, [
                 CONSTANTES.TIPO_ARCHIVO_PARCHE_CATALOGO,
-                CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS,
-                CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO
+                CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS
             ]);
             if (verif.esValido) {
                 datos = verif.datos;
@@ -1260,7 +1414,7 @@
             }
         }
 
-        // 1. Detección polimórfica de Vademécum Oficial DIGEMAPS (sin códigos de barras obligatorios iniciales)
+        // 1. Detección polimórfica de Vademécum Oficial DIGEMAPS
         if (datos.tipo === 'vademecum-digemaps' || (Array.isArray(datos.medicamentos) && datos.medicamentos.length > 0)) {
             const medicamentos = datos.medicamentos || [];
             const resVad = guardarVademecumMaestro(medicamentos);
@@ -1272,28 +1426,37 @@
             };
         }
 
-        const esConveniencia = datos.tipo === 'catalogo-conveniencia';
+        const esConveniencia = datos.tipo === 'catalogo-conveniencia' || datos.tipo === 'catalogo-conveniencia-rd';
 
-        // Extracción flexible de productos según esquema
-        let items = null;
+        // Extracción flexible y sanitización pública obligatoria de productos entrantes
+        let itemsRaw = null;
         if (datos.datos && datos.datos.diccionario && typeof datos.datos.diccionario === 'object') {
-            items = datos.datos.diccionario;
+            itemsRaw = datos.datos.diccionario;
         } else if (datos.diccionario && typeof datos.diccionario === 'object' && !Array.isArray(datos.diccionario)) {
-            items = datos.diccionario;
+            itemsRaw = datos.diccionario;
         } else if (datos.datos && typeof datos.datos === 'object' && !Array.isArray(datos.datos)) {
-            items = datos.datos;
+            itemsRaw = datos.datos;
         } else if (Array.isArray(datos)) {
-            items = {};
-            datos.forEach(p => { if (p && p.codigoBarras) items[p.codigoBarras] = p; });
+            itemsRaw = {};
+            datos.forEach(p => { if (p && p.codigoBarras) itemsRaw[p.codigoBarras] = p; });
         } else if (Array.isArray(datos.productos)) {
-            items = {};
-            datos.productos.forEach(p => { if (p && p.codigoBarras) items[p.codigoBarras] = p; });
+            itemsRaw = {};
+            datos.productos.forEach(p => {
+                if (p && p.codigoBarras) {
+                    itemsRaw[p.codigoBarras] = {
+                        ...p,
+                        nombre: p.nombre || p.nombreComercial || '',
+                        laboratorio: p.laboratorio || p.marca || p.fabricante || ''
+                    };
+                }
+            });
         } else if (typeof datos === 'object' && !Array.isArray(datos)) {
-            items = datos;
+            itemsRaw = datos;
         }
 
-        if (!items || typeof items !== 'object' || Object.keys(items).length === 0) {
-            return { exito: false, error: 'El archivo no contiene productos reconocibles para fusionar.' };
+        const items = Dominio.sanitizarDiccionarioPublico(itemsRaw || {});
+        if (!items || Object.keys(items).length === 0) {
+            return { exito: false, error: 'El archivo no contiene productos sanitarios reconocibles para fusionar.' };
         }
 
         const actual = obtenerDiccionarioCodigos();
@@ -1309,7 +1472,300 @@
         };
     }
 
+    // --- CICLO DE VIDA CRIPTOGRÁFICO DE LA BÓVEDA (PANEL DE ADMINISTRADOR) ---
+    function limpiarRamPorBloqueo() {
+        const dicActual = cacheStorage.get(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS);
+        if (dicActual && typeof dicActual === 'object') {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(dicActual));
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, []);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, crearSesionVacia());
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, Dominio.clonarObjetoSeguro(REGLAS_NEGOCIO_POR_DEFECTO));
+        limpiarLocalStorageSensible();
+    }
+
+    async function persistirMetadatosSeguridad(metadatos) {
+        const claveMeta = (CONSTANTES.SEGURIDAD_BOVEDA && CONSTANTES.SEGURIDAD_BOVEDA.CLAVE_META_BOVEDA) || 'vault_meta';
+        return encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
+            if (!db) return;
+            const tx = db.transaction([STORES.SEGURIDAD], 'readwrite');
+            if (metadatos) {
+                tx.objectStore(STORES.SEGURIDAD).put(metadatos, claveMeta);
+            } else {
+                tx.objectStore(STORES.SEGURIDAD).delete(claveMeta);
+            }
+        });
+    }
+
+    async function migrarTodoACifradoIdb(snapshot) {
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado() || Seg.estaBloqueado()) {
+            throw new Error('Se requiere bóveda desbloqueada para cifrar datos.');
+        }
+        return encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
+            if (!db) return;
+
+            const empaquetadosDic = (await Promise.all(
+                Object.values(snapshot.diccionario || {}).map(empaquetarProductoParaIdb)
+            )).filter(Boolean);
+
+            const encHist = await Promise.all((snapshot.historial || []).filter(f => f && f.id).map(async fac => ({
+                id: fac.id,
+                timestampGuardado: fac.timestampGuardado || Date.now(),
+                ...(await Seg.cifrarJson(fac))
+            })));
+
+            const encBorrador = await Seg.cifrarJson(snapshot.borrador || crearSesionVacia());
+            const encReglas = await Seg.cifrarJson(snapshot.reglas || REGLAS_NEGOCIO_POR_DEFECTO);
+            const encProvs = await Promise.all((snapshot.proveedores || []).filter(p => p && p.id).map(async prov => ({
+                id: prov.id,
+                ...(await Seg.cifrarJson(prov))
+            })));
+
+            const storesTx = [STORES.DICCIONARIO, STORES.HISTORIAL, STORES.BORRADOR, STORES.CONFIGURACION, STORES.PROVEEDORES];
+            const tx = db.transaction(storesTx, 'readwrite');
+            const sDic = tx.objectStore(STORES.DICCIONARIO);
+            const sHist = tx.objectStore(STORES.HISTORIAL);
+            const sProv = tx.objectStore(STORES.PROVEEDORES);
+
+            sDic.clear();
+            empaquetadosDic.forEach(p => sDic.put(p));
+
+            sHist.clear();
+            encHist.forEach(h => sHist.put(h));
+
+            sProv.clear();
+            encProvs.forEach(p => sProv.put(p));
+
+            tx.objectStore(STORES.BORRADOR).put(encBorrador, 'activo');
+            tx.objectStore(STORES.CONFIGURACION).put(encReglas, 'reglas_activas');
+
+            await new Promise((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error || new Error('Error cifrando stores en IndexedDB'));
+            });
+        });
+    }
+
+    async function descifrarTodoDesdeIdbEnRam() {
+        const Seg = obtenerSeguridad();
+        if (!Seg || Seg.estaBloqueado()) {
+            throw new Error('La bóveda está bloqueada.');
+        }
+        const db = await abrirBaseDatos();
+        if (!db) return false;
+
+        const storesLeer = [STORES.DICCIONARIO, STORES.HISTORIAL, STORES.BORRADOR, STORES.CONFIGURACION, STORES.PROVEEDORES];
+        const crudo = await new Promise((resolve) => {
+            try {
+                const tx = db.transaction(storesLeer, 'readonly');
+                const rDic = tx.objectStore(STORES.DICCIONARIO).getAll();
+                const rHist = tx.objectStore(STORES.HISTORIAL).getAll();
+                const rProv = tx.objectStore(STORES.PROVEEDORES).getAll();
+                const rBor = tx.objectStore(STORES.BORRADOR).get('activo');
+                const rReg = tx.objectStore(STORES.CONFIGURACION).get('reglas_activas');
+                tx.oncomplete = () => resolve({
+                    ok: true,
+                    dic: rDic.result || [],
+                    hist: rHist.result || [],
+                    prov: rProv.result || [],
+                    borrador: rBor.result || null,
+                    reglas: rReg.result || null
+                });
+                tx.onerror = () => resolve({ ok: false });
+            } catch (_) {
+                resolve({ ok: false });
+            }
+        });
+
+        if (!crudo.ok) return false;
+
+        const dicMap = {};
+        for (const item of crudo.dic) {
+            const p = await desempaquetarProductoDesdeIdb(item);
+            if (p && p.codigoBarras) dicMap[p.codigoBarras] = p;
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
+
+        const histDec = [];
+        for (const fac of crudo.hist) {
+            if (fac && fac._segCifrado) {
+                try {
+                    const dec = await Seg.descifrarJson(fac);
+                    histDec.push(dec);
+                } catch (e) {
+                    console.warn('[Cripto] Error descifrando factura:', e);
+                }
+            } else if (fac && fac.id) {
+                histDec.push(fac);
+            }
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, histDec);
+
+        const provDec = [];
+        for (const pv of crudo.prov) {
+            if (pv && pv._segCifrado) {
+                try {
+                    provDec.push(await Seg.descifrarJson(pv));
+                } catch (e) {
+                    console.warn('[Cripto] Error descifrando proveedor:', e);
+                }
+            } else if (pv && pv.id) {
+                provDec.push(pv);
+            }
+        }
+        const listaProvsFinal = fusionarSemillasConGuardados(provDec, PROVEEDORES_SEMILLA);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProvsFinal);
+
+        if (crudo.borrador) {
+            const borDec = crudo.borrador._segCifrado
+                ? await Seg.descifrarJson(crudo.borrador).catch(() => crearSesionVacia())
+                : crudo.borrador;
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, borDec);
+        }
+
+        if (crudo.reglas) {
+            const regDec = crudo.reglas._segCifrado
+                ? await Seg.descifrarJson(crudo.reglas).catch(() => REGLAS_NEGOCIO_POR_DEFECTO)
+                : crudo.reglas;
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, regDec);
+        }
+
+        limpiarHistorialExpirado7Dias();
+        return true;
+    }
+
+    async function activarCifradoConContrasena(contrasena, opciones = {}) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+
+        const provActuales = obtenerDirectorioProveedores();
+        const snapshot = {
+            diccionario: Dominio.clonarObjetoSeguro(obtenerDiccionarioCodigos()),
+            historial: Dominio.clonarObjetoSeguro(obtenerHistorialFacturas()),
+            borrador: Dominio.clonarObjetoSeguro(cargarBorradorActivo()),
+            reglas: Dominio.clonarObjetoSeguro(obtenerReglasNegocio()),
+            proveedores: Dominio.clonarObjetoSeguro(provActuales)
+        };
+
+        const res = await Seg.configurarContrasenaMaestra(contrasena, opciones);
+        await persistirMetadatosSeguridad(res.metadatos);
+        await migrarTodoACifradoIdb(snapshot);
+        limpiarLocalStorageSensible();
+
+        return {
+            exito: true,
+            codigoRecuperacion: res.codigoRecuperacion
+        };
+    }
+
+    async function desbloquearBoveda(contrasena) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        await Seg.desbloquear(contrasena);
+        await descifrarTodoDesdeIdbEnRam();
+        return { exito: true };
+    }
+
+    function bloquearBoveda() {
+        const Seg = obtenerSeguridad();
+        if (Seg) Seg.bloquear();
+        limpiarRamPorBloqueo();
+    }
+
+    async function cambiarContrasenaBoveda(actual, nueva) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        const res = await Seg.cambiarContrasena(actual, nueva);
+        await persistirMetadatosSeguridad(res.metadatos);
+        return { exito: true };
+    }
+
+    async function regenerarCodigoRecuperacionBoveda(actual) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        const res = await Seg.regenerarCodigoRecuperacion(actual);
+        await persistirMetadatosSeguridad(res.metadatos);
+        return { exito: true, codigoRecuperacion: res.codigoRecuperacion };
+    }
+
+    async function recuperarBovedaConCodigo(codigo, nuevaContrasena) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        const res = await Seg.recuperarConCodigo(codigo, nuevaContrasena);
+        await persistirMetadatosSeguridad(res.metadatos);
+        await descifrarTodoDesdeIdbEnRam();
+        return { exito: true, nuevoCodigoRecuperacion: res.nuevoCodigoRecuperacion };
+    }
+
+    async function actualizarAutoBloqueoBoveda(minutos) {
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado()) return false;
+        const meta = Seg.configurarAutoBloqueo(minutos);
+        if (meta) await persistirMetadatosSeguridad(meta);
+        return true;
+    }
+
+    async function purgarDatosPrivadosLocales() {
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+            throw new Error('Debes desbloquear la bóveda antes de purgar datos privados.');
+        }
+        const dicPublico = Dominio.sanitizarDiccionarioPublico(obtenerDiccionarioCodigos());
+        encDiccionarioBlobs.clear();
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicPublico);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, crearSesionVacia());
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, [...PROVEEDORES_SEMILLA]);
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, Dominio.clonarObjetoSeguro(REGLAS_NEGOCIO_POR_DEFECTO));
+        limpiarLocalStorageSensible();
+
+        await migrarTodoACifradoIdb({
+            diccionario: dicPublico,
+            historial: [],
+            borrador: crearSesionVacia(),
+            reglas: REGLAS_NEGOCIO_POR_DEFECTO,
+            proveedores: [...PROVEEDORES_SEMILLA]
+        }).catch(async () => {
+            // Si no hay cifrado configurado todavía, limpiar IDB directamente
+            const db = await abrirBaseDatos();
+            if (!db) return;
+            const tx = db.transaction([STORES.DICCIONARIO, STORES.HISTORIAL, STORES.BORRADOR, STORES.CONFIGURACION, STORES.PROVEEDORES], 'readwrite');
+            const sDic = tx.objectStore(STORES.DICCIONARIO);
+            sDic.clear();
+            Object.values(dicPublico).forEach(p => sDic.put(p));
+            tx.objectStore(STORES.HISTORIAL).clear();
+            tx.objectStore(STORES.BORRADOR).delete('activo');
+            tx.objectStore(STORES.CONFIGURACION).put(Dominio.clonarObjetoSeguro(REGLAS_NEGOCIO_POR_DEFECTO), 'reglas_activas');
+            const sProv = tx.objectStore(STORES.PROVEEDORES);
+            sProv.clear();
+            PROVEEDORES_SEMILLA.forEach(p => sProv.put(p));
+        });
+        return { exito: true, totalProductosConservados: Object.keys(dicPublico).length };
+    }
+
+    // Suscribirse al bloqueo automático por inactividad para limpiar RAM de inmediato
+    if (AppFarmacia.Seguridad && typeof AppFarmacia.Seguridad.suscribirCambioEstado === 'function') {
+        AppFarmacia.Seguridad.suscribirCambioEstado(estado => {
+            if (estado && estado.configurado && estado.bloqueado) {
+                limpiarRamPorBloqueo();
+            }
+        });
+    }
+
     AppFarmacia.Almacenamiento = Object.freeze({
+        activarCifradoConContrasena,
+        desbloquearBoveda,
+        bloquearBoveda,
+        cambiarContrasenaBoveda,
+        regenerarCodigoRecuperacionBoveda,
+        recuperarBovedaConCodigo,
+        actualizarAutoBloqueoBoveda,
+        purgarDatosPrivadosLocales,
+
         guardarVademecumMaestro,
         obtenerVademecumMaestro,
         buscarEnVademecum,

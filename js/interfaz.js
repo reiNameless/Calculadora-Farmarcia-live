@@ -6,7 +6,6 @@
     const { CONSTANTES } = AppFarmacia.Configuracion;
     const Dominio = AppFarmacia.Dominio;
     const Almacenamiento = AppFarmacia.Almacenamiento;
-    const ServicioIA = AppFarmacia.ServicioIA;
 
     const el = id => document.getElementById(id);
 
@@ -74,7 +73,7 @@
         UI.Factura.actualizarDatalistProveedores?.();
         el('facNumero').value = sesionActual.numeroFactura;
         el('facFechaEmision').value = sesionActual.fechaEmision;
-        el('facFechaVencimiento').value = sesionActual.fechaVencimiento;
+        if (el('facFechaVencimiento')) el('facFechaVencimiento').value = sesionActual.fechaVencimiento;
         el('facTotalFisico').value = sesionActual.totalFisico || '';
         if (el('facDescuentoGlobal')) {
             el('facDescuentoGlobal').value = sesionActual.descuentoGlobalValor || '';
@@ -83,14 +82,18 @@
             }
         }
         el('avisoEdicion').style.display = sesionActual.id ? 'flex' : 'none';
-        el('txtFinalizar').textContent = sesionActual.id ? 'Guardar cambios y cerrar' : 'Finalizar y Guardar';
-        el('txtDescartar').textContent = sesionActual.id ? 'Salir de edición' : 'Descartar factura';
+        el('txtFinalizar').textContent = sesionActual.id ? 'Guardar cambios y cerrar' : 'Finalizar (F4)';
+        el('txtDescartar').textContent = sesionActual.id ? 'Salir de edición' : 'Descartar';
 
         UI.Calculadora.actualizarEtiquetasReglasUI();
         UI.Factura.actualizarBarraSuperior();
         UI.Factura.renderizarTablaProductosActuales();
         UI.Diccionario.renderizarDiccionarioUI();
+        if (UI.Diccionario.renderizarProveedoresUI) UI.Diccionario.renderizarProveedoresUI();
         UI.Historial.renderizarHistorialUI();
+        if (UI.Seguridad && typeof UI.Seguridad.actualizarInterfazEstado === 'function') {
+            UI.Seguridad.actualizarInterfazEstado();
+        }
     }
 
     AppFarmacia.Estado = {
@@ -167,18 +170,15 @@
                     'warning'
                 );
             }
-            Almacenamiento.limpiarHistorialExpirado7Dias();
             sesionActual = Almacenamiento.cargarBorradorActivo();
             reglasActivas = Almacenamiento.obtenerReglasNegocio();
 
-            // SEG-01: Migrar API Key de localStorage a sessionStorage por seguridad
-            const legacyKey = localStorage.getItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY);
-            if (legacyKey) {
-                sessionStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY, legacyKey);
+            // Purgar credenciales de IA Gemini heredadas por privacidad y soberanía de datos
+            try {
                 localStorage.removeItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY);
-            }
-            el('iaApiKey').value = sessionStorage.getItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY) || '';
-            el('iaModelo').value = localStorage.getItem(CONSTANTES.CLAVES_STORAGE.IA_MODELO) || CONSTANTES.MODELO_IA_POR_DEFECTO;
+                localStorage.removeItem(CONSTANTES.CLAVES_STORAGE.IA_MODELO);
+                sessionStorage.removeItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY);
+            } catch (_) {}
 
             // Inicializar submódulos
             UI.Calculadora.establecerBloqueoReglas(true);
@@ -187,6 +187,9 @@
             UI.Factura.inicializarEventosFactura();
             UI.Diccionario.inicializarEventosDiccionario();
             UI.Historial.inicializarEventosHistorial();
+            if (UI.Seguridad && typeof UI.Seguridad.inicializarEventosSeguridad === 'function') {
+                UI.Seguridad.inicializarEventosSeguridad();
+            }
 
             renderizarTodo();
 
@@ -196,7 +199,7 @@
             window.addEventListener('input', marcarInteraccion, { once: true, passive: true });
             window.addEventListener('click', marcarInteraccion, { once: true, passive: true });
 
-            // Inicializar persistencia asíncrona con IndexedDB
+            // Inicializar persistencia asíncrona y metadatos de bóveda cifrada
             Almacenamiento.inicializarPersistencia().then(seActualizaronDatos => {
                 if (seActualizaronDatos) {
                     if (!interaccionUsuarioIniciada) {
@@ -205,78 +208,18 @@
                         renderizarTodo();
                         UI.Calculadora.calcularEnVivo();
                     } else {
-                        // Preservar la sesión activa del usuario para evitar sobreescritura por carrera
                         reglasActivas = Almacenamiento.obtenerReglasNegocio();
                         UI.Diccionario.renderizarDiccionarioUI();
+                        if (UI.Diccionario.renderizarProveedoresUI) UI.Diccionario.renderizarProveedoresUI();
                         UI.Historial.renderizarHistorialUI();
+                        UI.Seguridad?.actualizarInterfazEstado();
                     }
+                } else {
+                    UI.Seguridad?.actualizarInterfazEstado();
                 }
             }).catch(err => {
                 console.warn('[Almacenamiento] Error inicializando persistencia IndexedDB:', err);
             });
-
-            // Eventos IA
-            if (el('iaApiKey')) el('iaApiKey').addEventListener('change', e => {
-                sessionStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY, e.target.value.trim());
-            });
-            if (el('iaModelo')) el('iaModelo').addEventListener('change', e => {
-                localStorage.setItem(CONSTANTES.CLAVES_STORAGE.IA_MODELO, e.target.value.trim());
-            });
-
-            async function procesarArchivosFacturaIA(archivos) {
-                const lista = Array.from(archivos || []).filter(Boolean);
-                if (lista.length === 0) return;
-
-                const apiKey = sessionStorage.getItem(CONSTANTES.CLAVES_STORAGE.IA_API_KEY) || el('iaApiKey').value.trim();
-                if (!apiKey) {
-                    if (typeof abrirAjustes === 'function') abrirAjustes('seccionEscanerIA');
-                    UI.Notificaciones.mostrarMensaje('Primero ingresa tu API Key de Gemini en Ajustes para procesar facturas.', 'warning');
-                    return;
-                }
-
-                const contenedorIA = el('seccionEscanerIA');
-                if (contenedorIA) contenedorIA.classList.add('btn-loading');
-                const plural = lista.length > 1 ? `${lista.length} páginas` : '1 página';
-                el('iaEstadoTexto').textContent = `Optimizando y analizando ${plural} de factura con IA...`;
-                UI.Notificaciones.mostrarMensaje(`Analizando ${plural} con IA... Por favor espera unos momentos.`, 'info');
-
-                try {
-                    const modelo = el('iaModelo').value.trim() || CONSTANTES.MODELO_IA_POR_DEFECTO;
-                    const res = await ServicioIA.analizarImagenFactura(lista, apiKey, modelo, reglasActivas);
-
-                    if (res.proveedor && !sesionActual.proveedor) sesionActual.proveedor = res.proveedor;
-                    if (res.numeroFactura && !sesionActual.numeroFactura) sesionActual.numeroFactura = res.numeroFactura;
-                    if (res.fechaEmision) sesionActual.fechaEmision = res.fechaEmision;
-                    if (res.totalFactura && !sesionActual.totalFisico) sesionActual.totalFisico = res.totalFactura;
-
-                    res.productos.forEach(p => sesionActual.productos.push(p));
-                    sincronizarYGuardarSesion();
-                    renderizarTodo();
-                    UI.Calculadora.calcularEnVivo();
-
-                    const msgExito = `Escaneo completado: ${res.productos.length} productos cargados desde ${plural}.`;
-                    el('iaEstadoTexto').textContent = msgExito;
-                    UI.Notificaciones.mostrarMensaje(msgExito, 'success');
-                } catch (err) {
-                    el('iaEstadoTexto').textContent = err.message;
-                    UI.Notificaciones.mostrarMensaje(err.message, 'error');
-                } finally {
-                    if (contenedorIA) contenedorIA.classList.remove('btn-loading');
-                }
-            }
-
-            if (el('iaImagenInput')) el('iaImagenInput').addEventListener('change', async e => {
-                await procesarArchivosFacturaIA(e.target.files);
-                e.target.value = '';
-            });
-
-            const inputDirecto = el('iaImagenInputDirecto');
-            if (inputDirecto) {
-                inputDirecto.addEventListener('change', async e => {
-                    await procesarArchivosFacturaIA(e.target.files);
-                    e.target.value = '';
-                });
-            }
 
             // --- REDISEÑO 2026: BÓVEDA, AJUSTES Y MODO ULTRA-DARK ---
 

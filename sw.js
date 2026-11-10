@@ -1,19 +1,19 @@
 // Service Worker para Calculadora de Farmacia PWA (CAL-03)
-const CACHE_NAME = 'farmacia-pwa-v51';
+const CACHE_NAME = 'farmacia-pwa-v53';
 
 const ARCHIVOS_ESTATICOS = [
     './',
     './index.html',
     './manifest.json',
-    './catalogo_rd_inicial.json',
     './css/estilos.css',
     './js/zxing.min.js',
     './js/configuracion.js',
     './js/dominio.js',
+    './js/seguridad.js',
     './js/almacenamiento.js',
-    './js/servicio-ia.js',
     './js/servicio-catalogo.js',
     './js/ui-notificaciones.js',
+    './js/ui-seguridad.js',
     './js/ui-calculadora.js',
     './js/ui-factura.js',
     './js/ui-diccionario.js',
@@ -25,12 +25,20 @@ const ARCHIVOS_ESTATICOS = [
     './icons/icon.svg'
 ];
 
+const ARCHIVOS_OPCIONALES = [
+    './catalogo_rd_inicial.json',
+    './catalogo_farmacia_extenso.json'
+];
+
 // Instalación: Precarga todos los recursos en caché
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
+        caches.open(CACHE_NAME).then(async cache => {
             console.log('[Service Worker] Precargando recursos para uso offline...');
-            return cache.addAll(ARCHIVOS_ESTATICOS);
+            await cache.addAll(ARCHIVOS_ESTATICOS);
+            await Promise.allSettled(
+                ARCHIVOS_OPCIONALES.map(url => cache.add(url).catch(() => null))
+            );
         }).then(() => self.skipWaiting())
     );
 });
@@ -51,12 +59,12 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Intercepción de peticiones (Cache First para recursos locales, Network Only para IA)
+// Intercepción de peticiones (Cache First para recursos locales, Network Only para catálogo abierto externo)
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // Las peticiones a la API de Google Gemini no se guardan en caché offline
-    if (url.hostname.includes('googleapis.com')) {
+    // Consultas externas de catálogo abierto no se almacenan en caché
+    if (url.hostname !== self.location.hostname) {
         return event.respondWith(fetch(event.request));
     }
 

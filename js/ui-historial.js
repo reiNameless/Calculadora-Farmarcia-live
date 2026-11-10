@@ -13,6 +13,26 @@
 
     function renderizarHistorialUI() {
         const contenedor = el('contenedorHistorial');
+        if (!contenedor) return;
+
+        if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
+            contenedor.innerHTML = `<div class="tarjeta-bloqueo-boveda">
+                <div style="color:var(--color-alerta);">${iconoSvg('lock')}</div>
+                <div><strong>Historial Confidencial Cifrado (AES-256)</strong></div>
+                <div class="fs-xs text-muted" style="max-width:420px;margin:4px auto 10px;">
+                    Las facturas, costos de compra, totales y datos de distribuidores están cifrados localmente. Ingresa tu contraseña de administrador para consultarlos.
+                </div>
+                <button type="button" class="btn-primario" id="btnDesbloquearDesdeHistorial" style="height:32px;padding:0 14px;font-size:12px;">
+                    ${iconoSvg('unlock')} <span>Desbloquear Bóveda</span>
+                </button>
+            </div>`;
+            const btnUnlock = el('btnDesbloquearDesdeHistorial');
+            if (btnUnlock && UI.Seguridad) {
+                btnUnlock.addEventListener('click', () => UI.Seguridad.abrirModalSeguridad('vistaModalDesbloquear'));
+            }
+            return;
+        }
+
         const historial = Almacenamiento.obtenerHistorialFacturas();
         if (!historial.length) {
             contenedor.innerHTML = `<div class="text-center p-18 text-muted">No hay facturas cerradas en los últimos 7 días.</div>`;
@@ -127,107 +147,27 @@
     }
 
     function descargarRespaldoFacturas() {
-        const Estado = AppFarmacia.Estado;
-        const historial = Almacenamiento.obtenerHistorialFacturas();
-        if (historial.length === 0 && Estado.sesionActual.productos.length === 0) {
-            return UI.Notificaciones.mostrarMensaje('El historial y la factura actual están vacíos. No hay datos para descargar.', 'error');
-        }
-        Almacenamiento.descargarObjetoComoJson({
-            tipo: CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS,
-            version: CONSTANTES.VERSION_ESQUEMA_RESPALDO,
-            fecha: new Date().toISOString(),
-            historial,
-            borrador: Estado.sesionActual
-        }, `respaldo-farmacia-${Dominio.obtenerFechaLocalISO()}.json`, CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS);
+        UI.Notificaciones.mostrarMensaje('La exportación de facturas fue eliminada por cumplimiento legal y protección de datos confidenciales.', 'warning');
+        return false;
     }
 
-    async function restaurarRespaldoFacturas(inputArchivo) {
-        const Estado = AppFarmacia.Estado;
-        const archivo = inputArchivo.files[0];
-        inputArchivo.value = '';
-        if (!archivo) return;
-
-        try {
-            let datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
-            if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
-                const resVerif = Dominio.verificarSobreDatos(datos, CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS);
-                if (resVerif.esValido) {
-                    datos = resVerif.datos;
-                } else if (!resVerif.esLegacy) {
-                    throw new Error(resVerif.error);
-                }
-            }
-            if ((datos.tipo !== 'respaldo-farmacia' && datos.tipo !== CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) || !Array.isArray(datos.historial)) {
-                throw new Error('Archivo de respaldo de facturas no válido.');
-            }
-            const historialActual = Almacenamiento.obtenerHistorialFacturas();
-            const idsExistentes = new Set(historialActual.map(x => x.id));
-            let agregadas = 0;
-
-            datos.historial.forEach(fac => {
-                if (fac && Array.isArray(fac.productos) && !idsExistentes.has(fac.id)) {
-                    const productosSanitizados = fac.productos.map(p => Dominio.crearLineaProductoInmutable(p, Estado.reglasActivas));
-                    const resumen = Dominio.calcularResumenCuadreFactura(productosSanitizados, fac.totalFisico);
-                    const idNuevo = fac.id || Dominio.generarIdUnico();
-                    historialActual.push({
-                        id: idNuevo,
-                        proveedor: String(fac.proveedor || ''),
-                        numeroFactura: String(fac.numeroFactura || ''),
-                        fechaEmision: String(fac.fechaEmision || ''),
-                        fechaVencimiento: String(fac.fechaVencimiento || ''),
-                        totalFisico: Number(fac.totalFisico) || 0,
-                        productos: productosSanitizados,
-                        totalCalculado: resumen.sumaAcumulada,
-                        timestampGuardado: Number(fac.timestampGuardado) || Date.now()
-                    });
-                    idsExistentes.add(idNuevo);
-                    agregadas++;
-                }
-            });
-
-            Almacenamiento.guardarHistorialFacturas(historialActual);
-            renderizarHistorialUI();
-            UI.Notificaciones.mostrarMensaje(`Respaldo restaurado: ${agregadas} facturas añadidas.`, 'success');
-        } catch (error) {
-            UI.Notificaciones.mostrarMensaje(error.message, 'error');
-        }
+    async function restaurarRespaldoFacturas() {
+        UI.Notificaciones.mostrarMensaje('La importación de respaldos externos de facturas fue deshabilitada.', 'info');
+        return false;
     }
 
     function exportarFormato606() {
-        const historial = Almacenamiento.obtenerHistorialFacturas();
-        if (!historial || !historial.length) {
-            return UI.Notificaciones.mostrarMensaje('No hay facturas registradas en el historial para exportar.', 'info');
-        }
-
-        const Estado = AppFarmacia.Estado;
-        const rncEmpresa = (Estado && Estado.reglasActivas && Estado.reglasActivas.rncEmpresa) || '';
-        const res606 = Dominio.generarTextoFormato606(historial, rncEmpresa);
-
-        if (!res606.exito) {
-            return UI.Notificaciones.mostrarMensaje(res606.motivo || 'No se encontraron comprobantes fiscales B01/E31 en el historial.', 'warning');
-        }
-
-        const blob = new Blob([res606.texto606], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = res606.nombreArchivo || `DGII_606_${res606.periodo}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-        UI.Notificaciones.mostrarMensaje(`Formato 606 exportado con éxito: ${res606.totalFacturas} comprobante(s) fiscal(es) incluido(s).`, 'success');
-        if (Dominio.emitirBipExito) Dominio.emitirBipExito();
+        UI.Notificaciones.mostrarMensaje('La exportación de archivos fiscales externos fue eliminada por confidencialidad.', 'warning');
+        return false;
     }
 
     function inicializarEventosHistorial() {
-        if (el('btnExportar606')) el('btnExportar606').addEventListener('click', exportarFormato606);
-        el('btnDescargarRespaldo').addEventListener('click', descargarRespaldoFacturas);
-        el('inputRestaurarRespaldo').addEventListener('change', e => restaurarRespaldoFacturas(e.target));
-        el('contenedorHistorial').addEventListener('click', async e => {
+        if (el('contenedorHistorial')) el('contenedorHistorial').addEventListener('click', async e => {
             const btnImp = e.target.closest('[data-hist-imprimir]');
             if (btnImp) {
+                if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
+                    return UI.Seguridad && UI.Seguridad.solicitarDesbloqueoSiNecesario();
+                }
                 const fac = Almacenamiento.obtenerHistorialFacturas().find(x => x.id === btnImp.dataset.histImprimir);
                 return imprimirFactura(fac);
             }

@@ -425,7 +425,7 @@
         const primerIngreso = Dominio.calcularVariacionCostoPorcentaje(300, 0);
         afirmarIgualdad(primerIngreso, 0, 'Radar: Sin variación en primer ingreso sin costo previo');
 
-        // 18. Exportador de Catálogo Maestro para ERP (CSV Relacional de 26 Columnas)
+        // 18. Exportador Sanitario Público de Catálogo Maestro (CSV Purgado + Anti-Inyección de Fórmulas)
         const mockDictCsv = {
             '746001': {
                 codigoBarras: '746001',
@@ -436,6 +436,7 @@
                 formaFarmaceutica: 'Cápsulas',
                 presentacion: 'Caja x 30',
                 laboratorio: 'GlaxoSmithKline',
+                categoria: 'Antibióticos',
                 proveedorHabitual: 'Droguería Betances',
                 rncProveedor: '101023456',
                 tipo: 'divisible',
@@ -445,22 +446,38 @@
                 variacionCosto: 20,
                 costoUnitarioFiscal: '12.00000000',
                 preciosVenta: { p1Exacto: '15.60', p2Exacto: '14.80', p3Exacto: '14.00' },
+                historialCostos: [{ fecha: '2024-01-15', costoCaja: 360 }],
                 aplicaItbis: false,
                 tasaItbis: 0,
                 esLeche: false,
                 condicionVenta: 'Receta Médica',
                 registroSanitario: 'RD-12345',
                 ubicacion: 'Tramo A-2'
+            },
+            '746002': {
+                codigoBarras: '746002',
+                nombre: '=SUM(A1)',
+                principioActivo: '+cmd',
+                laboratorio: '-TestLab',
+                categoria: '@alert'
             }
         };
 
         const csvGenerado = Dominio.generarCsvCatalogoMaestro(mockDictCsv);
-        afirmarIgualdad(csvGenerado.includes('codigo_barras,nombre,nombre_comercial,principio_activo'), true, 'CSV ERP: Encabezados relacionales normalizados');
-        afirmarIgualdad(csvGenerado.includes('"Amoxil 500mg"'), true, 'CSV ERP: Fila de producto con escape seguro');
-        afirmarIgualdad(csvGenerado.includes('"GlaxoSmithKline"'), true, 'CSV ERP: Preservación de laboratorio');
-        afirmarIgualdad(csvGenerado.includes('"Droguería Betances"'), true, 'CSV ERP: Preservación de proveedor');
-        afirmarIgualdad(csvGenerado.includes('"12.00000000"'), true, 'CSV ERP: Costo unitario fiscal a 8 decimales');
-        afirmarIgualdad(csvGenerado.includes('"20.00%"'), true, 'CSV ERP: Porcentaje de variación de costo reflejado');
+        const encabezadoCsv = csvGenerado.split(/\r?\n/)[0];
+        afirmarIgualdad(encabezadoCsv.includes('codigo_barras,nombre,nombre_comercial,principio_activo'), true, 'CSV Público: Encabezados sanitarios normalizados');
+        afirmarIgualdad(encabezadoCsv.includes('proveedor_habitual') || encabezadoCsv.includes('rnc_proveedor') || encabezadoCsv.includes('ultimo_costo_caja'), false, 'CSV Público: Encabezados excluyen columnas comerciales privadas');
+        afirmarIgualdad(csvGenerado.includes('"Amoxil 500mg"'), true, 'CSV Público: Fila de producto sanitario preservada');
+        afirmarIgualdad(csvGenerado.includes('"GlaxoSmithKline"'), true, 'CSV Público: Preservación de laboratorio');
+        afirmarIgualdad(csvGenerado.includes('"Droguería Betances"'), false, 'CSV Público: Purga proveedor habitual');
+        afirmarIgualdad(csvGenerado.includes('101023456'), false, 'CSV Público: Purga RNC del proveedor');
+        afirmarIgualdad(csvGenerado.includes('12.00000000'), false, 'CSV Público: Purga costo unitario fiscal');
+        afirmarIgualdad(csvGenerado.includes('360.00'), false, 'CSV Público: Purga último costo por caja');
+        afirmarIgualdad(csvGenerado.includes('20.00%'), false, 'CSV Público: Purga variación de costo');
+        afirmarIgualdad(csvGenerado.includes('15.60'), false, 'CSV Público: Purga precios de venta');
+        afirmarIgualdad(csvGenerado.includes('ultimoPrecioCaja') || csvGenerado.includes('historialCostos') || csvGenerado.includes('proveedorHabitual') || csvGenerado.includes('2024-01-15'), false, 'CSV Público: Purga historial y claves internas');
+        afirmarIgualdad(csvGenerado.includes('"\'=SUM(A1)"'), true, 'CSV Público: Neutraliza inyección de fórmula =SUM(A1)');
+        afirmarIgualdad(csvGenerado.includes('"\'+cmd"') && csvGenerado.includes('"\'-TestLab"') && csvGenerado.includes('"\'@alert"'), true, 'CSV Público: Neutraliza prefijos +, - y @ en celdas CSV');
 
 
                 // 19. Blindaje de Catálogo Maestro y Protección contra Sobreescritura Accidental
@@ -491,7 +508,10 @@
             AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario(lineaOperador);
             const recuperado = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoPruebaBlindaje);
 
-            afirmarIgualdad(recuperado.nombre, 'Amoxicilina 500mg MK Oficial', 'Blindaje: Preserva nombre oficial e impide sobreescritura casual');
+            const nombreEsperado = (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
+                ? Dominio.normalizarNombreProductoMayusculas('Amoxicilina 500mg MK Oficial')
+                : 'Amoxicilina 500mg MK Oficial';
+            afirmarIgualdad(recuperado.nombre, nombreEsperado, 'Blindaje: Preserva nombre oficial e impide sobreescritura casual');
             afirmarIgualdad(recuperado.tipo, 'divisible', 'Blindaje: Preserva empaque divisible oficial');
             afirmarIgualdad(recuperado.unidadesPorCaja, 30, 'Blindaje: Preserva unidades por caja oficiales (30)');
             afirmarIgualdad(recuperado.ultimoPrecioCaja, 350, 'Blindaje: Actualiza costo de compra correctamente (350)');
@@ -506,7 +526,10 @@
             };
             AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo(edicionDeliberada);
             const recuperadoEditado = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoPruebaBlindaje);
-            afirmarIgualdad(recuperadoEditado.nombre, 'Amoxicilina 500mg MK Ficha Editada', 'Catálogo: Permite actualización deliberada desde ficha de catálogo');
+            const nombreEditadoEsperado = (Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function')
+                ? Dominio.estandarizarNombreFarmaceutico('Amoxicilina 500mg MK Ficha Editada')
+                : 'Amoxicilina 500mg MK Ficha Editada';
+            afirmarIgualdad(recuperadoEditado.nombre, nombreEditadoEsperado, 'Catálogo: Permite actualización deliberada desde ficha de catálogo');
             afirmarIgualdad(recuperadoEditado.categoria, 'Antibiótico / Betalactámico', 'Catálogo: Guarda categoría terapéutica');
 
             // Limpieza
@@ -751,10 +774,59 @@
         afirmarIgualdad(prodFusionado.ubicacion, 'Pasillo 1 - Estante A', 'Fusión Inteligente: Preserva ubicación física de estante local');
         afirmarIgualdad(prodFusionado.historialCostos.length, 2, 'Fusión Inteligente: Combina los historiales de compra sin duplicados');
 
-        // Prueba de sobre de intercambio (Smart Delta Sobre)
+        // Prueba de sobre de intercambio (Smart Delta Sobre - Purga en Caliente)
         const sobreGenerado = Dominio.generarSobreParcheCatalogo(dicLocalMock);
         afirmarIgualdad(sobreGenerado.tipo, 'parche-farmacia-catalogo', 'Sobre de Intercambio: Tipo estándar parche-farmacia-catalogo');
         afirmarIgualdad(sobreGenerado.resumen.totalProductos, 2, 'Sobre de Intercambio: Registra conteo correcto en resumen');
+        afirmarIgualdad(sobreGenerado.resumen.sanitizadoPublico, true, 'Sobre de Intercambio: Marca bandera sanitizadoPublico');
+
+        const dicLocalConPrivados = {
+            '746888': {
+                codigoBarras: '746888',
+                nombre: 'Ibuprofeno 400mg',
+                principioActivo: 'Ibuprofeno',
+                laboratorio: 'LabLocal',
+                ultimoPrecioCaja: 450,
+                costoAnteriorCaja: 400,
+                variacionCosto: 12.5,
+                costoUnitarioFiscal: '15.00000000',
+                preciosVenta: { p1Exacto: '19.50', p2Exacto: '18.50', p3Exacto: '17.50' },
+                historialCostos: [{ fecha: '2024-05-01', costoCaja: 450 }],
+                proveedorHabitual: 'Droguería Betances',
+                rncProveedor: '101023456',
+                _segCifrado: { _segCifrado: true, v: 1, alg: 'AES-256-GCM', iv: 'iv', ct: 'secreto' }
+            }
+        };
+        const sobrePrivado = Dominio.generarSobreParcheCatalogo(dicLocalConPrivados);
+        const sobreJsonStr = JSON.stringify(sobrePrivado);
+        afirmarIgualdad(sobreJsonStr.includes('Ibuprofeno 400mg') && sobreJsonStr.includes('LabLocal'), true, 'Sobre de Intercambio: Conserva ficha sanitaria pública');
+        afirmarIgualdad(
+            sobreJsonStr.includes('Droguería Betances') ||
+            sobreJsonStr.includes('101023456') ||
+            sobreJsonStr.includes('ultimoPrecioCaja') ||
+            sobreJsonStr.includes('historialCostos') ||
+            sobreJsonStr.includes('proveedorHabitual') ||
+            sobreJsonStr.includes('15.00000000') ||
+            sobreJsonStr.includes('19.50') ||
+            sobreJsonStr.includes('_segCifrado'),
+            false,
+            'Sobre de Intercambio: Purga costos, historial, proveedores, precios y blobs cifrados'
+        );
+
+        const parchePublicoEntrante = {
+            '746888': {
+                codigoBarras: '746888',
+                nombre: 'Ibuprofeno 400mg Caja x 30',
+                principioActivo: 'Ibuprofeno'
+            }
+        };
+        const resFusionPriv = Dominio.fusionarDiccionarios(dicLocalConPrivados, parchePublicoEntrante, { modo: 'fusion' });
+        const fichaTrasFusion = resFusionPriv.diccionarioFusionado['746888'];
+        afirmarIgualdad(fichaTrasFusion.nombre, 'Ibuprofeno 400mg Caja x 30', 'Fusión Sanitaria: Actualiza campo sanitario desde parche público');
+        afirmarIgualdad(fichaTrasFusion.ultimoPrecioCaja, 450, 'Fusión Sanitaria: Preserva último costo local sin sobrescribir');
+        afirmarIgualdad(Array.isArray(fichaTrasFusion.historialCostos) && fichaTrasFusion.historialCostos[0].costoCaja === 450, true, 'Fusión Sanitaria: Preserva historialCostos local');
+        afirmarIgualdad(fichaTrasFusion.proveedorHabitual, 'Droguería Betances', 'Fusión Sanitaria: Preserva proveedor local');
+        afirmarIgualdad(Boolean(fichaTrasFusion._segCifrado && fichaTrasFusion._segCifrado.ct === 'secreto'), true, 'Fusión Sanitaria: Preserva sobre _segCifrado local intacto');
 
 
                 // 27. Macro-Categorización Farmacéutica EGM (Rol 01 / UX)
@@ -984,15 +1056,217 @@
             afirmarIgualdad(Boolean(rowe && rowe.origen === 'Nacional RD'), true, 'Directorio Laboratorios: Rowe registrado como Nacional RD');
         }
 
+        // 36. Carga y Persistencia de Vademécum Maestro Oficial DIGEMAPS (Cero fallos por db)
+        if (typeof Almacenamiento !== 'undefined' && typeof Almacenamiento.guardarVademecumMaestro === 'function') {
+            const vadMuestra = [
+                {
+                    id: 'VAD-TEST-01',
+                    nombreComercial: 'Aceta-Felt 500 mg',
+                    principioActivo: 'Paracetamol (Acetaminofén)',
+                    laboratorio: 'Laboratorios Feltrex',
+                    registroSanitario: '2021-0142'
+                },
+                {
+                    id: 'VAD-TEST-02',
+                    nombreComercial: 'Amoxil 500 mg',
+                    principioActivo: 'Amoxicilina',
+                    laboratorio: 'GSK',
+                    registroSanitario: '2019-0331'
+                }
+            ];
+            const resGuardar = Almacenamiento.guardarVademecumMaestro(vadMuestra);
+            afirmarIgualdad(resGuardar.exito, true, 'Vademécum DIGEMAPS: Guardado exitoso sin lanzar ejecutarConDb');
+            afirmarIgualdad(resGuardar.total, 2, 'Vademécum DIGEMAPS: Total de medicamentos almacenados es 2');
+
+            const resultadosBusqueda = Almacenamiento.buscarEnVademecum('aceta-felt');
+            afirmarIgualdad(resultadosBusqueda.length > 0, true, 'Vademécum DIGEMAPS: Búsqueda por nombre comercial exitosa');
+            afirmarIgualdad(resultadosBusqueda[0].principioActivo, 'Paracetamol (Acetaminofén)', 'Vademécum DIGEMAPS: Principio activo coincide');
+
+            // Detección polimórfica en importador
+            if (typeof Almacenamiento.fusionarCatalogoDesdeArchivo === 'function') {
+                const resImport = Almacenamiento.fusionarCatalogoDesdeArchivo({
+                    tipo: 'vademecum-digemaps',
+                    medicamentos: vadMuestra
+                });
+                afirmarIgualdad(resImport.exito, true, 'Importación Vademécum DIGEMAPS polimórfico exitosa');
+                afirmarIgualdad(resImport.tipo, 'vademecum-digemaps', 'Tipo detectado es vademecum-digemaps');
+            }
+        }
+
+        // 37. Allowlist Sanitaria en sanitizarFichaPublicaCatalogo (Cero Costos / Cero Proveedores / Anti-Proto)
+        const fichaSucia = {
+            codigoBarras: '746555',
+            nombre: 'Azitromicina 500mg',
+            principioActivo: 'Azitromicina',
+            laboratorio: 'Pfizer',
+            categoria: 'Antibióticos',
+            tipo: 'divisible',
+            unidadesPorCaja: 3,
+            aplicaItbis: false,
+            tasaItbis: 0,
+            esLeche: false,
+            condicionVenta: 'Receta Médica',
+            registroSanitario: 'RD-99887',
+            ubicacion: 'Tramo B-4',
+            ultimoPrecioCaja: 500,
+            costoAnteriorCaja: 450,
+            variacionCosto: 11.11,
+            costoUnitarioFiscal: '166.66666667',
+            preciosVenta: { p1Exacto: '216.67' },
+            historialCostos: [{ fecha: '2024-02-10', costoCaja: 500 }],
+            proveedorHabitual: 'Droguería Confidencial',
+            rncProveedor: '131000111',
+            _segCifrado: { ct: 'cipher' }
+        };
+        Object.defineProperty(fichaSucia, '__proto__', { value: { evil: true }, enumerable: true });
+        const fichaSaneada = Dominio.sanitizarFichaPublicaCatalogo(fichaSucia);
+        afirmarIgualdad(fichaSaneada.nombre, 'Azitromicina 500mg', 'Sanitizador Ficha: Conserva nombre sanitario');
+        afirmarIgualdad(fichaSaneada.registroSanitario, 'RD-99887', 'Sanitizador Ficha: Conserva registro sanitario');
+        afirmarIgualdad(
+            'ultimoPrecioCaja' in fichaSaneada ||
+            'costoAnteriorCaja' in fichaSaneada ||
+            'variacionCosto' in fichaSaneada ||
+            'costoUnitarioFiscal' in fichaSaneada ||
+            'preciosVenta' in fichaSaneada ||
+            'historialCostos' in fichaSaneada ||
+            'proveedorHabitual' in fichaSaneada ||
+            'rncProveedor' in fichaSaneada ||
+            '_segCifrado' in fichaSaneada ||
+            'evil' in fichaSaneada,
+            false,
+            'Sanitizador Ficha: Excluye campos comerciales sensibles y propiedades heredadas'
+        );
+
+        // 38. Sanitizador de Diccionario Público y Defensa contra Prototype Pollution
+        const jsonHostil = '{"__proto__":{"codigoBarras":"__proto__","nombre":"EvilProto"},"constructor":{"nombre":"EvilCtor"},"prototype":{"nombre":"EvilPrototype"},"746111":{"codigoBarras":"746111","nombre":"Vitamina C 1000mg","laboratorio":"Bayer","ultimoPrecioCaja":999,"proveedorHabitual":"SecretProv","historialCostos":[{"fecha":"2024-03-01","costoCaja":999}],"_segCifrado":{"ct":"secret"}}}';
+        const dicHostil = JSON.parse(jsonHostil);
+        const dicLimpio = Dominio.sanitizarDiccionarioPublico(dicHostil);
+        const clavesLimpio = Object.keys(dicLimpio);
+        afirmarIgualdad(clavesLimpio.length, 1, 'Sanitizador Diccionario: Filtra claves peligrosas __proto__/constructor/prototype');
+        afirmarIgualdad(clavesLimpio[0], '746111', 'Sanitizador Diccionario: Mantiene únicamente código válido 746111');
+        afirmarIgualdad(({}).nombre === undefined, true, 'Sanitizador Diccionario: Cero contaminación de Object.prototype');
+        const dicLimpioJson = JSON.stringify(dicLimpio);
+        afirmarIgualdad(
+            dicLimpioJson.includes('SecretProv') ||
+            dicLimpioJson.includes('ultimoPrecioCaja') ||
+            dicLimpioJson.includes('historialCostos') ||
+            dicLimpioJson.includes('proveedorHabitual') ||
+            dicLimpioJson.includes('_segCifrado'),
+            false,
+            'Sanitizador Diccionario: Elimina 100% de costos, proveedores y sobres cifrados'
+        );
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;
     }
 
+    async function ejecutarPruebasSeguridad() {
+        console.group('Suite de Pruebas de Cifrado y Bóveda (Web Crypto AES-256-GCM)');
+        const Seg = AppFarmacia.Seguridad;
+        afirmarIgualdad(Boolean(Seg && typeof Seg.configurarContrasenaMaestra === 'function'), true, 'Seguridad: Módulo AppFarmacia.Seguridad disponible');
+        afirmarIgualdad(Seg.soportaWebCrypto(), true, 'Seguridad: Web Crypto API soportada en el entorno');
+
+        if (Seg.estaConfigurado()) {
+            console.warn('[Pruebas Seguridad] Bóveda ya configurada en sesión activa; omitiendo pruebas destructivas en vivo.');
+            console.groupEnd();
+            return true;
+        }
+
+        try {
+            // S1. Configuración de contraseña maestra sin texto plano en metadatos
+            const resSetup = await Seg.configurarContrasenaMaestra('ClaveMaestra#2026', { minutosAutoBloqueo: 10 });
+            afirmarIgualdad(resSetup.exito, true, 'Seguridad S1: Configuración maestra exitosa');
+            afirmarIgualdad(typeof resSetup.codigoRecuperacion === 'string' && resSetup.codigoRecuperacion.length >= 24, true, 'Seguridad S1: Emite código de recuperación robusto');
+            const metaStr = JSON.stringify(resSetup.metadatos || {});
+            afirmarIgualdad(metaStr.includes('ClaveMaestra#2026'), false, 'Seguridad S1: Metadatos jamás almacenan la contraseña en texto plano');
+            afirmarIgualdad(Seg.estaConfigurado() && !Seg.estaBloqueado(), true, 'Seguridad S1: Bóveda configurada y desbloqueada');
+
+            // S2. Cifrado AES-256-GCM oculta los datos confidenciales
+            const cargaSensible = {
+                proveedorHabitual: 'Drogueria Privada SRL',
+                ultimoPrecioCaja: 1850.25,
+                rncProveedor: '101999888'
+            };
+            const sobreCifrado = await Seg.cifrarJson(cargaSensible);
+            afirmarIgualdad(sobreCifrado._segCifrado, true, 'Seguridad S2: Sobre marcado con _segCifrado');
+            afirmarIgualdad(sobreCifrado.alg, 'AES-256-GCM', 'Seguridad S2: Algoritmo AES-256-GCM');
+            const sobreCifradoStr = JSON.stringify(sobreCifrado);
+            afirmarIgualdad(
+                sobreCifradoStr.includes('Drogueria Privada SRL') ||
+                sobreCifradoStr.includes('1850.25') ||
+                sobreCifradoStr.includes('101999888') ||
+                sobreCifradoStr.includes('ultimoPrecioCaja'),
+                false,
+                'Seguridad S2: El texto cifrado oculta proveedor, RNC y costo'
+            );
+
+            // S3. Descifrado recupera exactamente los datos originales
+            const datosDescifrados = await Seg.descifrarJson(sobreCifrado);
+            afirmarIgualdad(datosDescifrados.proveedorHabitual, 'Drogueria Privada SRL', 'Seguridad S3: Descifra proveedorHabitual exacto');
+            afirmarIgualdad(datosDescifrados.ultimoPrecioCaja, 1850.25, 'Seguridad S3: Descifra ultimoPrecioCaja exacto');
+            afirmarIgualdad(datosDescifrados.rncProveedor, '101999888', 'Seguridad S3: Descifra rncProveedor exacto');
+
+            // S4. El bloqueo impide cifrar y descifrar en RAM
+            Seg.bloquear();
+            afirmarIgualdad(Seg.estaBloqueado(), true, 'Seguridad S4: Estado bloqueado activo tras bloquear()');
+            let bloqueoCifrado = false;
+            try { await Seg.cifrarJson({ test: 1 }); } catch (_) { bloqueoCifrado = true; }
+            let bloqueoDescifrado = false;
+            try { await Seg.descifrarJson(sobreCifrado); } catch (_) { bloqueoDescifrado = true; }
+            afirmarIgualdad(bloqueoCifrado && bloqueoDescifrado, true, 'Seguridad S4: Bloqueo impide cifrarJson y descifrarJson');
+
+            // S5. Contraseña errónea rechazada e incrementa intentosFallidos
+            let rechazoClaveMala = false;
+            try { await Seg.desbloquear('ClaveEquivocada99'); } catch (_) { rechazoClaveMala = true; }
+            afirmarIgualdad(rechazoClaveMala, true, 'Seguridad S5: Contraseña incorrecta rechazada');
+            afirmarIgualdad(Seg.obtenerEstado().intentosFallidos, 1, 'Seguridad S5: Incrementa contador intentosFallidos');
+            afirmarIgualdad(Seg.estaBloqueado(), true, 'Seguridad S5: Permanece bloqueada tras fallo');
+
+            // S6. Contraseña correcta desbloquea y reinicia contador
+            await Seg.desbloquear('ClaveMaestra#2026');
+            afirmarIgualdad(Seg.estaBloqueado(), false, 'Seguridad S6: Desbloqueo exitoso con contraseña maestra');
+            afirmarIgualdad(Seg.obtenerEstado().intentosFallidos, 0, 'Seguridad S6: Reinicia intentosFallidos a 0');
+
+            // S7. Cambio de contraseña conserva el acceso al sobre cifrado (envelope DEK)
+            await Seg.cambiarContrasena('ClaveMaestra#2026', 'ClaveNueva#2027');
+            Seg.bloquear();
+            let falloClaveVieja = false;
+            try { await Seg.desbloquear('ClaveMaestra#2026'); } catch (_) { falloClaveVieja = true; }
+            afirmarIgualdad(falloClaveVieja, true, 'Seguridad S7: Contraseña anterior invalidada tras cambio');
+            await Seg.desbloquear('ClaveNueva#2027');
+            const descifradoTrasCambio = await Seg.descifrarJson(sobreCifrado);
+            afirmarIgualdad(descifradoTrasCambio.ultimoPrecioCaja, 1850.25, 'Seguridad S7: DEK preservada permite descifrar sobres previos');
+
+            // S8. Código de recuperación restablece acceso y rota el código anterior
+            Seg.bloquear();
+            const resRecup = await Seg.recuperarConCodigo(resSetup.codigoRecuperacion, 'ClaveRecuperada#2028');
+            afirmarIgualdad(resRecup.exito, true, 'Seguridad S8: Recuperación de emergencia exitosa');
+            afirmarIgualdad(resRecup.nuevoCodigoRecuperacion !== resSetup.codigoRecuperacion, true, 'Seguridad S8: Rota el código de recuperación tras su uso');
+            Seg.bloquear();
+            await Seg.desbloquear('ClaveRecuperada#2028');
+            const descifradoTrasRecup = await Seg.descifrarJson(sobreCifrado);
+            afirmarIgualdad(descifradoTrasRecup.proveedorHabitual, 'Drogueria Privada SRL', 'Seguridad S8: Mantiene integridad de datos cifrados tras recuperación');
+
+            console.info('%c[Todas las pruebas de cifrado AES-256-GCM superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
+            console.groupEnd();
+            return true;
+        } finally {
+            Seg.bloquear();
+            Seg.establecerMetadatosPersistidos(null);
+        }
+    }
+
     AppFarmacia.ejecutarSuitePruebas = ejecutarSuitePruebas;
+    AppFarmacia.ejecutarPruebasSeguridad = ejecutarPruebasSeguridad;
 
     // CAL-01: Ejecutar solo si se solicita explícitamente en la URL (?test=true o ?debug=1) o en consola
     if (typeof window !== 'undefined' && window.location?.search && (window.location.search.includes('test=true') || window.location.search.includes('debug=1'))) {
-        window.addEventListener('DOMContentLoaded', ejecutarSuitePruebas);
+        window.addEventListener('DOMContentLoaded', () => {
+            ejecutarSuitePruebas();
+            if (AppFarmacia.Seguridad && typeof AppFarmacia.Seguridad.soportaWebCrypto === 'function') {
+                ejecutarPruebasSeguridad().catch(err => console.error('[Fallo Pruebas Seguridad]', err));
+            }
+        });
     }
 })(window);

@@ -109,6 +109,25 @@
     function renderizarProveedoresUI(terminoFiltro = '') {
         const contenedor = el('contenedorProveedores');
         if (!contenedor) return;
+
+        if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
+            contenedor.innerHTML = `<div class="tarjeta-bloqueo-boveda">
+                <div style="color:var(--color-alerta);">${iconoSvg('lock')}</div>
+                <div><strong>Directorio de Proveedores y Acuerdos Cifrado (AES-256)</strong></div>
+                <div class="fs-xs text-muted" style="max-width:430px;margin:4px auto 10px;">
+                    Los RNCs, acuerdos comerciales, días de crédito y descuentos pactados con droguerías son secretos privados del negocio. Desbloquea la Bóveda de Administrador para verlos o editarlos.
+                </div>
+                <button type="button" class="btn-primario" id="btnDesbloquearDesdeProveedores" style="height:32px;padding:0 14px;font-size:12px;">
+                    ${iconoSvg('unlock')} <span>Desbloquear Bóveda</span>
+                </button>
+            </div>`;
+            const btnDesbloq = el('btnDesbloquearDesdeProveedores');
+            if (btnDesbloq && UI.Seguridad) {
+                btnDesbloq.addEventListener('click', () => UI.Seguridad.abrirModalSeguridad('vistaModalDesbloquear'));
+            }
+            return;
+        }
+
         const lista = Almacenamiento.obtenerDirectorioProveedores();
         const term = terminoFiltro.toLowerCase().trim();
 
@@ -375,16 +394,22 @@
                 const tasa = item.tasaItbis || 18;
                 badges.push(`<span class="badge" style="font-size:10px;background:var(--color-alerta-fondo);color:var(--color-alerta);padding:1px 5px;border-radius:3px;margin-left:4px;">+${tasa}% ITBIS</span>`);
             }
-            const nombreTexto = item.nombre || 'Producto sin nombre';
+            const nombreTexto = item.nombre || item.nombreComercial || 'Producto sin nombre';
             const subtitulo = [item.principioActivo, item.laboratorio].filter(Boolean).join(' • ');
 
+            const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+
             let badgeVariacion = '';
-            if (item.variacionCosto && Number(item.variacionCosto) !== 0) {
+            if (!estaBloqueado && item.variacionCosto && Number(item.variacionCosto) !== 0) {
                 const varNum = Number(item.variacionCosto);
                 const bg = varNum > 0 ? '#fee2e2' : '#dcfce7';
                 const color = varNum > 0 ? '#dc2626' : '#16a34a';
                 badgeVariacion = `<span class="badge" style="font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;" title="Variación respecto a la compra anterior">${varNum > 0 ? '+' : ''}${varNum}%</span>`;
             }
+
+            const celdaCostoHtml = estaBloqueado
+                ? `<span class="badge-cifrado-celda" title="Costo cifrado con AES-256. Desbloquea Bóveda para visualizar.">${iconoSvg('lock')} Cifrado</span>`
+                : `$${Number(item.ultimoPrecioCaja || 0).toFixed(2)}${badgeVariacion}`;
 
             filasHtml += `<tr>
                 <td class="mono">${escaparHtml(cod)}</td>
@@ -394,7 +419,7 @@
                 </td>
                 <td><span style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(categoriaActual)}</span><br><span style="font-size:10px;">${item.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}</span></td>
                 <td class="mono">${item.unidadesPorCaja}</td>
-                <td class="mono">$${Number(item.ultimoPrecioCaja || 0).toFixed(2)}${badgeVariacion}</td>
+                <td class="mono">${celdaCostoHtml}</td>
                 <td style="white-space:nowrap;">
                     <div style="display:flex;gap:4px;align-items:center;">
                         <button type="button" class="action-icon-btn" data-usar-codigo="${codEscapado}" title="Cargar en Calculadora" aria-label="Cargar ${escaparHtml(nombreTexto)} en calculadora">${iconoSvg('calc')}</button>
@@ -430,12 +455,16 @@
         if (Object.keys(diccionario).length === 0) {
             return UI.Notificaciones.mostrarMensaje('El diccionario de códigos está vacío. No hay datos para descargar.', 'error');
         }
+        // Purga en caliente: elimina costos, márgenes, historial financiero y proveedores privados
+        const diccionarioSanitario = Dominio.sanitizarDiccionarioPublico(diccionario);
         Almacenamiento.descargarObjetoComoJson({
             tipo: CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS,
             version: CONSTANTES.VERSION_ESQUEMA_RESPALDO,
             fecha: new Date().toISOString(),
-            diccionario
-        }, `diccionario-codigos-farmacia-${Dominio.obtenerFechaLocalISO()}.json`, CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS);
+            sanitizadoPublico: true,
+            diccionario: diccionarioSanitario
+        }, `catalogo-sanitario-farmacia-${Dominio.obtenerFechaLocalISO()}.json`, CONSTANTES.TIPO_ARCHIVO_DICCIONARIO_CODIGOS);
+        UI.Notificaciones.mostrarMensaje('Catálogo Sanitario Público descargado (costos y proveedores purgados).', 'success');
     }
 
     async function restaurarDiccionarioJson(inputArchivo, modoForzado = 'fusion') {
@@ -513,7 +542,7 @@
         if (btnExportCsv) {
             btnExportCsv.addEventListener('click', () => {
                 const res = Almacenamiento.exportarCatalogoMaestroCsv();
-                UI.Notificaciones.mostrarMensaje(`Catálogo Maestro (${res.totalProductos} productos) exportado en CSV relacional para ERP.`, 'success');
+                UI.Notificaciones.mostrarMensaje(`Catálogo Sanitario Público (${res.totalProductos} productos) exportado en CSV sin costos ni proveedores.`, 'success');
             });
         }
 
@@ -564,6 +593,8 @@
                         ? (el('editProdCategoriaNueva') ? el('editProdCategoriaNueva').value.trim() : 'General / Otros')
                         : catSelVal;
 
+                    const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+
                     const ficha = {
                         codigoBarras: codigo,
                         nombre: nombreNormalizado,
@@ -571,12 +602,10 @@
                         principioActivo: el('editProdPrincipioActivo').value.trim(),
                         concentracion: el('editProdConcentracion') ? el('editProdConcentracion').value.trim() : '',
                         laboratorio: el('editProdLaboratorio').value.trim(),
-                        proveedorHabitual: el('editProdProveedorHabitual') ? el('editProdProveedorHabitual').value.trim() : '',
                         formaFarmaceutica: el('editProdForma') ? el('editProdForma').value : '',
                         presentacion: el('editProdPresentacion') ? el('editProdPresentacion').value.trim() : '',
                         tipo: el('editProdTipo').value,
                         unidadesPorCaja: el('editProdUnidades').value,
-                        ultimoPrecioCaja: el('editProdUltimoCosto') ? parseFloat(el('editProdUltimoCosto').value) || 0 : 0,
                         tasaItbis: el('editProdTasaItbis').value,
                         aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
                         condicionVenta: el('editProdCondicion') ? el('editProdCondicion').value : 'OTC',
@@ -584,6 +613,11 @@
                         registroSanitario: el('editProdRegistroSanitario').value.trim(),
                         ubicacion: el('editProdUbicacion').value.trim()
                     };
+
+                    if (!estaBloqueado) {
+                        ficha.proveedorHabitual = el('editProdProveedorHabitual') ? el('editProdProveedorHabitual').value.trim() : '';
+                        ficha.ultimoPrecioCaja = el('editProdUltimoCosto') ? parseFloat(el('editProdUltimoCosto').value) || 0 : 0;
+                    }
 
                     if (Dominio && typeof Dominio.validarDatosMinimosProducto === 'function') {
                         const valMin = Dominio.validarDatosMinimosProducto(ficha);
@@ -611,15 +645,15 @@
             });
         }
 
-        el('btnDescargarDiccionario').addEventListener('click', descargarDiccionarioJson);
-        el('inputRestaurarDiccionario').addEventListener('change', e => restaurarDiccionarioJson(e.target));
+        if (el('btnDescargarDiccionario')) el('btnDescargarDiccionario').addEventListener('click', descargarDiccionarioJson);
+        if (el('inputRestaurarDiccionario')) el('inputRestaurarDiccionario').addEventListener('change', e => restaurarDiccionarioJson(e.target));
 
-        // Sincronización entre Cajas (Smart Delta Patch)
+        // Sincronización entre Cajas (Solo Catálogo Sanitario Público)
         const btnExportarCaja = el('btnExportarParaOtraCaja');
         if (btnExportarCaja) {
             btnExportarCaja.addEventListener('click', () => {
                 Almacenamiento.exportarParcheParaOtraCaja();
-                UI.Notificaciones.mostrarMensaje('Catálogo empaquetado para transferir a otra computadora descargado.', 'success');
+                UI.Notificaciones.mostrarMensaje('Parche Sanitario Público descargado (costos y acuerdos eliminados).', 'success');
             });
         }
 
@@ -628,42 +662,6 @@
             inputFusionar.addEventListener('change', e => restaurarDiccionarioJson(e.target, 'fusion'));
         }
 
-        // Respaldo y Restauración de Base Completa (IndexedDB)
-        const btnDescargarBase = el('btnDescargarBaseCompleta');
-        if (btnDescargarBase) {
-            btnDescargarBase.addEventListener('click', () => {
-                Almacenamiento.exportarBaseCompleta();
-            });
-        }
-
-        const inputRestaurarBase = el('inputRestaurarBaseCompleta');
-        if (inputRestaurarBase) {
-            inputRestaurarBase.addEventListener('change', async e => {
-                const archivo = e.target.files[0];
-                e.target.value = '';
-                if (!archivo) return;
-                try {
-                    const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
-                    const confirmar = await UI.Notificaciones.mostrarConfirmacion(
-                        'Esta acción restaurará toda la base de datos (Catálogo, Historial y Fórmulas). ¿Deseas continuar?',
-                        'Restaurar Base Completa'
-                    );
-                    if (!confirmar) return;
-
-                    const res = Almacenamiento.restaurarBaseCompleta(datos);
-                    if (res.exito) {
-                        renderizarDiccionarioUI();
-                        AppFarmacia.Estado.renderizarTodo();
-                        UI.Calculadora.calcularEnVivo();
-                        UI.Notificaciones.mostrarMensaje(`Restauración completa exitosa: ${res.totalProductos} productos y ${res.totalFacturas} facturas restauradas.`, 'success');
-                    } else {
-                        UI.Notificaciones.mostrarMensaje(res.error || 'Error al restaurar.', 'error');
-                    }
-                } catch (err) {
-                    UI.Notificaciones.mostrarMensaje(err.message, 'error');
-                }
-            });
-        }
         el('contenedorDiccionario').addEventListener('click', async e => {
             const btnUsar = e.target.closest('[data-usar-codigo]');
             if (btnUsar) {
@@ -678,18 +676,34 @@
                 const dic = Almacenamiento.obtenerDiccionarioCodigos();
                 const prod = dic[cod];
                 if (prod && el('modalEditarProductoDiccionario')) {
+                    const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+
                     el('editProdCodigo').value = prod.codigoBarras || cod;
-                    el('editProdNombre').value = prod.nombre || '';
+                    el('editProdNombre').value = prod.nombre || prod.nombreComercial || '';
                     poblarSelectorCategoriasEdicion(prod.categoria || '');
                     el('editProdPrincipioActivo').value = prod.principioActivo || '';
                     if (el('editProdConcentracion')) el('editProdConcentracion').value = prod.concentracion || '';
                     el('editProdLaboratorio').value = prod.laboratorio || '';
-                    if (el('editProdProveedorHabitual')) el('editProdProveedorHabitual').value = prod.proveedorHabitual || '';
+
+                    const inputProvHab = el('editProdProveedorHabitual');
+                    if (inputProvHab) {
+                        inputProvHab.disabled = estaBloqueado;
+                        inputProvHab.value = estaBloqueado ? '' : (prod.proveedorHabitual || '');
+                        inputProvHab.placeholder = estaBloqueado ? 'Cifrado en Bóveda' : 'Ej. Droguería Betances';
+                    }
+
                     if (el('editProdForma')) el('editProdForma').value = prod.formaFarmaceutica || '';
                     if (el('editProdPresentacion')) el('editProdPresentacion').value = prod.presentacion || '';
                     el('editProdTipo').value = prod.tipo || 'divisible';
                     el('editProdUnidades').value = prod.unidadesPorCaja || 1;
-                    if (el('editProdUltimoCosto')) el('editProdUltimoCosto').value = (prod.ultimoPrecioCaja !== undefined) ? Number(prod.ultimoPrecioCaja).toFixed(2) : '0.00';
+
+                    const inputUltCosto = el('editProdUltimoCosto');
+                    if (inputUltCosto) {
+                        inputUltCosto.disabled = estaBloqueado;
+                        inputUltCosto.value = estaBloqueado ? '' : ((prod.ultimoPrecioCaja !== undefined) ? Number(prod.ultimoPrecioCaja).toFixed(2) : '0.00');
+                        inputUltCosto.placeholder = estaBloqueado ? 'Cifrado' : '0.00';
+                    }
+
                     el('editProdTasaItbis').value = String(prod.tasaItbis !== undefined ? prod.tasaItbis : (prod.aplicaItbis ? 18 : 0));
                     if (el('editProdCondicion')) el('editProdCondicion').value = prod.condicionVenta || 'OTC';
                     if (el('editProdEsLeche')) el('editProdEsLeche').checked = Boolean(prod.esLeche);

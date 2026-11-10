@@ -7,7 +7,7 @@
     <meta name="author" content="Chroniris / reiNameless">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="light dark">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com; object-src 'none'; frame-ancestors 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://world.openfoodfacts.org; object-src 'none'; frame-ancestors 'none';">
     <script>
         // Anti-Clickjacking Framebusting Protection (Chroniris OS)
         if (window.top !== window.self) {
@@ -17,8 +17,6 @@
         }
     </script>
     <title>Calculadora de Farmacia</title>
-    <link rel="preconnect" href="https://generativelanguage.googleapis.com" crossorigin>
-    <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0052CC">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -85,10 +83,14 @@
         <!-- CABECERA MINIMALISTA (EL NOMBRE SOLO ESTÁ EN LA PESTAÑA DEL NAVEGADOR) -->
         <header class="barra-superior">
             <div class="header-izquierda" style="flex-wrap:wrap;gap:6px;align-items:center;">
-                <!-- BOTÓN HAMBURGUESA / BÓVEDA (ACCESO A DICCIONARIO, FÓRMULAS, IA, HISTORIAL) -->
+                <!-- BOTÓN HAMBURGUESA / BÓVEDA (ACCESO A DICCIONARIO, FÓRMULAS, SEGURIDAD, HISTORIAL) -->
                 <button class="btn-header" id="btnAbrirBoveda" title="Abrir Bóveda del Sistema">
                     <svg class="ico"><use href="#i-menu"/></svg>
                     <span>Bóveda</span>
+                </button>
+                <button type="button" class="btn-header badge-seguridad-btn sin-clave" id="btnEstadoSeguridadHeader" title="Panel de Administrador y Cifrado AES-256">
+                    <svg class="ico ico-sm" id="icoEstadoSeguridadHeader"><use href="#i-warn"/></svg>
+                    <span id="txtEstadoSeguridadHeader">Cifrado: Sin Clave</span>
                 </button>
                 <div class="indicador-pwa">
                     <span class="punto-verde"></span>
@@ -175,11 +177,6 @@
                                             <option value="divisible" selected>Se divide (Pastillas / Blíster / Ampollas)</option>
                                             <option value="entero">Se vende entero (Jarabe / Crema / Gotas)</option>
                                         </select>
-                                        <label class="dropzone-foto" style="height:28px;padding:0 8px;font-size:11px;" title="Cargar foto de factura (IA)">
-                                            <svg class="ico ico-sm"><use href="#i-camera"/></svg>
-                                            <span>Foto IA</span>
-                                            <input type="file" id="iaImagenInputDirecto" style="display:none" accept="image/*,application/pdf" multiple>
-                                        </label>
                                     </div>
                                 </div>
 
@@ -417,15 +414,15 @@
                                     <input type="text" class="input-control" id="facProveedor" placeholder="Droguería o laboratorio" list="listaProveedoresSugeridos">
                                     <datalist id="listaProveedoresSugeridos"></datalist>
                                 </div>
-                                <div class="campo">
+                                <div class="campo" style="display:none;" aria-hidden="true">
                                     <label class="campo-label" for="facRnc">RNC (Opc.)</label>
                                     <input type="text" class="input-control input-mono" id="facRnc" placeholder="Ej. 101023456" maxlength="11" inputmode="numeric">
                                 </div>
                                 <div class="campo">
-                                    <label class="campo-label" for="facNumero">Comprobante / NCF *</label>
+                                    <label class="campo-label" for="facNumero">Factura # *</label>
                                     <div style="display:flex;gap:var(--espacio-1);">
-                                        <input type="text" class="input-control input-mono" id="facNumero" placeholder="NCF o número físico" style="flex:1;min-width:0;">
-                                        <button type="button" class="btn-icono" id="btnEscanearQrFactura" title="Escanear QR de Factura DGII con Cámara" aria-label="Escanear QR de Factura DGII con Cámara" style="flex-shrink:0;height:34px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;gap:4px;">
+                                        <input type="text" class="input-control input-mono" id="facNumero" placeholder="Número de factura física" style="flex:1;min-width:0;">
+                                        <button type="button" class="btn-icono" id="btnEscanearQrFactura" title="Escanear QR de Factura DGII con Cámara" aria-label="Escanear QR de Factura DGII con Cámara" style="display:none;" aria-hidden="true">
                                             <svg class="ico ico-sm"><use href="#i-camera"/></svg>
                                             <span style="font-size:10px;font-weight:600;">QR</span>
                                         </button>
@@ -452,7 +449,7 @@
                                     <label class="campo-label" for="facFechaEmision">Fecha Emisión *</label>
                                     <input type="date" class="input-control" id="facFechaEmision">
                                 </div>
-                                <div class="campo">
+                                <div class="campo" style="display:none;" aria-hidden="true">
                                     <label class="campo-label" for="facFechaVencimiento">Vencimiento (Opc.)</label>
                                     <input type="date" class="input-control" id="facFechaVencimiento">
                                 </div>
@@ -647,8 +644,8 @@
                     <span>Fórmulas</span>
                 </button>
                 <button class="drawer-tab-btn" data-boveda-tab="seccionEscanerIA">
-                    <svg class="ico ico-sm"><use href="#i-sync"/></svg>
-                    <span>Datos & IA</span>
+                    <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                    <span>Seguridad & Datos</span>
                 </button>
                 <button class="drawer-tab-btn" data-boveda-tab="seccionManualOperativo">
                     <svg class="ico ico-sm"><use href="#i-doc"/></svg>
@@ -657,28 +654,16 @@
             </nav>
 
             <div class="drawer-contenido">
-                <!-- 1. HISTORIAL DE FACTURAS (7 DÍAS) -->
+                <!-- 1. HISTORIAL DE FACTURAS (7 DÍAS - CIFRADO EN REPOSO, SIN EXPORTACIÓN) -->
                 <section id="seccionHistorial" class="seccion-card boveda-panel activo">
                     <div class="seccion-card-header">
                         <div class="tarjeta-titulo">
                             <svg class="ico"><use href="#i-hist"/></svg>
                             <span>Historial de Facturas (Últimos 7 días)</span>
                         </div>
-                        <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
-                            <button type="button" class="btn-icono" id="btnExportar606" title="Exportar reporte DGII 606 (23 columnas)" style="display:none;" aria-hidden="true">
-                                <svg class="ico ico-sm"><use href="#i-print"/></svg>
-                                <span>Exportar 606 (DGII)</span>
-                            </button>
-                            <button class="btn-icono" id="btnDescargarRespaldo" title="Descargar facturas en JSON">
-                                <svg class="ico ico-sm"><use href="#i-down"/></svg>
-                                <span>Exportar JSON</span>
-                            </button>
-                            <label class="btn-icono" style="cursor:pointer" title="Restaurar facturas desde JSON">
-                                <svg class="ico ico-sm"><use href="#i-up"/></svg>
-                                <span>Importar JSON</span>
-                                <input type="file" id="inputRestaurarRespaldo" accept=".json,application/json" style="display:none">
-                            </label>
-                        </div>
+                        <span class="badge-header" style="font-size:10px;">
+                            <svg class="ico ico-sm"><use href="#i-lock"/></svg> Solo Uso Interno
+                        </span>
                     </div>
                     <div id="contenedorHistorial">
                         <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">3 facturas archivadas en la última semana.</div>
@@ -701,6 +686,11 @@
                                 <span>Desbloquear</span>
                             </button>
                         </div>
+                    </div>
+
+                    <div id="avisoReglasBloqueadas" class="alert-banner alert-warning" style="display:none;margin-bottom:8px;font-size:11px;">
+                        <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                        <span>Bóveda cifrada bloqueada: pulsa "Desbloquear" e ingresa tu contraseña de administrador para visualizar o editar los porcentajes del negocio.</span>
                     </div>
 
                     <fieldset id="fieldsetReglas" class="formula-fieldset" disabled>
@@ -774,9 +764,9 @@
                             <span id="tituloCabeceraCatalogoBoveda">Catálogo Maestro de Fármacos & Productos</span>
                         </div>
                         <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
-                            <button type="button" class="btn-icono" id="btnExportarCatalogoCsv" title="Exportar Catálogo Maestro para ERP o Excel (.csv)">
+                            <button type="button" class="btn-icono" id="btnExportarCatalogoCsv" title="Exportar Catálogo Sanitario Público (.csv — Sin costos ni proveedores)">
                                 <svg class="ico ico-sm"><use href="#i-doc"/></svg>
-                                <span>Exportar CSV</span>
+                                <span>Exportar CSV (Sanitario)</span>
                             </button>
                             <button type="button" id="btnSembrarCatalogoRd" style="display:none;" aria-hidden="true"></button>
                         </div>
@@ -844,51 +834,126 @@
                     </div>
                 </section>
 
-                <!-- 4. GESTIÓN DE DATOS, RESPALDOS & IA -->
+                <!-- 4. PANEL DE ADMINISTRADOR, CIFRADO AES-256 & CATÁLOGO SANITARIO -->
                 <section id="seccionEscanerIA" class="seccion-card boveda-panel">
                     <div class="seccion-card-header">
                         <div class="tarjeta-titulo">
-                            <svg class="ico"><use href="#i-sync"/></svg>
-                            <span>Datos, Respaldos & IA</span>
+                            <svg class="ico"><use href="#i-lock"/></svg>
+                            <span>Panel de Administrador &amp; Catálogo Público</span>
                         </div>
+                        <span id="badgePanelAdminEstado" class="badge-seguridad-estado sin-clave">Sin Contraseña</span>
                     </div>
 
-                    <!-- Tarjeta 1: Respaldo Completo del Sistema -->
-                    <div class="boveda-grupo-tarjeta">
-                        <div class="boveda-grupo-header">
+                    <!-- Tarjeta 1: Panel de Administrador & Cifrado Local AES-256 -->
+                    <div class="boveda-grupo-tarjeta panel-admin-seguridad" id="panelAdminBoveda">
+                        <div class="boveda-grupo-header" style="margin-bottom:8px;">
                             <div>
-                                <div class="boveda-grupo-titulo">
-                                    <svg class="ico ico-sm"><use href="#i-box"/></svg>
-                                    <span>Copia de Seguridad Completa (IndexedDB)</span>
+                                <div class="boveda-grupo-titulo" style="color:var(--color-accion);">
+                                    <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                                    <span>Protección Criptográfica de Secretos Comerciales (AES-256-GCM)</span>
                                 </div>
                                 <div class="helper-text" style="font-size:11px;margin-top:2px;">
-                                    Catálogo, facturas, borrador activo y fórmulas en un único archivo JSON cifrado.
+                                    Costos de compra, acuerdos de droguerías, márgenes e historial se cifran localmente con PBKDF2-SHA256 (600,000 rondas). Ningún archivo exportable contiene secretos del negocio.
                                 </div>
                             </div>
-                            <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
-                                <button type="button" class="btn-icono" id="btnDescargarBaseCompleta">
-                                    <svg class="ico ico-sm"><use href="#i-down"/></svg>
-                                    <span>Descargar Base Total</span>
+                        </div>
+
+                        <!-- Estado 1: Sin contraseña configurada -->
+                        <div id="adminBloqueSinClave" style="padding:8px 0;">
+                            <div class="alert-banner alert-warning" style="margin-bottom:10px;font-size:11px;">
+                                <svg class="ico ico-sm"><use href="#i-warn"/></svg>
+                                <span>Aún no has activado el cifrado maestro. Crea una contraseña para cifrar los costos e historial en este dispositivo.</span>
+                            </div>
+                            <button type="button" class="btn-primario" id="btnAbrirSetupDesdePanel" style="height:34px;padding:0 14px;font-size:12px;">
+                                <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                                <span>Configurar Contraseña y Activar Cifrado</span>
+                            </button>
+                        </div>
+
+                        <!-- Estado 2: Cifrada y Bloqueada -->
+                        <div id="adminBloqueBloqueado" style="display:none;padding:8px 0;">
+                            <p class="helper-text" style="margin:0 0 10px 0;font-size:12px;">
+                                Los secretos comerciales permanecen cifrados en IndexedDB. Ingresa tu contraseña para desbloquear autocompletado de costos, historial y proveedores en esta sesión.
+                            </p>
+                            <button type="button" class="btn-primario" id="btnAbrirUnlockDesdePanel" style="height:34px;padding:0 14px;font-size:12px;">
+                                <svg class="ico ico-sm"><use href="#i-unlock"/></svg>
+                                <span>Desbloquear Sesión de Administrador</span>
+                            </button>
+                        </div>
+
+                        <!-- Estado 3: Desbloqueada en Sesión -->
+                        <div id="adminBloqueDesbloqueado" style="display:none;padding-top:6px;">
+                            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+                                <button type="button" class="btn-icono" id="btnPanelBloquearAhora" style="height:34px;padding:0 12px;border-color:var(--color-alerta);color:var(--color-alerta);font-weight:700;">
+                                    <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                                    <span>Bloquear Sesión y Purgar RAM</span>
                                 </button>
-                                <label class="btn-icono" style="cursor:pointer">
-                                    <svg class="ico ico-sm"><use href="#i-up"/></svg>
-                                    <span>Restaurar Base Total</span>
-                                    <input type="file" id="inputRestaurarBaseCompleta" accept=".json,application/json" style="display:none">
-                                </label>
+                                <div class="campo" style="min-width:170px;">
+                                    <label class="campo-label" for="selPanelAutoBloqueo">Auto-bloqueo por inactividad</label>
+                                    <select id="selPanelAutoBloqueo" class="input-control" style="height:34px;">
+                                        <option value="5">5 minutos</option>
+                                        <option value="15" selected>15 minutos (Recomendado)</option>
+                                        <option value="30">30 minutos</option>
+                                        <option value="60">60 minutos</option>
+                                        <option value="0">Solo manual</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <details style="margin-bottom:10px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);padding:8px 10px;">
+                                <summary style="cursor:pointer;font-size:12px;font-weight:600;">Cambiar Contraseña Maestra</summary>
+                                <form id="formPanelCambiarClave" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+                                    <div class="campo">
+                                        <label class="campo-label" for="inputPanelClaveActual">Contraseña Actual</label>
+                                        <input type="password" id="inputPanelClaveActual" class="input-control" required autocomplete="current-password">
+                                    </div>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <div class="campo" style="flex:1;min-width:140px;">
+                                            <label class="campo-label" for="inputPanelClaveNueva">Nueva Contraseña (mín. 6)</label>
+                                            <input type="password" id="inputPanelClaveNueva" class="input-control" required minlength="6" autocomplete="new-password">
+                                        </div>
+                                        <div class="campo" style="flex:1;min-width:140px;">
+                                            <label class="campo-label" for="inputPanelClaveNuevaConf">Confirmar Nueva</label>
+                                            <input type="password" id="inputPanelClaveNuevaConf" class="input-control" required minlength="6" autocomplete="new-password">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <button type="submit" class="btn-primario" id="btnPanelCambiarClave" style="height:32px;padding:0 12px;font-size:12px;">Actualizar Contraseña</button>
+                                    </div>
+                                </form>
+                            </details>
+
+                            <details style="margin-bottom:10px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);padding:8px 10px;">
+                                <summary style="cursor:pointer;font-size:12px;font-weight:600;">Regenerar Código de Recuperación de Emergencia</summary>
+                                <form id="formPanelRegenRec" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px;">
+                                    <div class="campo" style="flex:1;min-width:160px;">
+                                        <label class="campo-label" for="inputPanelClaveRegenRec">Confirma Contraseña Actual</label>
+                                        <input type="password" id="inputPanelClaveRegenRec" class="input-control" required autocomplete="current-password">
+                                    </div>
+                                    <button type="submit" class="btn-icono" style="height:34px;">Generar Nuevo Código</button>
+                                </form>
+                            </details>
+
+                            <div style="padding-top:8px;border-top:1px dashed var(--color-borde);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <span class="fs-xs text-muted">Limpieza local al concluir turno o dejar equipo:</span>
+                                <button type="button" class="btn-icono text-danger" id="btnPanelPurgarPrivados" style="height:30px;font-size:11px;">
+                                    <svg class="ico ico-sm"><use href="#i-trash"/></svg>
+                                    <span>Borrar Costos e Historial Privado</span>
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Tarjeta 2: Sincronización entre Cajas (Delta Patch) -->
+                    <!-- Tarjeta 2: Sincronización entre Cajas (Solo Catálogo Sanitario Público) -->
                     <div class="boveda-grupo-tarjeta">
                         <div class="boveda-grupo-header">
                             <div>
                                 <div class="boveda-grupo-titulo" style="color:var(--color-primario);">
                                     <svg class="ico ico-sm"><use href="#i-sync"/></svg>
-                                    <span>Sincronización entre Cajas (Fusión sin Servidor)</span>
+                                    <span>Sincronización entre Cajas (Solo Catálogo Sanitario)</span>
                                 </div>
                                 <div class="helper-text" style="font-size:11px;margin-top:2px;">
-                                    Intercambia novedades con otra máquina por USB/Red sin borrar productos locales.
+                                    Transfiere códigos GS1, nombres y presentaciones entre equipos. <strong>Purga en caliente:</strong> 0% costos, 0% proveedores y 0% facturas.
                                 </div>
                             </div>
                             <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
@@ -905,19 +970,22 @@
                         </div>
                     </div>
 
-                    <!-- Tarjeta 3: Respaldo Individual de Catálogo -->
+                    <!-- Tarjeta 3: Catálogo Sanitario Público (.json) -->
                     <div class="boveda-grupo-tarjeta">
                         <div class="boveda-grupo-header">
                             <div>
                                 <div class="boveda-grupo-titulo">
                                     <svg class="ico ico-sm"><use href="#i-barcode"/></svg>
-                                    <span>Respaldo de Catálogo Maestro (.json)</span>
+                                    <span>Catálogo Sanitario Público (.json) &amp; Vademécum</span>
+                                </div>
+                                <div class="helper-text" style="font-size:11px;margin-top:2px;">
+                                    Exporta exclusivamente fichas sanitarias públicas (purga automática de costos y proveedores) o importa catálogos DIGEMAPS.
                                 </div>
                             </div>
                             <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                                 <button type="button" class="btn-icono" id="btnDescargarDiccionario">
                                     <svg class="ico ico-sm"><use href="#i-down"/></svg>
-                                    <span>Exportar Catálogo</span>
+                                    <span>Exportar Catálogo Limpio</span>
                                 </button>
                                 <label class="btn-icono" style="cursor:pointer">
                                     <svg class="ico ico-sm"><use href="#i-up"/></svg>
@@ -925,31 +993,6 @@
                                     <input type="file" id="inputRestaurarDiccionario" accept=".json,application/json" style="display:none">
                                 </label>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Tarjeta 4: Lector de Facturas Gemini IA -->
-                    <div class="boveda-grupo-tarjeta">
-                        <div class="boveda-grupo-titulo" style="margin-bottom:8px;">
-                            <svg class="ico ico-sm"><use href="#i-scan"/></svg>
-                            <span>Lector de Facturas con IA Gemini</span>
-                        </div>
-                        <div class="form-grid" style="grid-template-columns: 1fr;">
-                            <div class="campo">
-                                <label class="campo-label" for="iaApiKey">Clave API Google Gemini</label>
-                                <input type="password" id="iaApiKey" class="input-control" placeholder="Pega tu API Key de Google" autocomplete="off" spellcheck="false">
-                            </div>
-                            <div class="campo">
-                                <label class="campo-label" for="iaModelo">Modelo de IA</label>
-                                <input type="text" id="iaModelo" class="input-control" value="gemini-2.5-flash">
-                            </div>
-                            <div class="campo">
-                                <label class="campo-label" for="iaImagenInput">Foto / PDF de Factura para prueba</label>
-                                <input type="file" id="iaImagenInput" class="input-control" accept="image/*,application/pdf" multiple>
-                            </div>
-                        </div>
-                        <div id="iaEstadoTexto" class="helper-text" style="margin-top:4px;">
-                            OCR inteligente: extrae automáticamente proveedor, fecha y productos desde foto física.
                         </div>
                     </div>
                 </section>
@@ -1019,19 +1062,19 @@
                         </div>
                     </div>
 
-                    <!-- Módulo 4: Sincronización Local y Persistencia Local-First -->
+                    <!-- Módulo 4: Sincronización Local, Seguridad AES-256 y Purga de Exportaciones -->
                     <div class="manual-bloque">
                         <h4 class="manual-subtitulo">
                             <svg class="ico ico-sm"><use href="#i-sync"/></svg>
-                            4. Sincronización entre Cajas y Respaldos
+                            4. Sincronización de Catálogo Sanitario &amp; Seguridad AES-256
                         </h4>
                         <div class="manual-cuerpo">
-                            <p><strong>Arquitectura Local-First:</strong> El sistema funciona 100% offline utilizando IndexedDB del navegador. Los datos residen en la máquina local de la farmacia.</p>
-                            <p><strong>Fusión Inteligente sin Servidor:</strong> Para sincronizar el catálogo entre dos computadoras de mostrador:</p>
+                            <p><strong>Arquitectura Local-First &amp; Cifrado AES-256-GCM:</strong> Los costos de compra, acuerdos privados de droguerías e historial de facturas permanecen exclusivamente en este dispositivo cifrados localmente bajo la contraseña maestra del dueño (PBKDF2 600,000 rondas).</p>
+                            <p><strong>Purga en Caliente de Exportaciones:</strong> Para proteger secretos comerciales y cumplir con la Ley 53-07 y Ley 20-00 de República Dominicana, toda exportación de catálogo (<code>.csv</code> o <code>.json</code>) purga automáticamente costos, márgenes, historial y proveedores, transfiriendo únicamente fichas sanitarias públicas GS1:</p>
                             <ol>
-                                <li>En la Caja 1, presiona <em>Exportar Novedades</em> en la pestaña Datos & IA.</li>
-                                <li>Transfiere el archivo <code>.json</code> por memoria USB o red local hacia la Caja 2.</li>
-                                <li>En la Caja 2, pulsa <em>Importar Novedades</em>. La base de datos fusiona los productos nuevos o actualizados sin sobrescribir ni borrar registros existentes.</li>
+                                <li>En la Caja 1, presiona <em>Exportar Novedades</em> en la pestaña <em>Seguridad &amp; Datos</em>.</li>
+                                <li>Transfiere el archivo sanitario público por memoria USB o red local hacia la Caja 2.</li>
+                                <li>En la Caja 2, pulsa <em>Importar Novedades</em>. Los códigos nuevos se incorporan sin sobrescribir ni exponer secretos comerciales locales.</li>
                             </ol>
                         </div>
                     </div>
@@ -1464,6 +1507,120 @@
             </form>
         </dialog>
 
+        <!-- Modal Accesible: Panel de Administrador y Seguridad AES-256 -->
+        <dialog id="modalAdminSeguridad" class="farmacia-modal" style="max-width:450px;" aria-labelledby="tituloModalAdminSeguridad" aria-modal="true">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
+                <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
+                    <svg class="ico"><use href="#i-lock"/></svg>
+                    <span id="tituloModalAdminSeguridad">Seguridad de Bóveda (AES-256)</span>
+                </div>
+                <button type="button" class="btn-icono" id="btnCerrarModalAdminSeguridad" style="border:none;padding:6px;cursor:pointer;" title="Cerrar">
+                    <svg class="ico ico-sm"><use href="#i-close"/></svg>
+                </button>
+            </div>
+
+            <!-- Vista 1: Configuración Inicial de Contraseña -->
+            <div id="vistaModalSetupClave" style="display:none;">
+                <p class="helper-text" style="margin:0 0 10px 0;font-size:12px;">
+                    Activa el cifrado AES-256-GCM en IndexedDB. Los costos de compra, historial de facturas, márgenes y proveedores quedarán ilegibles sin tu contraseña maestra.
+                </p>
+                <form id="formModalSetupClave" style="display:flex;flex-direction:column;gap:10px;">
+                    <div class="campo">
+                        <label class="campo-label" for="inputModalNuevaClave">Contraseña Maestra (mín. 6 caracteres) *</label>
+                        <input type="password" id="inputModalNuevaClave" class="input-control" required minlength="6" autocomplete="new-password" placeholder="Contraseña segura">
+                    </div>
+                    <div class="campo">
+                        <label class="campo-label" for="inputModalConfirmarClave">Confirmar Contraseña *</label>
+                        <input type="password" id="inputModalConfirmarClave" class="input-control" required minlength="6" autocomplete="new-password" placeholder="Repite la contraseña">
+                    </div>
+                    <div class="campo">
+                        <label class="campo-label" for="selectModalAutoBloqueo">Auto-bloqueo por Inactividad</label>
+                        <select id="selectModalAutoBloqueo" class="input-control">
+                            <option value="5">5 minutos</option>
+                            <option value="15" selected>15 minutos (Recomendado)</option>
+                            <option value="30">30 minutos</option>
+                            <option value="60">60 minutos</option>
+                            <option value="0">Solo bloqueo manual</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions" style="justify-content:flex-end;margin-top:4px;">
+                        <button type="submit" class="btn-primario" id="btnModalActivarCifrado">Activar Cifrado AES-256</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Vista 2: Código de Recuperación Único -->
+            <div id="vistaModalCodigoRecuperacion" style="display:none;">
+                <div class="alert-banner alert-warning" style="margin-bottom:10px;font-size:12px;">
+                    <svg class="ico ico-sm"><use href="#i-warn"/></svg>
+                    <span><strong>¡ATENCIÓN! Guarda este Código de Recuperación en papel.</strong> Si olvidas tu contraseña, es el único medio para recuperar tus costos cifrados.</span>
+                </div>
+                <div id="boxModalCodigoRecuperacion" class="codigo-recuperacion-box mono"></div>
+                <div class="modal-actions" style="justify-content:space-between;margin-top:12px;">
+                    <button type="button" class="btn-icono" id="btnCopiarCodigoRecuperacion">
+                        <svg class="ico ico-sm"><use href="#i-copy"/></svg>
+                        <span>Copiar Código</span>
+                    </button>
+                    <button type="button" class="btn-primario" id="btnConfirmarCodigoGuardado">Entendido, ya lo guardé</button>
+                </div>
+            </div>
+
+            <!-- Vista 3: Desbloquear Sesión -->
+            <div id="vistaModalDesbloquear" style="display:none;">
+                <p class="helper-text" style="margin:0 0 10px 0;font-size:12px;">
+                    La bóveda financiera está cifrada. Ingresa tu contraseña de administrador para desbloquear costos, historial y proveedores en RAM durante este turno.
+                </p>
+                <form id="formModalDesbloquear" style="display:flex;flex-direction:column;gap:10px;">
+                    <div class="campo">
+                        <label class="campo-label" for="inputModalClaveUnlock">Contraseña de Administrador *</label>
+                        <input type="password" id="inputModalClaveUnlock" class="input-control" required autocomplete="current-password" placeholder="Ingresa tu contraseña">
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
+                        <button type="button" class="btn-icono" id="btnModalMostrarRecuperar" style="border:none;background:transparent;color:var(--color-accion);padding:4px 0;">
+                            ¿Olvidaste tu contraseña?
+                        </button>
+                        <button type="submit" class="btn-primario" id="btnModalDesbloquear">Desbloquear Bóveda</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Vista 4: Recuperación por Código de Emergencia -->
+            <div id="vistaModalRecuperar" style="display:none;">
+                <p class="helper-text" style="margin:0 0 10px 0;font-size:12px;">
+                    Introduce tu Código de Recuperación de 32 caracteres y define una nueva contraseña maestra.
+                </p>
+                <form id="formModalRecuperar" style="display:flex;flex-direction:column;gap:10px;">
+                    <div class="campo">
+                        <label class="campo-label" for="inputModalCodigoRec">Código de Recuperación *</label>
+                        <input type="text" id="inputModalCodigoRec" class="input-control input-mono" required autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
+                    </div>
+                    <div class="campo">
+                        <label class="campo-label" for="inputModalNuevaClaveRec">Nueva Contraseña Maestra (mín. 6) *</label>
+                        <input type="password" id="inputModalNuevaClaveRec" class="input-control" required minlength="6" autocomplete="new-password">
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                        <button type="button" class="btn-icono" id="btnModalVolverUnlock">Volver</button>
+                        <button type="submit" class="btn-primario" id="btnModalRecuperar">Restablecer y Desbloquear</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Vista 5: Sesión Desbloqueada -->
+            <div id="vistaModalDesbloqueado" style="display:none;">
+                <div class="alert-banner" style="background:var(--color-exito-fondo);color:var(--color-exito);border:1px solid var(--color-exito-borde);margin-bottom:12px;font-size:12px;">
+                    <svg class="ico ico-sm"><use href="#i-unlock"/></svg>
+                    <span><strong>Sesión Autorizada Activa:</strong> La llave AES-256 reside únicamente en memoria volátil (RAM).</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button type="button" class="btn-icono" id="btnModalIrPanelAdmin">Configuración Completa</button>
+                    <button type="button" class="btn-primario" id="btnModalBloquearAhora" style="background:var(--color-alerta);border-color:var(--color-alerta);">
+                        <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                        <span>Bloquear Sesión Ahora</span>
+                    </button>
+                </div>
+            </div>
+        </dialog>
+
         <div id="printArea" style="display:none;"></div>
 
     </div>
@@ -1472,10 +1629,11 @@
     <script defer src="js/zxing.min.js"></script>
     <script defer src="js/configuracion.js"></script>
     <script defer src="js/dominio.js"></script>
+    <script defer src="js/seguridad.js"></script>
     <script defer src="js/almacenamiento.js"></script>
-    <script defer src="js/servicio-ia.js"></script>
     <script defer src="js/servicio-catalogo.js"></script>
     <script defer src="js/ui-notificaciones.js"></script>
+    <script defer src="js/ui-seguridad.js"></script>
     <script defer src="js/ui-calculadora.js"></script>
     <script defer src="js/ui-factura.js"></script>
     <script defer src="js/ui-diccionario.js"></script>

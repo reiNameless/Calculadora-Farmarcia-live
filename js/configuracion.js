@@ -69,10 +69,60 @@
             ])
         }),
         SEGURIDAD_CRIPTO: Object.freeze({
+            // Sello de integridad estructural para archivos públicos de intercambio (NO confidencialidad)
             ALGORITMO_FIRMA: 'HMAC-SHA256',
             CLAVE_SISTEMA_SEMILLA: 'Chroniris-OS::reiNameless::FiscalPharmacy::v1',
             VERSION_SELLO: 1
         }),
+        SEGURIDAD_BOVEDA: Object.freeze({
+            ALGORITMO_CIFRADO: 'AES-GCM',
+            LONGITUD_CLAVE_BITS: 256,
+            ITERACIONES_PBKDF2: 600000,
+            LONGITUD_SALT_BYTES: 16,
+            LONGITUD_IV_BYTES: 12,
+            MIN_LONGITUD_CONTRASENA: 6,
+            MAX_INTENTOS_FALLIDOS_BASE: 3,
+            AUTO_BLOQUEO_DEFECTO_MIN: 15,
+            STORE_SEGURIDAD: 'seguridad_boveda',
+            CLAVE_META_BOVEDA: 'vault_meta'
+        }),
+        CAMPOS_PUBLICOS_CATALOGO: Object.freeze([
+            'codigoBarras',
+            'nombre',
+            'nombreComercial',
+            'principioActivo',
+            'concentracion',
+            'formaFarmaceutica',
+            'presentacion',
+            'laboratorio',
+            'categoria',
+            'tipo',
+            'unidadesPorCaja',
+            'aplicaItbis',
+            'tasaItbis',
+            'esLeche',
+            'condicionVenta',
+            'registroSanitario',
+            'ubicacion',
+            'actualizadoEn'
+        ]),
+        CAMPOS_SENSIBLES_CATALOGO: Object.freeze([
+            'ultimoPrecioCaja',
+            'costoAnteriorCaja',
+            'variacionCosto',
+            'costoUnitarioFiscal',
+            'costoUnitario',
+            'costoUnitarioVenta',
+            'costoReferencia',
+            'preciosVenta',
+            'historialCostos',
+            'descuentoValor',
+            'tipoDescuento',
+            'descuentoTotalLinea',
+            'proveedorHabitual',
+            'rncProveedor',
+            'numeroFactura'
+        ]),
         DOMINIOS_AUTORIZADOS: Object.freeze([
             'localhost',
             '127.0.0.1',

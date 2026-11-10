@@ -2891,3 +2891,96 @@ html[data-paleta="cobalto"] .subtab-btn.activo {
     from { opacity: 0; transform: translateY(3px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* ==========================================================================
+   SEGURIDAD CRIPTOGRÁFICA, PANEL DE ADMINISTRADOR Y ESTADOS DE BÓVEDA
+   ========================================================================== */
+.badge-seguridad-btn {
+    font-weight: 700;
+    transition: all 0.15s ease;
+}
+.badge-seguridad-btn.sin-clave {
+    background: var(--color-alerta-fondo);
+    color: var(--color-alerta);
+    border-color: var(--color-alerta);
+}
+.badge-seguridad-btn.bloqueado {
+    background: rgba(239, 68, 68, 0.14);
+    color: #dc2626;
+    border-color: rgba(239, 68, 68, 0.4);
+}
+[data-tema="oscuro"] .badge-seguridad-btn.bloqueado {
+    color: #fca5a5;
+}
+.badge-seguridad-btn.desbloqueado {
+    background: var(--color-exito-fondo);
+    color: var(--color-exito);
+    border-color: var(--color-exito-borde);
+}
+.badge-seguridad-estado {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: var(--radio-pildora, 999px);
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid var(--color-borde);
+}
+.badge-seguridad-estado.sin-clave {
+    background: var(--color-alerta-fondo);
+    color: var(--color-alerta);
+    border-color: var(--color-alerta);
+}
+.badge-seguridad-estado.bloqueado {
+    background: rgba(239, 68, 68, 0.14);
+    color: #dc2626;
+    border-color: rgba(239, 68, 68, 0.4);
+}
+[data-tema="oscuro"] .badge-seguridad-estado.bloqueado {
+    color: #fca5a5;
+}
+.badge-seguridad-estado.desbloqueado {
+    background: var(--color-exito-fondo);
+    color: var(--color-exito);
+    border-color: var(--color-exito-borde);
+}
+.tarjeta-bloqueo-boveda {
+    text-align: center;
+    padding: 28px 16px;
+    border: 1.5px dashed var(--color-borde-fuerte);
+    border-radius: var(--radio-md);
+    background: var(--color-superficie-resaltada);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+.codigo-recuperacion-box {
+    padding: 12px;
+    border-radius: var(--radio-sm);
+    background: var(--color-superficie-resaltada);
+    border: 1.5px dashed var(--color-accion);
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--color-accion);
+    word-break: break-all;
+    user-select: all;
+}
+.badge-cifrado-celda {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--color-superficie-resaltada);
+    color: var(--color-texto-secundario);
+    border: 1px solid var(--color-borde);
+}
+.badge-cifrado-celda svg.ico {
+    width: 11px;
+    height: 11px;
+}

@@ -407,9 +407,10 @@
                 badgeVariacion = `<span class="badge" style="font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;" title="Variación respecto a la compra anterior">${varNum > 0 ? '+' : ''}${varNum}%</span>`;
             }
 
+            const tieneCostoLocal = item.ultimoPrecioCaja !== undefined && item.ultimoPrecioCaja !== null && Number(item.ultimoPrecioCaja) > 0;
             const celdaCostoHtml = estaBloqueado
-                ? `<span class="badge-cifrado-celda" title="Costo cifrado con AES-256. Desbloquea Bóveda para visualizar.">${iconoSvg('lock')} Cifrado</span>`
-                : `$${Number(item.ultimoPrecioCaja || 0).toFixed(2)}${badgeVariacion}`;
+                ? `<span class="badge-cifrado-celda" title="Costo cifrado con AES-256. Desbloquea Admin para visualizar.">${iconoSvg('lock')} Cifrado</span>`
+                : `<span data-celda-costo-cod="${codEscapado}">${tieneCostoLocal ? `$${Number(item.ultimoPrecioCaja).toFixed(2)}${badgeVariacion}` : '—'}</span>`;
 
             filasHtml += `<tr>
                 <td class="mono">${escaparHtml(cod)}</td>
@@ -448,6 +449,31 @@
                     </tbody>
                 </table>
             </div>`;
+
+        // Hidratación puntual de costos para tabla solo si Administrador está desbloqueado
+        if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && !AppFarmacia.Seguridad.estaBloqueado() &&
+            typeof Almacenamiento.obtenerResumenCostosTablaSiAdmin === 'function') {
+            Almacenamiento.obtenerResumenCostosTablaSiAdmin().then(mapaCostos => {
+                if (!contenedor || !mapaCostos || !mapaCostos.size) return;
+                if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaBloqueado()) return;
+                contenedor.querySelectorAll('[data-celda-costo-cod]').forEach(celda => {
+                    const codItem = celda.getAttribute('data-celda-costo-cod');
+                    const info = mapaCostos.get(codItem);
+                    if (info && info.ultimoPrecioCaja !== undefined && Number(info.ultimoPrecioCaja) > 0) {
+                        let extra = '';
+                        if (info.variacionCosto && Number(info.variacionCosto) !== 0) {
+                            const v = Number(info.variacionCosto);
+                            const bg = v > 0 ? '#fee2e2' : '#dcfce7';
+                            const col = v > 0 ? '#dc2626' : '#16a34a';
+                            extra = `<span class="badge" style="font-size:9px;background:${bg};color:${col};padding:1px 4px;border-radius:3px;margin-left:4px;">${v > 0 ? '+' : ''}${v}%</span>`;
+                        }
+                        celda.innerHTML = `$${Number(info.ultimoPrecioCaja).toFixed(2)}${extra}`;
+                    } else {
+                        celda.textContent = '—';
+                    }
+                });
+            }).catch(() => {});
+        }
     }
 
     function descargarDiccionarioJson() {
@@ -479,7 +505,7 @@
             }
 
             if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_COMPLETO) {
-                throw new Error('Has seleccionado un archivo de Respaldo Completo. Para restaurar la base completa usa la casilla "Restaurar Base Completa (.json)" de abajo.');
+                throw new Error('Archivo de respaldo completo no compatible con la importación sanitaria.');
             }
             if (datos.tipo === CONSTANTES.TIPO_ARCHIVO_RESPALDO_FACTURAS) {
                 throw new Error('Has seleccionado un archivo de Historial de Facturas. Para restaurarlo ve a la Bóveda de la Farmacia.');
@@ -610,13 +636,14 @@
                         aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
                         condicionVenta: el('editProdCondicion') ? el('editProdCondicion').value : 'OTC',
                         esLeche: Boolean(el('editProdEsLeche') && el('editProdEsLeche').checked),
-                        registroSanitario: el('editProdRegistroSanitario').value.trim(),
-                        ubicacion: el('editProdUbicacion').value.trim()
+                        registroSanitario: el('editProdRegistroSanitario').value.trim()
                     };
 
                     if (!estaBloqueado) {
+                        ficha.ubicacion = el('editProdUbicacion') ? el('editProdUbicacion').value.trim() : '';
                         ficha.proveedorHabitual = el('editProdProveedorHabitual') ? el('editProdProveedorHabitual').value.trim() : '';
-                        ficha.ultimoPrecioCaja = el('editProdUltimoCosto') ? parseFloat(el('editProdUltimoCosto').value) || 0 : 0;
+                        const costoRaw = el('editProdUltimoCosto') ? el('editProdUltimoCosto').value.trim() : '';
+                        ficha.ultimoPrecioCaja = costoRaw !== '' ? (parseFloat(costoRaw) || '') : '';
                     }
 
                     if (Dominio && typeof Dominio.validarDatosMinimosProducto === 'function') {
@@ -673,10 +700,12 @@
             const btnEditar = e.target.closest('[data-editar-ficha]');
             if (btnEditar) {
                 const cod = btnEditar.dataset.editarFicha;
-                const dic = Almacenamiento.obtenerDiccionarioCodigos();
-                const prod = dic[cod];
+                const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+                let prod = Almacenamiento.buscarProductoPorCodigo(cod);
+                if (!estaBloqueado && typeof Almacenamiento.obtenerDetalleProductoAdmin === 'function') {
+                    prod = (await Almacenamiento.obtenerDetalleProductoAdmin(cod)) || prod;
+                }
                 if (prod && el('modalEditarProductoDiccionario')) {
-                    const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
 
                     el('editProdCodigo').value = prod.codigoBarras || cod;
                     el('editProdNombre').value = prod.nombre || prod.nombreComercial || '';
@@ -689,7 +718,7 @@
                     if (inputProvHab) {
                         inputProvHab.disabled = estaBloqueado;
                         inputProvHab.value = estaBloqueado ? '' : (prod.proveedorHabitual || '');
-                        inputProvHab.placeholder = estaBloqueado ? 'Cifrado en Bóveda' : 'Ej. Droguería Betances';
+                        inputProvHab.placeholder = estaBloqueado ? 'Cifrado en Bóveda (Requiere Admin)' : 'Ej. Droguería Betances';
                     }
 
                     if (el('editProdForma')) el('editProdForma').value = prod.formaFarmaceutica || '';
@@ -700,15 +729,21 @@
                     const inputUltCosto = el('editProdUltimoCosto');
                     if (inputUltCosto) {
                         inputUltCosto.disabled = estaBloqueado;
-                        inputUltCosto.value = estaBloqueado ? '' : ((prod.ultimoPrecioCaja !== undefined) ? Number(prod.ultimoPrecioCaja).toFixed(2) : '0.00');
-                        inputUltCosto.placeholder = estaBloqueado ? 'Cifrado' : '0.00';
+                        const tieneCosto = prod.ultimoPrecioCaja !== undefined && prod.ultimoPrecioCaja !== null && Number(prod.ultimoPrecioCaja) > 0;
+                        inputUltCosto.value = estaBloqueado ? '' : (tieneCosto ? Number(prod.ultimoPrecioCaja).toFixed(2) : '');
+                        inputUltCosto.placeholder = estaBloqueado ? 'Cifrado (Requiere Admin)' : 'Sin costo registrado';
                     }
 
                     el('editProdTasaItbis').value = String(prod.tasaItbis !== undefined ? prod.tasaItbis : (prod.aplicaItbis ? 18 : 0));
                     if (el('editProdCondicion')) el('editProdCondicion').value = prod.condicionVenta || 'OTC';
                     if (el('editProdEsLeche')) el('editProdEsLeche').checked = Boolean(prod.esLeche);
                     el('editProdRegistroSanitario').value = prod.registroSanitario || '';
-                    el('editProdUbicacion').value = prod.ubicacion || '';
+                    const inputUbicacion = el('editProdUbicacion');
+                    if (inputUbicacion) {
+                        inputUbicacion.disabled = estaBloqueado;
+                        inputUbicacion.value = estaBloqueado ? '' : (prod.ubicacion || '');
+                        inputUbicacion.placeholder = estaBloqueado ? 'Cifrado (Requiere Admin)' : 'Ej. Tramo A-2';
+                    }
                     actualizarDatalistsDirectorios();
                     el('modalEditarProductoDiccionario').showModal();
                 }
@@ -950,6 +985,37 @@
                         actualizarDatalistsDirectorios();
                         UI.Notificaciones.mostrarMensaje('Laboratorio eliminado.', 'info');
                     }
+                }
+            });
+        }
+
+        const btnExportLabs = el('btnExportarLaboratoriosJson');
+        if (btnExportLabs) {
+            btnExportLabs.addEventListener('click', () => {
+                const res = Almacenamiento.exportarLaboratoriosJson();
+                if (res && res.exito) {
+                    UI.Notificaciones.mostrarMensaje(`Directorio público de ${res.totalLaboratorios} laboratorios exportado en JSON.`, 'success');
+                }
+            });
+        }
+
+        const inputImportLabs = el('inputImportarLaboratoriosJson');
+        if (inputImportLabs) {
+            inputImportLabs.addEventListener('change', async e => {
+                const archivo = e.target.files[0];
+                e.target.value = '';
+                if (!archivo) return;
+                try {
+                    const datos = await Almacenamiento.leerArchivoJsonSubido(archivo);
+                    const res = Almacenamiento.importarLaboratoriosJson(datos);
+                    if (!res || !res.exito) {
+                        throw new Error((res && res.error) || 'No se pudo importar el directorio de laboratorios.');
+                    }
+                    renderizarLaboratoriosUI();
+                    actualizarDatalistsDirectorios();
+                    UI.Notificaciones.mostrarMensaje(`Laboratorios importados: +${res.agregados} nuevos, ${res.actualizados} actualizados (${res.total} totales).`, 'success');
+                } catch (err) {
+                    UI.Notificaciones.mostrarMensaje(err.message || 'Error al importar laboratorios.', 'error');
                 }
             });
         }

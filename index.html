@@ -7,7 +7,7 @@
     <meta name="author" content="Chroniris / reiNameless">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="light dark">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://world.openfoodfacts.org; object-src 'none'; frame-ancestors 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://world.openfoodfacts.org; object-src 'none';">
     <script>
         // Anti-Clickjacking Framebusting Protection (Chroniris OS)
         if (window.top !== window.self) {
@@ -340,7 +340,7 @@
                                     <span><svg class="ico ico-sm"><use href="#i-box"/></svg> Inv: <b id="resTotalUnidadesInventario">0</b> uds</span>
                                     <span><svg class="ico ico-sm"><use href="#i-tag"/></svg> ITBIS: <b id="resItbisLinea" style="color:var(--color-exito);">$0.00 (Exento)</b></span>
                                     <span><svg class="ico ico-sm"><use href="#i-wallet"/></svg> Sub: <b id="resSubtotalLinea" style="color:var(--color-accion);">$0.00</b></span>
-                                    <span>Total: <b id="resAcumuladoConLinea" style="color:var(--color-texto-principal);">$0.00</b></span>
+                                    <span title="Total acumulado de la factura sumando esta línea">Fact.+Línea: <b id="resAcumuladoConLinea" style="color:var(--color-texto-principal);">$0.00</b></span>
                                 </div>
                             </div>
 
@@ -370,17 +370,13 @@
                                     <span id="facCuadreText">Acumulado: $0.00</span>
                                 </div>
                                 <div class="factura-acciones" style="display:flex;gap:6px;align-items:center;">
-                                    <button class="btn-icono" id="btnImprimirActual" title="Imprimir Cuadre" style="height:28px;padding:0 8px;font-size:11px;">
-                                        <svg class="ico ico-sm"><use href="#i-print"/></svg>
-                                        <span>Imprimir</span>
-                                    </button>
                                     <button class="btn-icono text-danger" id="btnDescartar" title="Descartar factura" style="height:28px;padding:0 8px;font-size:11px;">
                                         <svg class="ico ico-sm"><use href="#i-trash"/></svg>
                                         <span id="txtDescartar">Descartar</span>
                                     </button>
                                     <button class="btn-primario" id="btnFinalizarFactura" style="height:28px;padding:0 10px;background:var(--color-exito);font-size:11px;">
                                         <svg class="ico ico-sm"><use href="#i-checkc"/></svg>
-                                        <span id="txtFinalizar">Finalizar (F4)</span>
+                                        <span id="txtFinalizar">Finalizar</span><span class="solo-desktop" id="txtFinalizarKbd">&nbsp;(F4)</span>
                                     </button>
                                 </div>
                             </div>
@@ -391,7 +387,7 @@
                                     <span class="chip-tag">Proveedor:</span>
                                     <strong id="chipFacProveedor">Sin proveedor</strong>
                                 </div>
-                                <div class="chip-factura-item">
+                                <div class="chip-factura-item" style="display:none;" aria-hidden="true">
                                     <span class="chip-tag">Factura #:</span>
                                     <strong class="mono" id="chipFacNumero">Sin número</strong>
                                 </div>
@@ -411,15 +407,15 @@
                             <div class="factura-campos-grid" id="gridCamposFactura" style="margin-top:4px;">
                                 <div class="campo">
                                     <label class="campo-label" for="facProveedor">Proveedor *</label>
-                                    <input type="text" class="input-control" id="facProveedor" placeholder="Droguería o laboratorio" list="listaProveedoresSugeridos">
+                                    <input type="text" class="input-control" id="facProveedor" placeholder="Droguería o suplidor" list="listaProveedoresSugeridos">
                                     <datalist id="listaProveedoresSugeridos"></datalist>
                                 </div>
                                 <div class="campo" style="display:none;" aria-hidden="true">
                                     <label class="campo-label" for="facRnc">RNC (Opc.)</label>
                                     <input type="text" class="input-control input-mono" id="facRnc" placeholder="Ej. 101023456" maxlength="11" inputmode="numeric">
                                 </div>
-                                <div class="campo">
-                                    <label class="campo-label" for="facNumero">Factura # *</label>
+                                <div class="campo" style="display:none;" aria-hidden="true">
+                                    <label class="campo-label" for="facNumero">Factura #</label>
                                     <div style="display:flex;gap:var(--espacio-1);">
                                         <input type="text" class="input-control input-mono" id="facNumero" placeholder="Número de factura física" style="flex:1;min-width:0;">
                                         <button type="button" class="btn-icono" id="btnEscanearQrFactura" title="Escanear QR de Factura DGII con Cámara" aria-label="Escanear QR de Factura DGII con Cámara" style="display:none;" aria-hidden="true">
@@ -822,13 +818,24 @@
                     <!-- Panel 3: Directorio de Laboratorios Fabricantes -->
                     <div id="panelCatalogoLaboratorios" class="panel-subtab-catalogo" style="display:none;">
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
-                            <div style="flex:1;min-width:220px;">
+                            <div style="flex:1;min-width:200px;">
                                 <input type="text" id="filtroBuscadorLaboratorios" class="input-control" placeholder="Buscar laboratorio o fabricante..." autocomplete="off">
                             </div>
-                            <button type="button" class="btn-icono" id="btnNuevoLaboratorio" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
-                                <svg class="ico ico-sm"><use href="#i-plus"/></svg>
-                                <span>+ Nuevo Laboratorio</span>
-                            </button>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                <button type="button" class="btn-icono" id="btnExportarLaboratoriosJson" title="Exportar directorio público de laboratorios (.json)">
+                                    <svg class="ico ico-sm"><use href="#i-down"/></svg>
+                                    <span>Exportar Labs</span>
+                                </button>
+                                <label class="btn-icono" style="cursor:pointer;" title="Importar directorio público de laboratorios (.json)">
+                                    <svg class="ico ico-sm"><use href="#i-up"/></svg>
+                                    <span>Importar Labs</span>
+                                    <input type="file" id="inputImportarLaboratoriosJson" accept=".json,application/json" style="display:none">
+                                </label>
+                                <button type="button" class="btn-icono" id="btnNuevoLaboratorio" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                                    <svg class="ico ico-sm"><use href="#i-plus"/></svg>
+                                    <span>+ Nuevo Laboratorio</span>
+                                </button>
+                            </div>
                         </div>
                         <div id="contenedorLaboratorios"></div>
                     </div>
@@ -883,13 +890,17 @@
 
                         <!-- Estado 3: Desbloqueada en Sesión -->
                         <div id="adminBloqueDesbloqueado" style="display:none;padding-top:6px;">
-                            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+                            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+                                <button type="button" class="btn-icono" id="btnPanelBloquearSoloAdmin" style="height:34px;padding:0 12px;border-color:var(--color-primario);color:var(--color-primario);font-weight:700;display:none;" title="Cierra historial, proveedores y fórmulas dejando activo solo el autocompletado de mostrador">
+                                    <svg class="ico ico-sm"><use href="#i-lock"/></svg>
+                                    <span>Dejar Modo Mostrador</span>
+                                </button>
                                 <button type="button" class="btn-icono" id="btnPanelBloquearAhora" style="height:34px;padding:0 12px;border-color:var(--color-alerta);color:var(--color-alerta);font-weight:700;">
                                     <svg class="ico ico-sm"><use href="#i-lock"/></svg>
-                                    <span>Bloquear Sesión y Purgar RAM</span>
+                                    <span>Bloquear Todo y Purgar RAM</span>
                                 </button>
                                 <div class="campo" style="min-width:170px;">
-                                    <label class="campo-label" for="selPanelAutoBloqueo">Auto-bloqueo por inactividad</label>
+                                    <label class="campo-label" for="selPanelAutoBloqueo">Auto-bloqueo Admin</label>
                                     <select id="selPanelAutoBloqueo" class="input-control" style="height:34px;">
                                         <option value="5">5 minutos</option>
                                         <option value="15" selected>15 minutos (Recomendado)</option>
@@ -901,6 +912,21 @@
                             </div>
 
                             <details style="margin-bottom:10px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);padding:8px 10px;">
+                                <summary style="cursor:pointer;font-size:12px;font-weight:600;">PIN Rápido de Mostrador (K_Caja — Último Costo sin Admin)</summary>
+                                <p class="helper-text" style="font-size:11px;margin:6px 0;">
+                                    Permite al cajero cargar el último costo al escanear un producto y sellar facturas al buzón ciego sin tener acceso al historial, proveedores ni edición de reglas.
+                                </p>
+                                <form id="formPanelPinCaja" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:6px;">
+                                    <div class="campo" style="flex:1;min-width:150px;">
+                                        <label class="campo-label" for="inputPanelPinCaja">PIN Operativo (4-16 chars/dígitos)</label>
+                                        <input type="password" id="inputPanelPinCaja" class="input-control" minlength="4" maxlength="16" autocomplete="new-password" placeholder="Ej. 4589">
+                                    </div>
+                                    <button type="submit" class="btn-primario" id="btnPanelGuardarPinCaja" style="height:34px;padding:0 12px;font-size:12px;">Guardar PIN Caja</button>
+                                    <button type="button" class="btn-icono text-danger" id="btnPanelQuitarPinCaja" style="height:34px;font-size:11px;display:none;">Desactivar PIN</button>
+                                </form>
+                            </details>
+
+                            <details style="margin-bottom:10px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);padding:8px 10px;">
                                 <summary style="cursor:pointer;font-size:12px;font-weight:600;">Cambiar Contraseña Maestra</summary>
                                 <form id="formPanelCambiarClave" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
                                     <div class="campo">
@@ -909,12 +935,12 @@
                                     </div>
                                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                                         <div class="campo" style="flex:1;min-width:140px;">
-                                            <label class="campo-label" for="inputPanelClaveNueva">Nueva Contraseña (mín. 6)</label>
-                                            <input type="password" id="inputPanelClaveNueva" class="input-control" required minlength="6" autocomplete="new-password">
+                                            <label class="campo-label" for="inputPanelClaveNueva">Nueva Contraseña (mín. 10)</label>
+                                            <input type="password" id="inputPanelClaveNueva" class="input-control" required minlength="10" autocomplete="new-password">
                                         </div>
                                         <div class="campo" style="flex:1;min-width:140px;">
                                             <label class="campo-label" for="inputPanelClaveNuevaConf">Confirmar Nueva</label>
-                                            <input type="password" id="inputPanelClaveNuevaConf" class="input-control" required minlength="6" autocomplete="new-password">
+                                            <input type="password" id="inputPanelClaveNuevaConf" class="input-control" required minlength="10" autocomplete="new-password">
                                         </div>
                                     </div>
                                     <div>
@@ -932,6 +958,60 @@
                                     </div>
                                     <button type="submit" class="btn-icono" style="height:34px;">Generar Nuevo Código</button>
                                 </form>
+                            </details>
+
+                            <details style="margin-bottom:10px;border:1px solid var(--color-borde);border-radius:var(--radio-sm);padding:8px 10px;" id="panelSyncP2P">
+                                <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--color-primario);">Sincronización Cifrada PC-a-PC (Cajas Autorizadas de la Farmacia)</summary>
+                                <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+                                    <div class="helper-text" style="font-size:11px;">
+                                        Empareja dos computadoras de tu farmacia una sola vez confirmando el mismo código de 6 dígitos (SAS). Los archivos <code>.cfpatch</code> exportados quedan cifrados exclusivamente para la PC hermana destino + Código Efímero de Entrega (imposibles de abrir con contraseña ni en laptops externas).
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--color-superficie-resaltada);padding:8px;border-radius:var(--radio-sm);">
+                                        <span class="fs-xs">ID de este equipo: <strong class="mono" id="txtMiDeviceIdP2P">-</strong></span>
+                                        <button type="button" class="btn-icono" id="btnCopiarTarjetaP2P" style="height:30px;font-size:11px;">
+                                            <svg class="ico ico-sm"><use href="#i-copy"/></svg>
+                                            <span>Copiar Tarjeta de Vinculación</span>
+                                        </button>
+                                    </div>
+                                    <div style="border-top:1px dashed var(--color-borde);padding-top:8px;">
+                                        <div style="font-weight:600;font-size:11px;margin-bottom:6px;">1. Vincular Computadora Hermana (1 sola vez por equipo)</div>
+                                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                                            <input type="text" id="inputAliasPeerP2P" class="input-control" placeholder="Alias (ej. Caja 2)" style="width:140px;">
+                                            <input type="text" id="inputTarjetaPeerP2P" class="input-control input-mono" placeholder="Pega aquí la Tarjeta de Vinculación de la otra PC" style="flex:1;min-width:180px;">
+                                        </div>
+                                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                            <button type="button" class="btn-icono" id="btnCalcularSasP2P" style="height:30px;font-size:11px;">Verificar Código SAS</button>
+                                            <span id="boxCodigoSasP2P" class="mono" style="font-weight:700;color:var(--color-primario);display:none;">SAS: ---</span>
+                                            <button type="button" class="btn-primario" id="btnConfirmarEmparejarP2P" style="height:30px;padding:0 12px;font-size:11px;display:none;">Autorizar PC Hermana</button>
+                                        </div>
+                                        <div id="listaPeersP2P" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;"></div>
+                                    </div>
+                                    <div style="border-top:1px dashed var(--color-borde);padding-top:8px;">
+                                        <div style="font-weight:600;font-size:11px;margin-bottom:6px;">2. Enviar / Recibir Catálogo + Costos Cifrados</div>
+                                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+                                            <select id="selDestinoSyncP2P" class="input-control" style="flex:1;min-width:160px;">
+                                                <option value="">Selecciona PC destino autorizada...</option>
+                                            </select>
+                                            <label style="font-size:11px;display:flex;align-items:center;gap:4px;">
+                                                <input type="checkbox" id="chkSyncIncluirProveedores" checked> Incluir Proveedores
+                                            </label>
+                                            <button type="button" class="btn-primario" id="btnExportarSyncP2P" style="height:32px;padding:0 12px;font-size:11px;">Exportar Delta (.cfpatch)</button>
+                                            <button type="button" class="btn-icono" id="btnWebRtcEnviarP2P" style="height:32px;font-size:11px;" title="Transferencia directa en red Wi-Fi/LAN local">Wi-Fi LAN</button>
+                                        </div>
+                                        <div id="boxCodigoEntregaSync" style="display:none;background:var(--color-exito-fondo);border:1px solid var(--color-exito-borde);padding:8px;border-radius:var(--radio-sm);font-size:11px;margin-bottom:8px;">
+                                            Código Efímero de Entrega (dígitalo en la PC destino): <strong id="txtCodigoEntregaSync" class="mono" style="font-size:14px;"></strong>
+                                        </div>
+                                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                            <input type="text" id="inputCodigoEntregaImportP2P" class="input-control input-mono" placeholder="Código Entrega (XXXX-XXXX)" style="width:190px;text-transform:uppercase;">
+                                            <label class="btn-icono" style="cursor:pointer;height:32px;font-size:11px;">
+                                                <svg class="ico ico-sm"><use href="#i-up"/></svg>
+                                                <span>Importar Delta (.cfpatch)</span>
+                                                <input type="file" id="inputImportarSyncP2P" accept=".json,.cfpatch,application/json" style="display:none">
+                                            </label>
+                                            <button type="button" class="btn-icono" id="btnWebRtcRecibirP2P" style="height:32px;font-size:11px;">Recibir por Wi-Fi LAN</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </details>
 
                             <div style="padding-top:8px;border-top:1px dashed var(--color-borde);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -1522,19 +1602,23 @@
             <!-- Vista 1: Configuración Inicial de Contraseña -->
             <div id="vistaModalSetupClave" style="display:none;">
                 <p class="helper-text" style="margin:0 0 10px 0;font-size:12px;">
-                    Activa el cifrado AES-256-GCM en IndexedDB. Los costos de compra, historial de facturas, márgenes y proveedores quedarán ilegibles sin tu contraseña maestra.
+                    Activa el cifrado AES-256-GCM en IndexedDB. Los costos de compra, historial de facturas, márgenes y proveedores quedarán ilegibles sin clave autorizada.
                 </p>
                 <form id="formModalSetupClave" style="display:flex;flex-direction:column;gap:10px;">
                     <div class="campo">
-                        <label class="campo-label" for="inputModalNuevaClave">Contraseña Maestra (mín. 6 caracteres) *</label>
-                        <input type="password" id="inputModalNuevaClave" class="input-control" required minlength="6" autocomplete="new-password" placeholder="Contraseña segura">
+                        <label class="campo-label" for="inputModalNuevaClave">Contraseña Maestra Admin (mín. 10 caracteres) *</label>
+                        <input type="password" id="inputModalNuevaClave" class="input-control" required minlength="10" autocomplete="new-password" placeholder="Contraseña segura de administrador">
                     </div>
                     <div class="campo">
-                        <label class="campo-label" for="inputModalConfirmarClave">Confirmar Contraseña *</label>
-                        <input type="password" id="inputModalConfirmarClave" class="input-control" required minlength="6" autocomplete="new-password" placeholder="Repite la contraseña">
+                        <label class="campo-label" for="inputModalConfirmarClave">Confirmar Contraseña Admin *</label>
+                        <input type="password" id="inputModalConfirmarClave" class="input-control" required minlength="10" autocomplete="new-password" placeholder="Repite la contraseña">
                     </div>
                     <div class="campo">
-                        <label class="campo-label" for="selectModalAutoBloqueo">Auto-bloqueo por Inactividad</label>
+                        <label class="campo-label" for="inputModalPinCajaSetup">PIN Rápido de Mostrador (opcional, 4-16 chars)</label>
+                        <input type="password" id="inputModalPinCajaSetup" class="input-control" minlength="4" maxlength="16" autocomplete="new-password" placeholder="Ej. 4589 (cajero carga último costo sin Admin)">
+                    </div>
+                    <div class="campo">
+                        <label class="campo-label" for="selectModalAutoBloqueo">Auto-bloqueo Admin por Inactividad</label>
                         <select id="selectModalAutoBloqueo" class="input-control">
                             <option value="5">5 minutos</option>
                             <option value="15" selected>15 minutos (Recomendado)</option>
@@ -1565,12 +1649,30 @@
                 </div>
             </div>
 
-            <!-- Vista 3: Desbloquear Sesión -->
+            <!-- Vista 3: Desbloquear Sesión (Dual: Mostrador vs Admin) -->
             <div id="vistaModalDesbloquear" style="display:none;">
-                <p class="helper-text" style="margin:0 0 10px 0;font-size:12px;">
-                    La bóveda financiera está cifrada. Ingresa tu contraseña de administrador para desbloquear costos, historial y proveedores en RAM durante este turno.
-                </p>
+                <div id="tabsUnlockDual" style="display:none;gap:6px;margin-bottom:10px;">
+                    <button type="button" class="btn-icono activo" id="btnTabUnlockCaja" style="flex:1;justify-content:center;">Mostrador (PIN Turno)</button>
+                    <button type="button" class="btn-icono" id="btnTabUnlockAdmin" style="flex:1;justify-content:center;">Administrador (Dueño)</button>
+                </div>
+
+                <form id="formModalDesbloquearCaja" style="display:none;flex-direction:column;gap:10px;">
+                    <p class="helper-text" style="margin:0;font-size:12px;">
+                        Modo Mostrador: habilita autocompletado puntual del último costo al escanear y sellado ciego al guardar facturas (sin acceso a historial, proveedores ni edición de reglas).
+                    </p>
+                    <div class="campo">
+                        <label class="campo-label" for="inputModalPinCajaUnlock">PIN de Mostrador *</label>
+                        <input type="password" id="inputModalPinCajaUnlock" class="input-control" required autocomplete="current-password" placeholder="Ingresa PIN operativo">
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;">
+                        <button type="submit" class="btn-primario" id="btnModalDesbloquearCaja">Abrir Turno de Mostrador</button>
+                    </div>
+                </form>
+
                 <form id="formModalDesbloquear" style="display:flex;flex-direction:column;gap:10px;">
+                    <p class="helper-text" style="margin:0;font-size:12px;">
+                        La bóveda financiera está cifrada. Ingresa tu contraseña maestra de Administrador para consultar historial, buzón, proveedores y fórmulas.
+                    </p>
                     <div class="campo">
                         <label class="campo-label" for="inputModalClaveUnlock">Contraseña de Administrador *</label>
                         <input type="password" id="inputModalClaveUnlock" class="input-control" required autocomplete="current-password" placeholder="Ingresa tu contraseña">
@@ -1579,7 +1681,7 @@
                         <button type="button" class="btn-icono" id="btnModalMostrarRecuperar" style="border:none;background:transparent;color:var(--color-accion);padding:4px 0;">
                             ¿Olvidaste tu contraseña?
                         </button>
-                        <button type="submit" class="btn-primario" id="btnModalDesbloquear">Desbloquear Bóveda</button>
+                        <button type="submit" class="btn-primario" id="btnModalDesbloquear">Desbloquear Admin</button>
                     </div>
                 </form>
             </div>
@@ -1595,8 +1697,8 @@
                         <input type="text" id="inputModalCodigoRec" class="input-control input-mono" required autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
                     </div>
                     <div class="campo">
-                        <label class="campo-label" for="inputModalNuevaClaveRec">Nueva Contraseña Maestra (mín. 6) *</label>
-                        <input type="password" id="inputModalNuevaClaveRec" class="input-control" required minlength="6" autocomplete="new-password">
+                        <label class="campo-label" for="inputModalNuevaClaveRec">Nueva Contraseña Maestra (mín. 10) *</label>
+                        <input type="password" id="inputModalNuevaClaveRec" class="input-control" required minlength="10" autocomplete="new-password">
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
                         <button type="button" class="btn-icono" id="btnModalVolverUnlock">Volver</button>
@@ -1607,15 +1709,17 @@
 
             <!-- Vista 5: Sesión Desbloqueada -->
             <div id="vistaModalDesbloqueado" style="display:none;">
-                <div class="alert-banner" style="background:var(--color-exito-fondo);color:var(--color-exito);border:1px solid var(--color-exito-borde);margin-bottom:12px;font-size:12px;">
+                <div class="alert-banner" id="bannerEstadoModalDesbloqueado" style="background:var(--color-exito-fondo);color:var(--color-exito);border:1px solid var(--color-exito-borde);margin-bottom:12px;font-size:12px;">
                     <svg class="ico ico-sm"><use href="#i-unlock"/></svg>
-                    <span><strong>Sesión Autorizada Activa:</strong> La llave AES-256 reside únicamente en memoria volátil (RAM).</span>
+                    <span id="txtEstadoModalDesbloqueado"><strong>Sesión Autorizada Activa:</strong> La llave AES-256 reside únicamente en memoria volátil (RAM).</span>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button type="button" class="btn-primario" id="btnModalSubirAdmin" style="display:none;">Elevar a Administrador</button>
                     <button type="button" class="btn-icono" id="btnModalIrPanelAdmin">Configuración Completa</button>
+                    <button type="button" class="btn-icono" id="btnModalBloquearSoloAdmin" style="display:none;border-color:var(--color-primario);color:var(--color-primario);">Dejar Solo Mostrador</button>
                     <button type="button" class="btn-primario" id="btnModalBloquearAhora" style="background:var(--color-alerta);border-color:var(--color-alerta);">
                         <svg class="ico ico-sm"><use href="#i-lock"/></svg>
-                        <span>Bloquear Sesión Ahora</span>
+                        <span>Bloquear Todo</span>
                     </button>
                 </div>
             </div>

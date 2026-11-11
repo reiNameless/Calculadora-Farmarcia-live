@@ -1149,11 +1149,13 @@
             return { esValido: false, codigo: 'SELLO_INCOMPLETO', error: 'El sello de seguridad del archivo está incompleto o dañado.' };
         }
 
-        if (tipoEsperado && tipo !== tipoEsperado) {
+        const esTipoValido = !tipoEsperado || (Array.isArray(tipoEsperado) ? tipoEsperado.includes(tipo) : tipo === tipoEsperado);
+        if (!esTipoValido) {
+            const esperadoTxt = Array.isArray(tipoEsperado) ? tipoEsperado.join(', ') : tipoEsperado;
             return {
                 esValido: false,
                 codigo: 'TIPO_INCORRECTO',
-                error: 'El archivo corresponde a "' + tipo + '", pero se esperaba "' + tipoEsperado + '".'
+                error: 'El archivo corresponde a "' + tipo + '", pero se esperaba "' + esperadoTxt + '".'
             };
         }
 
@@ -1965,7 +1967,6 @@
         'esLeche',
         'condicionVenta',
         'registroSanitario',
-        'ubicacion',
         'actualizadoEn'
     ]);
 
@@ -2048,7 +2049,6 @@
             'es_leche',
             'condicion_venta',
             'registro_sanitario',
-            'ubicacion',
             'actualizado_en'
         ];
 
@@ -2085,7 +2085,6 @@
                 escapeCsv(p.esLeche ? 'SÍ' : 'NO'),
                 escapeCsv(p.condicionVenta || 'OTC'),
                 escapeCsv(p.registroSanitario || ''),
-                escapeCsv(p.ubicacion || ''),
                 escapeCsv(p.actualizadoEn || new Date().toISOString())
             ];
             filas.push(fila.join(','));
@@ -2284,6 +2283,8 @@
                     fusionado.costoAnteriorCaja = existente.costoAnteriorCaja || 0;
                     fusionado.variacionCosto = existente.variacionCosto || 0;
                     fusionado.costoUnitarioFiscal = existente.costoUnitarioFiscal || '';
+                } else if (!(item.ultimoPrecioCaja > 0) && !(existente.ultimoPrecioCaja > 0)) {
+                    delete fusionado.ultimoPrecioCaja;
                 }
                 if (existente.preciosVenta && !item.preciosVenta) {
                     fusionado.preciosVenta = clonarObjetoSeguro(existente.preciosVenta);
@@ -2296,6 +2297,15 @@
                 }
                 if (existente._segCifrado && !item._segCifrado) {
                     fusionado._segCifrado = clonarObjetoSeguro(existente._segCifrado);
+                }
+                if (existente._segCaja && !item._segCaja) {
+                    fusionado._segCaja = clonarObjetoSeguro(existente._segCaja);
+                }
+                if (existente._segAdmin && !item._segAdmin) {
+                    fusionado._segAdmin = clonarObjetoSeguro(existente._segAdmin);
+                }
+                if (existente._segPendienteAdmin && !item._segPendienteAdmin) {
+                    fusionado._segPendienteAdmin = clonarObjetoSeguro(existente._segPendienteAdmin);
                 }
 
                 local[codigoLimpio] = fusionado;
@@ -2346,6 +2356,73 @@
                 diccionario: productos
             }
         };
+    }
+
+    function sanitizarLaboratorioPublico(lab) {
+        if (!lab || typeof lab !== 'object' || Array.isArray(lab)) return null;
+        const nombre = sanitizarEntradaTexto(lab.nombre || lab.razonSocial || '', 120).trim();
+        if (!nombre) return null;
+        const idCrudo = String(lab.id || '').trim();
+        const idSeguro = (idCrudo && idCrudo !== '__proto__' && idCrudo !== 'constructor' && idCrudo !== 'prototype')
+            ? sanitizarEntradaTexto(idCrudo, 80)
+            : ('lab_' + nombre.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48));
+        return {
+            id: idSeguro || ('lab_' + generarIdUnico()),
+            nombre,
+            razonSocial: sanitizarEntradaTexto(lab.razonSocial || nombre, 160).trim(),
+            origen: (lab.origen === 'Importado') ? 'Importado' : 'Nacional RD',
+            titularRegistro: sanitizarEntradaTexto(lab.titularRegistro || nombre, 160).trim(),
+            telefono: sanitizarEntradaTexto(lab.telefono || '', 60).trim(),
+            actualizadoEn: sanitizarEntradaTexto(lab.actualizadoEn || new Date().toISOString(), 40)
+        };
+    }
+
+    function sanitizarDirectorioLaboratoriosPublico(lista) {
+        const origen = Array.isArray(lista) ? lista : [];
+        const vistos = new Map();
+        for (const item of origen) {
+            const limpio = sanitizarLaboratorioPublico(item);
+            if (!limpio) continue;
+            const clave = limpio.nombre.toLowerCase();
+            if (!vistos.has(clave)) {
+                vistos.set(clave, limpio);
+            }
+        }
+        return Array.from(vistos.values());
+    }
+
+    function generarSobreLaboratorios(lista) {
+        const laboratorios = sanitizarDirectorioLaboratoriosPublico(lista);
+        return {
+            tipo: CONSTANTES.TIPO_ARCHIVO_DIRECTORIO_LABORATORIOS,
+            version: CONSTANTES.VERSION_ESQUEMA_RESPALDO || 2,
+            fechaGeneracion: new Date().toISOString(),
+            descripcion: 'Directorio Público Sanitario de Laboratorios Fabricantes',
+            resumen: {
+                totalLaboratorios: laboratorios.length,
+                sanitizadoPublico: true
+            },
+            datos: {
+                laboratorios
+            }
+        };
+    }
+
+    function generarFolioRecepcionInterno(fechaIso) {
+        const fechaCompacta = String(fechaIso || obtenerFechaLocalISO()).replace(/[^0-9]/g, '').slice(0, 8) || '00000000';
+        const aleatorio = generarIdUnico().slice(-4).toUpperCase();
+        return `REC-${fechaCompacta}-${aleatorio}`;
+    }
+
+    function generarHuellaFactura(sesion) {
+        if (!sesion || typeof sesion !== 'object') return '';
+        const proveedor = String(sesion.proveedor || '').trim().toLowerCase();
+        const fechaEmision = String(sesion.fechaEmision || '').trim();
+        const totalFisico = Number(sesion.totalFisico || 0).toFixed(2);
+        const items = Array.isArray(sesion.productos)
+            ? sesion.productos.map(p => `${p.codigoBarras || p.nombre || ''}:${p.cajasCompradas || 0}:${Number(p.precioCajaBase || 0).toFixed(2)}`).sort()
+            : [];
+        return sha256Pure(serializarJsonCanonico({ proveedor, fechaEmision, totalFisico, items }));
     }
 
     function obtenerMacroCategoria(cat) {
@@ -2603,6 +2680,11 @@
         generarTextoFormato606,
         fusionarDiccionarios,
         generarSobreParcheCatalogo,
+        sanitizarLaboratorioPublico,
+        sanitizarDirectorioLaboratoriosPublico,
+        generarSobreLaboratorios,
+        generarFolioRecepcionInterno,
+        generarHuellaFactura,
 
         validarRnc,
         emitirBipExito,

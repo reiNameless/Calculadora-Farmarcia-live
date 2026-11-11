@@ -33,6 +33,7 @@
         TIPO_ARCHIVO_PARCHE_CATALOGO: 'parche-farmacia-catalogo',
         TIPO_ARCHIVO_DIRECTORIO_PROVEEDORES: 'respaldo-farmacia-proveedores',
         TIPO_ARCHIVO_DIRECTORIO_LABORATORIOS: 'respaldo-farmacia-laboratorios',
+        TIPO_ARCHIVO_SYNC_CIFRADA: 'chroniris-sync-cifrado-v1',
         DECIMALES_COSTO_UNITARIO: 8,
         DECIMALES_MONEDA: 2,
         DECIMALES_AUDITORIA: 4,
@@ -78,9 +79,12 @@
             ALGORITMO_CIFRADO: 'AES-GCM',
             LONGITUD_CLAVE_BITS: 256,
             ITERACIONES_PBKDF2: 600000,
+            ITERACIONES_PIN_CAJA: 300000,
             LONGITUD_SALT_BYTES: 16,
             LONGITUD_IV_BYTES: 12,
-            MIN_LONGITUD_CONTRASENA: 6,
+            MIN_LONGITUD_CONTRASENA: 10,
+            MIN_LONGITUD_PIN_CAJA: 4,
+            MAX_LONGITUD_PIN_CAJA: 16,
             MAX_INTENTOS_FALLIDOS_BASE: 3,
             AUTO_BLOQUEO_DEFECTO_MIN: 15,
             STORE_SEGURIDAD: 'seguridad_boveda',
@@ -103,8 +107,15 @@
             'esLeche',
             'condicionVenta',
             'registroSanitario',
-            'ubicacion',
             'actualizadoEn'
+        ]),
+        CAMPOS_OPERATIVOS_CAJA: Object.freeze([
+            'ultimoPrecioCaja',
+            'costoAnteriorCaja',
+            'variacionCosto',
+            'costoUnitarioFiscal',
+            'costoReferencia',
+            'preciosVenta'
         ]),
         CAMPOS_SENSIBLES_CATALOGO: Object.freeze([
             'ultimoPrecioCaja',
@@ -121,7 +132,17 @@
             'descuentoTotalLinea',
             'proveedorHabitual',
             'rncProveedor',
-            'numeroFactura'
+            'numeroFactura',
+            'ubicacion'
+        ]),
+        CAMPOS_PUBLICOS_LABORATORIO: Object.freeze([
+            'id',
+            'nombre',
+            'razonSocial',
+            'origen',
+            'titularRegistro',
+            'telefono',
+            'actualizadoEn'
         ]),
         DOMINIOS_AUTORIZADOS: Object.freeze([
             'localhost',

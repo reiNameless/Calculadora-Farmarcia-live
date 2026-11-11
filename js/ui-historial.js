@@ -47,19 +47,24 @@
             const diasRestantes = Math.max(0, Math.ceil(msRestantes / (24 * 60 * 60 * 1000)));
             const idEscapado = escaparHtml(f.id);
 
+            const tituloFolio = f.folioInterno ? ` (${escaparHtml(f.folioInterno)})` : '';
             return `
             <div style="border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                 <div>
                     <div style="font-weight:700; color:var(--primary); display:flex; align-items:center; gap:8px;">
-                        <span>${escaparHtml(f.proveedor)} — Factura #${escaparHtml(f.numeroFactura)}</span>
-                        ${expiraPronto ? `<span class="tag-expira-pronto" title="El historial retiene facturas por 7 días. Descarga un respaldo para no perderla.">Expira en ~${diasRestantes} d</span>` : ''}
+                        <span>${escaparHtml(f.proveedor)}${tituloFolio}</span>
+                        ${expiraPronto ? `<span class="tag-expira-pronto" title="El historial retiene facturas por 7 días.">Expira en ~${diasRestantes} d</span>` : ''}
                     </div>
-                    <div style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">
-                        Emisión: <b>${escaparHtml(f.fechaEmision)}</b> | Productos: <b>${f.productos.length}</b> | Total: <b>$${Number(f.totalCalculado || 0).toFixed(2)}</b>
+                    <div style="font-size:0.82rem; color:var(--text-muted); margin-top:2px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span>Emisión: <b>${escaparHtml(f.fechaEmision)}</b></span>
+                        <span>| Productos: <b>${f.productos.length}</b></span>
+                        <span>| Total: <b class="mono" data-hist-monto="${idEscapado}">$••••••</b>
+                            <button type="button" class="btn-secundario-sm" data-hist-revelar="${idEscapado}" style="padding:1px 6px;font-size:10px;margin-left:2px;" title="Revelar monto durante 30 segundos">Ver</button>
+                        </span>
                     </div>
                 </div>
                 <div class="actions-group">
-                    <button type="button" class="action-icon-btn" data-hist-imprimir="${idEscapado}" title="Imprimir Factura" aria-label="Imprimir factura de ${escaparHtml(f.proveedor)}">${iconoSvg('print')}</button>
+                    <button type="button" class="action-icon-btn" data-hist-imprimir="${idEscapado}" title="Imprimir Reporte Completo (Solo Admin)" aria-label="Imprimir factura de ${escaparHtml(f.proveedor)}">${iconoSvg('print')}</button>
                     <button type="button" class="action-icon-btn" data-hist-editar="${idEscapado}" title="Reabrir / Editar Factura" aria-label="Editar factura de ${escaparHtml(f.proveedor)}">${iconoSvg('edit')}</button>
                     <button type="button" class="action-icon-btn text-danger" data-hist-eliminar="${idEscapado}" title="Eliminar Factura" aria-label="Eliminar factura de ${escaparHtml(f.proveedor)}">${iconoSvg('trash')}</button>
                 </div>
@@ -82,17 +87,26 @@
         el('seccionProductosRegistrados').scrollIntoView({ behavior: 'smooth' });
     }
 
+    function limpiarAreaImpresion() {
+        const area = el('printArea');
+        if (area) area.innerHTML = '';
+    }
+
     function imprimirFactura(factura) {
+        if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
+            UI.Notificaciones.mostrarMensaje('El reporte completo con costos exige sesión de Administrador desbloqueada.', 'warning');
+            return;
+        }
         if (!factura || !factura.productos.length) {
             return UI.Notificaciones.mostrarMensaje('No hay productos para imprimir.', 'error');
         }
         const resumen = Dominio.calcularResumenCuadreFactura(factura.productos, factura.totalFisico);
         el('printArea').innerHTML = `
             <div class="print-header">
-                <h2 style="margin:0 0 4px 0;">Calculadora de Farmacia — Reporte de Recepción</h2>
+                <h2 style="margin:0 0 4px 0;">Calculadora de Farmacia — Reporte Interno de Recepción</h2>
                 <p style="margin:0; font-size:0.85rem;">
                     <b>Proveedor:</b> ${escaparHtml(factura.proveedor || 'No especificado')} &nbsp;|&nbsp;
-                    <b>Factura #:</b> ${escaparHtml(factura.numeroFactura || 'S/N')} &nbsp;|&nbsp;
+                    ${factura.folioInterno ? `<b>Folio Interno:</b> ${escaparHtml(factura.folioInterno)} &nbsp;|&nbsp;` : ''}
                     <b>Fecha Emisión:</b> ${escaparHtml(factura.fechaEmision || '-')}
                 </p>
             </div>
@@ -144,6 +158,7 @@
                 ${resumen.totalFisico > 0 ? `<br><small style="color:${resumen.cuadreExacto ? 'green' : 'orange'};">${resumen.cuadreExacto ? 'Factura Cuadra Exactamente' : `Diferencia: $${resumen.diferencia.toFixed(2)}`}</small>` : ''}
             </div>`;
         window.print();
+        setTimeout(limpiarAreaImpresion, 1500);
     }
 
     function descargarRespaldoFacturas() {
@@ -162,7 +177,35 @@
     }
 
     function inicializarEventosHistorial() {
+        if (typeof window !== 'undefined') {
+            window.addEventListener('afterprint', limpiarAreaImpresion);
+        }
         if (el('contenedorHistorial')) el('contenedorHistorial').addEventListener('click', async e => {
+            const btnRevelar = e.target.closest('[data-hist-revelar]');
+            if (btnRevelar) {
+                const idFac = btnRevelar.dataset.histRevelar;
+                const spanMonto = el('contenedorHistorial').querySelector(`[data-hist-monto="${CSS.escape ? CSS.escape(idFac) : idFac}"]`);
+                if (!spanMonto) return;
+                if (btnRevelar.dataset.visible === '1') {
+                    spanMonto.textContent = '$••••••';
+                    btnRevelar.textContent = 'Ver';
+                    btnRevelar.dataset.visible = '0';
+                } else {
+                    const fac = Almacenamiento.obtenerHistorialFacturas().find(x => x.id === idFac);
+                    if (!fac) return;
+                    spanMonto.textContent = `$${Number(fac.totalCalculado || 0).toFixed(2)}`;
+                    btnRevelar.textContent = 'Ocultar';
+                    btnRevelar.dataset.visible = '1';
+                    setTimeout(() => {
+                        if (spanMonto && btnRevelar.dataset.visible === '1') {
+                            spanMonto.textContent = '$••••••';
+                            btnRevelar.textContent = 'Ver';
+                            btnRevelar.dataset.visible = '0';
+                        }
+                    }, 30000);
+                }
+                return;
+            }
             const btnImp = e.target.closest('[data-hist-imprimir]');
             if (btnImp) {
                 if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
@@ -191,6 +234,7 @@
         renderizarHistorialUI,
         reabrirFacturaDeHistorial,
         imprimirFactura,
+        limpiarAreaImpresion,
         descargarRespaldoFacturas,
         restaurarRespaldoFacturas,
         exportarFormato606,

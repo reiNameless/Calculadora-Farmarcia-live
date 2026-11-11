@@ -68,6 +68,37 @@
         }
     }
 
+    function extraerSubconjuntoCampos(item, listaCampos) {
+        if (!item || typeof item !== 'object') return null;
+        const salida = {};
+        let tieneDatos = false;
+        for (const c of listaCampos) {
+            const val = item[c];
+            if (val === undefined || val === null || val === '') continue;
+            if (Array.isArray(val) && val.length === 0) continue;
+            if (typeof val === 'number' && val === 0 &&
+                (c === 'ultimoPrecioCaja' || c === 'costoAnteriorCaja' || c === 'variacionCosto' || c === 'descuentoValor') &&
+                !item.esBonificacionCruzada) {
+                continue;
+            }
+            salida[c] = Dominio.clonarObjetoSeguro(val);
+            tieneDatos = true;
+        }
+        return tieneDatos ? salida : null;
+    }
+
+    function extraerCamposCajaProducto(item) {
+        const camposCaja = (CONSTANTES && Array.isArray(CONSTANTES.CAMPOS_OPERATIVOS_CAJA))
+            ? CONSTANTES.CAMPOS_OPERATIVOS_CAJA
+            : ['ultimoPrecioCaja', 'costoAnteriorCaja', 'variacionCosto', 'costoUnitarioFiscal', 'costoReferencia', 'preciosVenta'];
+        return extraerSubconjuntoCampos(item, camposCaja);
+    }
+
+    function extraerCamposAdminProducto(item) {
+        const camposAdmin = ['historialCostos', 'proveedorHabitual', 'rncProveedor', 'ubicacion', 'descuentoValor', 'tipoDescuento', 'descuentoTotalLinea'];
+        return extraerSubconjuntoCampos(item, camposAdmin);
+    }
+
     function extraerCamposSensiblesProducto(item) {
         if (!item || typeof item !== 'object') return null;
         const campos = (CONSTANTES && Array.isArray(CONSTANTES.CAMPOS_SENSIBLES_CATALOGO))
@@ -77,75 +108,105 @@
                 'costoUnitarioFiscal', 'costoUnitario', 'costoUnitarioVenta',
                 'costoReferencia', 'preciosVenta', 'historialCostos',
                 'descuentoValor', 'tipoDescuento', 'descuentoTotalLinea',
-                'proveedorHabitual', 'rncProveedor', 'numeroFactura'
+                'proveedorHabitual', 'rncProveedor', 'ubicacion'
             ];
-        const sensible = {};
-        let tieneDatos = false;
-        for (const c of campos) {
-            const val = item[c];
-            if (val === undefined || val === null || val === '') continue;
-            if (Array.isArray(val) && val.length === 0) continue;
-            if (typeof val === 'number' && val === 0 && (c === 'ultimoPrecioCaja' || c === 'costoAnteriorCaja' || c === 'variacionCosto' || c === 'descuentoValor')) {
-                continue;
-            }
-            sensible[c] = Dominio.clonarObjetoSeguro(val);
-            tieneDatos = true;
-        }
-        return tieneDatos ? sensible : null;
+        return extraerSubconjuntoCampos(item, campos);
     }
 
     async function empaquetarProductoParaIdb(item) {
         const publico = Dominio.sanitizarFichaPublicaCatalogo(item);
         if (!publico || !publico.codigoBarras) return null;
 
+        const cod = publico.codigoBarras;
         const Seg = obtenerSeguridad();
-        const sensible = extraerCamposSensiblesProducto(item);
 
         if (Seg && Seg.estaConfigurado()) {
-            if (!Seg.estaBloqueado()) {
-                if (sensible) {
-                    const env = await Seg.cifrarJson(sensible);
-                    encDiccionarioBlobs.set(publico.codigoBarras, env);
-                    return { ...publico, _segCifrado: env };
+            const previo = encDiccionarioBlobs.get(cod) || {};
+            const adminAbierto = typeof Seg.estaAdminDesbloqueado === 'function' ? Seg.estaAdminDesbloqueado() : !Seg.estaBloqueado();
+            const cajaAbierta = typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : adminAbierto;
+
+            const reg = { ...publico };
+
+            if (adminAbierto) {
+                const datosCaja = extraerCamposCajaProducto(item);
+                const datosAdmin = extraerCamposAdminProducto(item);
+
+                if (datosCaja) {
+                    reg._segCaja = await Seg.cifrarParaCaja(datosCaja, cod);
+                } else if (previo._segCaja && !item._forzarLimpiarCaja) {
+                    reg._segCaja = previo._segCaja;
                 }
-                encDiccionarioBlobs.delete(publico.codigoBarras);
-                return publico;
+
+                if (datosAdmin) {
+                    reg._segAdmin = await Seg.cifrarJson(datosAdmin, { scope: 'admin', codigoBarras: cod });
+                } else if (previo._segAdmin && !item._forzarLimpiarAdmin) {
+                    reg._segAdmin = previo._segAdmin;
+                }
+                if (previo._segPendienteAdmin && !item._limpiarPendienteAdmin) {
+                    reg._segPendienteAdmin = previo._segPendienteAdmin;
+                }
+            } else if (cajaAbierta) {
+                const datosCaja = extraerCamposCajaProducto(item);
+                if (datosCaja) {
+                    reg._segCaja = await Seg.cifrarParaCaja(datosCaja, cod);
+                } else if (previo._segCaja) {
+                    reg._segCaja = previo._segCaja;
+                }
+                if (previo._segAdmin) reg._segAdmin = previo._segAdmin;
+                if (previo._segCifrado) reg._segCifrado = previo._segCifrado;
+                if (Array.isArray(item._segPendienteAdmin)) {
+                    reg._segPendienteAdmin = item._segPendienteAdmin;
+                } else if (previo._segPendienteAdmin) {
+                    reg._segPendienteAdmin = previo._segPendienteAdmin;
+                }
+            } else {
+                // Bloqueado total: preservar intactos todos los sobres previos en disco
+                if (previo._segCaja) reg._segCaja = previo._segCaja;
+                if (previo._segAdmin) reg._segAdmin = previo._segAdmin;
+                if (previo._segCifrado) reg._segCifrado = previo._segCifrado;
+                if (previo._segPendienteAdmin) reg._segPendienteAdmin = previo._segPendienteAdmin;
             }
-            // Bóveda bloqueada: preservar intacto el sobre cifrado previo en disco
-            const previo = encDiccionarioBlobs.get(publico.codigoBarras);
-            return previo ? { ...publico, _segCifrado: previo } : publico;
+
+            encDiccionarioBlobs.set(cod, {
+                _segCaja: reg._segCaja || null,
+                _segAdmin: reg._segAdmin || null,
+                _segCifrado: reg._segCifrado || null,
+                _segPendienteAdmin: Array.isArray(reg._segPendienteAdmin) ? reg._segPendienteAdmin : null
+            });
+            return reg;
         }
 
-        // Sin cifrado configurado todavía: mantener formato plano completo en IDB hasta que el dueño configure contraseña
+        // Sin cifrado configurado todavía: mantener registro completo en IDB hasta activar contraseña
         return { ...Dominio.clonarObjetoSeguro(item), ...publico };
     }
 
     async function desempaquetarProductoDesdeIdb(registro) {
         if (!registro || typeof registro !== 'object' || !registro.codigoBarras) return null;
         const publico = Dominio.sanitizarFichaPublicaCatalogo(registro);
+        if (!publico || !publico.codigoBarras) return null;
+        const cod = publico.codigoBarras;
         const Seg = obtenerSeguridad();
 
-        if (registro._segCifrado) {
-            encDiccionarioBlobs.set(publico.codigoBarras, registro._segCifrado);
-            if (Seg && !Seg.estaBloqueado()) {
-                try {
-                    const descifrado = await Seg.descifrarJson(registro._segCifrado);
-                    return { ...publico, ...descifrado };
-                } catch (e) {
-                    console.warn(`[Cripto] No se pudieron descifrar costos de ${publico.codigoBarras}:`, e);
-                    return publico;
-                }
+        if (Seg && Seg.estaConfigurado()) {
+            // Almacenar únicamente sobres cifrados en memoria interna privada (cero descifrado masivo en RAM)
+            const tieneCifrado = Boolean(registro._segCaja || registro._segAdmin || registro._segCifrado || registro._segPendienteAdmin);
+            if (tieneCifrado) {
+                encDiccionarioBlobs.set(cod, {
+                    _segCaja: registro._segCaja || null,
+                    _segAdmin: registro._segAdmin || null,
+                    _segCifrado: registro._segCifrado || null,
+                    _segPendienteAdmin: Array.isArray(registro._segPendienteAdmin) ? registro._segPendienteAdmin : null
+                });
             }
-            // Bloqueado: solo retornar campos sanitarios públicos
             return publico;
         }
 
-        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
-            return publico;
-        }
-
+        // Sin cifrado configurado aún
         const copia = Dominio.clonarObjetoSeguro(registro);
         delete copia._segCifrado;
+        delete copia._segCaja;
+        delete copia._segAdmin;
+        delete copia._segPendienteAdmin;
         return copia;
     }
 
@@ -502,7 +563,8 @@
     // --- GESTIÓN DE REGLAS DE CÁLCULO ---
     function obtenerReglasNegocio() {
         const Seg = obtenerSeguridad();
-        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+        const puedeVerReglas = !Seg || !Seg.estaConfigurado() || (typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : !Seg.estaBloqueado());
+        if (!puedeVerReglas) {
             return Dominio.sanitizarReglasNegocio(REGLAS_NEGOCIO_POR_DEFECTO);
         }
         const guardadas = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, REGLAS_NEGOCIO_POR_DEFECTO);
@@ -520,11 +582,19 @@
         encolarOperacionIdb(async () => {
             const db = await abrirBaseDatos();
             if (!db) return;
-            const payload = (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado())
-                ? await Seg.cifrarJson(sanitizadas)
-                : sanitizadas;
+            const adminActivo = Seg && Seg.estaConfigurado() && !Seg.estaBloqueado();
+            const payload = adminActivo ? await Seg.cifrarJson(sanitizadas) : sanitizadas;
+            const payloadCaja = (adminActivo && typeof Seg.estaCajaConfigurada === 'function' && Seg.estaCajaConfigurada())
+                ? await Seg.cifrarParaCaja(sanitizadas, 'reglas_caja')
+                : null;
             const tx = db.transaction([STORES.CONFIGURACION], 'readwrite');
-            tx.objectStore(STORES.CONFIGURACION).put(payload, 'reglas_activas');
+            const st = tx.objectStore(STORES.CONFIGURACION);
+            st.put(payload, 'reglas_activas');
+            if (payloadCaja) {
+                st.put(payloadCaja, 'reglas_caja');
+            } else if (adminActivo) {
+                st.delete('reglas_caja');
+            }
         });
 
         return {
@@ -533,10 +603,15 @@
         };
     }
 
-    // --- DICCIONARIO PERMANENTE DE CÓDIGOS DE BARRA ---
+    // --- DICCIONARIO PERMANENTE DE CÓDIGOS DE BARRA (FICHAS PÚBLICAS EN RAM + DESCIFRADO JIT) ---
     function obtenerDiccionarioCodigos() {
         const dic = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
-        return (dic && typeof dic === 'object' && !Array.isArray(dic)) ? dic : {};
+        if (!dic || typeof dic !== 'object' || Array.isArray(dic)) return {};
+        const Seg = obtenerSeguridad();
+        if (Seg && Seg.estaConfigurado()) {
+            return Dominio.sanitizarDiccionarioPublico(dic);
+        }
+        return dic;
     }
 
     function guardarDiccionarioCodigos(diccionario) {
@@ -548,20 +623,21 @@
             }
         }
         const Seg = obtenerSeguridad();
-        const dicParaRam = (Seg && Seg.estaConfigurado() && Seg.estaBloqueado())
+        const configurado = Boolean(Seg && Seg.estaConfigurado());
+        const dicParaRam = configurado
             ? Dominio.sanitizarDiccionarioPublico(diccionario)
             : diccionario;
 
         const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicParaRam);
-        const snapshotItems = Object.values(dicParaRam || {}).map(x => Dominio.clonarObjetoSeguro(x));
+        const fuenteItems = Object.values((configurado && (!Seg.estaBloqueado() || (typeof Seg.estaCajaActiva === 'function' && Seg.estaCajaActiva()))) ? (diccionario || {}) : (dicParaRam || {}))
+            .map(x => Dominio.clonarObjetoSeguro(x));
 
         encolarOperacionIdb(async () => {
             const db = await abrirBaseDatos();
             if (!db) return;
-            const empaquetados = (await Promise.all(snapshotItems.map(empaquetarProductoParaIdb))).filter(Boolean);
+            const empaquetados = (await Promise.all(fuenteItems.map(empaquetarProductoParaIdb))).filter(Boolean);
             const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
             const store = tx.objectStore(STORES.DICCIONARIO);
-            store.clear();
             empaquetados.forEach(item => store.put(item));
         });
 
@@ -575,18 +651,159 @@
         return diccionario[codigo] || null;
     }
 
+    async function leerRegistroCrudoDiccionarioIdb(codigo) {
+        const db = await abrirBaseDatos();
+        if (!db) return null;
+        return new Promise(resolve => {
+            try {
+                const tx = db.transaction([STORES.DICCIONARIO], 'readonly');
+                const req = tx.objectStore(STORES.DICCIONARIO).get(codigo);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            } catch (_) {
+                resolve(null);
+            }
+        });
+    }
+
+    async function obtenerSobresCodigoJit(codigo) {
+        let blob = encDiccionarioBlobs.get(codigo);
+        if (!blob) {
+            const regIdb = await leerRegistroCrudoDiccionarioIdb(codigo);
+            if (regIdb) {
+                blob = {
+                    _segCaja: regIdb._segCaja || null,
+                    _segAdmin: regIdb._segAdmin || null,
+                    _segCifrado: regIdb._segCifrado || null,
+                    _segPendienteAdmin: Array.isArray(regIdb._segPendienteAdmin) ? regIdb._segPendienteAdmin : null
+                };
+                if (blob._segCaja || blob._segAdmin || blob._segCifrado || blob._segPendienteAdmin) {
+                    encDiccionarioBlobs.set(codigo, blob);
+                }
+            }
+        }
+        return blob || null;
+    }
+
+    async function obtenerCostoOperativoProducto(codigoCrudo) {
+        const codigo = Dominio.normalizarCodigoBarras(codigoCrudo);
+        if (!codigo) return null;
+        const Seg = obtenerSeguridad();
+
+        if (!Seg || !Seg.estaConfigurado()) {
+            const dic = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
+            const item = dic[codigo];
+            if (!item) return null;
+            return extraerCamposCajaProducto(item);
+        }
+
+        const cajaActiva = typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : !Seg.estaBloqueado();
+        if (!cajaActiva) return null;
+
+        const blob = await obtenerSobresCodigoJit(codigo);
+        if (!blob) return null;
+
+        if (blob._segCaja) {
+            try {
+                return await Seg.descifrarDeCaja(blob._segCaja, codigo);
+            } catch (e) {
+                console.warn(`[Cripto] No se pudo descifrar _segCaja de ${codigo}:`, e);
+            }
+        }
+
+        if (blob._segCifrado && !Seg.estaBloqueado()) {
+            try {
+                const legacy = await Seg.descifrarJson(blob._segCifrado);
+                return extraerCamposCajaProducto(legacy);
+            } catch (_) {}
+        }
+
+        return null;
+    }
+
+    async function obtenerDetalleProductoAdmin(codigoCrudo) {
+        const codigo = Dominio.normalizarCodigoBarras(codigoCrudo);
+        if (!codigo) return null;
+        const dic = obtenerDiccionarioCodigos();
+        const basePublica = dic[codigo] ? Dominio.clonarObjetoSeguro(dic[codigo]) : null;
+        if (!basePublica) return null;
+
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado()) {
+            const completo = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
+            return completo[codigo] ? Dominio.clonarObjetoSeguro(completo[codigo]) : basePublica;
+        }
+        if (Seg.estaBloqueado()) {
+            return basePublica;
+        }
+
+        const blob = await obtenerSobresCodigoJit(codigo);
+        if (!blob) return basePublica;
+
+        let extraCaja = {};
+        let extraAdmin = {};
+        let extraLegacy = {};
+        if (blob._segCifrado) {
+            try { extraLegacy = await Seg.descifrarJson(blob._segCifrado); } catch (_) {}
+        }
+        if (blob._segCaja) {
+            try { extraCaja = await Seg.descifrarDeCaja(blob._segCaja, codigo); } catch (_) {}
+        }
+        if (blob._segAdmin) {
+            try { extraAdmin = await Seg.descifrarJson(blob._segAdmin, { scope: 'admin', codigoBarras: codigo }); } catch (_) {}
+        }
+
+        return { ...basePublica, ...extraLegacy, ...extraAdmin, ...extraCaja };
+    }
+
+    async function obtenerResumenCostosTablaSiAdmin() {
+        const mapa = new Map();
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado()) {
+            const dic = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
+            for (const [cod, item] of Object.entries(dic || {})) {
+                if (!item) continue;
+                mapa.set(cod, {
+                    ultimoPrecioCaja: item.ultimoPrecioCaja,
+                    variacionCosto: item.variacionCosto
+                });
+            }
+            return mapa;
+        }
+        if (Seg.estaBloqueado()) return mapa;
+
+        for (const [cod, blob] of encDiccionarioBlobs.entries()) {
+            try {
+                let datos = null;
+                if (blob._segCaja) {
+                    datos = await Seg.descifrarDeCaja(blob._segCaja, cod);
+                } else if (blob._segCifrado) {
+                    datos = await Seg.descifrarJson(blob._segCifrado);
+                }
+                if (datos) {
+                    mapa.set(cod, {
+                        ultimoPrecioCaja: datos.ultimoPrecioCaja,
+                        variacionCosto: datos.variacionCosto
+                    });
+                }
+            } catch (_) {}
+        }
+        return mapa;
+    }
+
     function aprenderProductoEnDiccionario(lineaProducto, contextoFactura = {}) {
         const codigo = Dominio.normalizarCodigoBarras(lineaProducto.codigoBarras);
         const nombreCandidato = String(lineaProducto.nombre || '').trim();
         const esNombreGenerico = !nombreCandidato || /^Producto #\d+$/i.test(nombreCandidato) || nombreCandidato === 'Producto IA' || nombreCandidato === 'Producto';
         if (!codigo) return false;
 
-        const diccionario = obtenerDiccionarioCodigos();
-        const existente = diccionario[codigo];
+        const dicActual = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
+        const existente = dicActual[codigo];
         const Seg = obtenerSeguridad();
-        const estaBloqueado = Boolean(Seg && Seg.estaConfigurado() && Seg.estaBloqueado());
+        const configurado = Boolean(Seg && Seg.estaConfigurado());
+        const adminAbierto = !configurado || (typeof Seg.estaAdminDesbloqueado === 'function' ? Seg.estaAdminDesbloqueado() : !Seg.estaBloqueado());
+        const cajaAbierta = !configurado || (typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : adminAbierto);
 
-        // PROTECCIÓN DE INTEGRIDAD DE CATÁLOGO MAESTRO:
         let nombreFinal = nombreCandidato;
         let tipo = lineaProducto.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
         let tasaItbis = (lineaProducto.tasaItbis !== undefined && Number.isFinite(Number(lineaProducto.tasaItbis)))
@@ -601,12 +818,8 @@
             if (existente.unidadesPorCaja && existente.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
                 unidadesPorCaja = Number(existente.unidadesPorCaja) || 1;
             }
-            if (existente.tasaItbis !== undefined) {
-                tasaItbis = Number(existente.tasaItbis);
-            }
-            if (existente.esLeche !== undefined) {
-                esLeche = Boolean(existente.esLeche);
-            }
+            if (existente.tasaItbis !== undefined) tasaItbis = Number(existente.tasaItbis);
+            if (existente.esLeche !== undefined) esLeche = Boolean(existente.esLeche);
         } else if (esNombreGenerico && existente && existente.nombre && !/^Producto #\d+$/i.test(existente.nombre)) {
             nombreFinal = existente.nombre;
         } else if (!nombreFinal) {
@@ -621,85 +834,7 @@
             }
         }
 
-        // Si la bóveda está bloqueada, SOLO aprender/preservar ficha sanitaria pública (preservando _segCifrado intacto)
-        if (estaBloqueado) {
-            const fichaPublica = Dominio.sanitizarFichaPublicaCatalogo({
-                ...(existente || {}),
-                codigoBarras: codigo,
-                nombre: nombreFinal,
-                nombreComercial: lineaProducto.nombreComercial || (existente && existente.nombreComercial) || nombreFinal,
-                principioActivo: lineaProducto.principioActivo || (existente && existente.principioActivo) || '',
-                laboratorio: lineaProducto.laboratorio || (existente && existente.laboratorio) || '',
-                concentracion: lineaProducto.concentracion || (existente && existente.concentracion) || '',
-                categoria: lineaProducto.categoria || (existente && existente.categoria) || '',
-                presentacion: lineaProducto.presentacion || (existente && existente.presentacion) || '',
-                formaFarmaceutica: lineaProducto.formaFarmaceutica || (existente && existente.formaFarmaceutica) || '',
-                registroSanitario: lineaProducto.registroSanitario || (existente && existente.registroSanitario) || '',
-                condicionVenta: lineaProducto.condicionVenta || (existente && existente.condicionVenta) || 'OTC',
-                ubicacion: lineaProducto.ubicacion || (existente && existente.ubicacion) || '',
-                tipo,
-                unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : unidadesPorCaja,
-                aplicaItbis: tasaItbis > 0,
-                tasaItbis,
-                esLeche,
-                actualizadoEn: new Date().toISOString()
-            });
-            diccionario[codigo] = fichaPublica;
-            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
-
-            encolarOperacionIdb(async () => {
-                const db = await abrirBaseDatos();
-                if (!db) return;
-                const reg = await empaquetarProductoParaIdb(fichaPublica);
-                if (!reg) return;
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                tx.objectStore(STORES.DICCIONARIO).put(reg);
-            });
-            return true;
-        }
-
-        const precioCajaActual = Number(lineaProducto.precioCajaBase) || 0;
-        const costoAnteriorCaja = (existente && existente.ultimoPrecioCaja && Number(existente.ultimoPrecioCaja) > 0)
-            ? Number(existente.ultimoPrecioCaja)
-            : 0;
-
-        let variacionCosto = 0;
-        if (costoAnteriorCaja > 0 && precioCajaActual > 0) {
-            variacionCosto = (Dominio && typeof Dominio.calcularVariacionCostoPorcentaje === 'function')
-                ? Dominio.calcularVariacionCostoPorcentaje(precioCajaActual, costoAnteriorCaja)
-                : Math.round(((precioCajaActual - costoAnteriorCaja) / costoAnteriorCaja) * 10000) / 100;
-        } else if (existente && existente.variacionCosto !== undefined) {
-            variacionCosto = existente.variacionCosto;
-        }
-
-        const proveedor = (contextoFactura && contextoFactura.proveedor) || lineaProducto.proveedor || (existente && existente.proveedorHabitual) || '';
-        const rncProveedor = (contextoFactura && contextoFactura.rnc) || lineaProducto.rncProveedor || (existente && existente.rncProveedor) || '';
-        const numeroFactura = (contextoFactura && contextoFactura.numeroFactura) || lineaProducto.numeroFactura || '';
-
-        const historialCostos = Array.isArray(existente && existente.historialCostos)
-            ? [...existente.historialCostos]
-            : [];
-
-        if (precioCajaActual > 0) {
-            historialCostos.unshift({
-                fecha: (contextoFactura && contextoFactura.fechaEmision) || (Dominio ? Dominio.obtenerFechaLocalISO() : new Date().toISOString().slice(0, 10)),
-                precioCaja: precioCajaActual,
-                costoUnitarioFiscal: lineaProducto.costoUnitario || (Dominio && Dominio.formatearCostoFiscalOchoDecimales
-                    ? Dominio.formatearCostoFiscalOchoDecimales(precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1)))
-                    : (precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1))).toFixed(8)),
-                proveedor,
-                rnc: rncProveedor,
-                numeroFactura,
-                descuentoValor: Number(lineaProducto.descuentoValor) || 0,
-                tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
-                aplicaItbis: tasaItbis > 0
-            });
-            if (historialCostos.length > 20) {
-                historialCostos.length = 20;
-            }
-        }
-
-        const fichaActualizada = {
+        const fichaPublica = Dominio.sanitizarFichaPublicaCatalogo({
             ...(existente || {}),
             codigoBarras: codigo,
             nombre: nombreFinal,
@@ -712,45 +847,203 @@
             formaFarmaceutica: lineaProducto.formaFarmaceutica || (existente && existente.formaFarmaceutica) || '',
             registroSanitario: lineaProducto.registroSanitario || (existente && existente.registroSanitario) || '',
             condicionVenta: lineaProducto.condicionVenta || (existente && existente.condicionVenta) || 'OTC',
-            ubicacion: lineaProducto.ubicacion || (existente && existente.ubicacion) || '',
-            proveedorHabitual: proveedor,
-            rncProveedor: rncProveedor,
             tipo,
             unidadesPorCaja: tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : unidadesPorCaja,
-            ultimoPrecioCaja: precioCajaActual > 0 ? precioCajaActual : ((existente && existente.ultimoPrecioCaja) || 0),
-            costoAnteriorCaja: costoAnteriorCaja,
-            variacionCosto: variacionCosto,
-            costoUnitarioFiscal: lineaProducto.costoUnitario || (existente && existente.costoUnitarioFiscal) || (Dominio && Dominio.formatearCostoFiscalOchoDecimales
-                ? Dominio.formatearCostoFiscalOchoDecimales(precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1)))
-                : (precioCajaActual / (tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : (Number(lineaProducto.unidadesPorCaja) || 1))).toFixed(8)),
-            preciosVenta: lineaProducto.precios ? {
-                p1Exacto: lineaProducto.precios.p1Exacto,
-                p1Redondeado: lineaProducto.precios.p1Redondeado,
-                p2Exacto: lineaProducto.precios.p2Exacto,
-                p2Redondeado: lineaProducto.precios.p2Redondeado,
-                p3Exacto: lineaProducto.precios.p3Exacto,
-                p3Redondeado: lineaProducto.precios.p3Redondeado
-            } : (existente && existente.preciosVenta ? existente.preciosVenta : null),
-            historialCostos,
             aplicaItbis: tasaItbis > 0,
             tasaItbis,
             esLeche,
-            descuentoValor: Number(lineaProducto.descuentoValor) || 0,
-            tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
             actualizadoEn: new Date().toISOString()
-        };
+        });
 
-        diccionario[codigo] = fichaActualizada;
-        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
+        const precioCajaActual = Number(lineaProducto.precioCajaBase) || 0;
+        const proveedor = (contextoFactura && contextoFactura.proveedor) || lineaProducto.proveedor || '';
+        const rncProveedor = (contextoFactura && contextoFactura.rnc) || lineaProducto.rncProveedor || '';
+        const fechaCompra = (contextoFactura && contextoFactura.fechaEmision) || (Dominio ? Dominio.obtenerFechaLocalISO() : new Date().toISOString().slice(0, 10));
+        const unidadesReales = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : unidadesPorCaja;
+        const costoUnitCalculado = lineaProducto.costoUnitario || (Dominio && Dominio.formatearCostoFiscalOchoDecimales
+            ? Dominio.formatearCostoFiscalOchoDecimales(precioCajaActual / unidadesReales)
+            : (precioCajaActual / unidadesReales).toFixed(8));
+        const preciosVentaActual = lineaProducto.precios ? {
+            p1Exacto: lineaProducto.precios.p1Exacto,
+            p1Redondeado: lineaProducto.precios.p1Redondeado,
+            p2Exacto: lineaProducto.precios.p2Exacto,
+            p2Redondeado: lineaProducto.precios.p2Redondeado,
+            p3Exacto: lineaProducto.precios.p3Exacto,
+            p3Redondeado: lineaProducto.precios.p3Redondeado
+        } : null;
 
-        const clonSnapshot = Dominio.clonarObjetoSeguro(fichaActualizada);
+        if (!configurado) {
+            const costoAnteriorCaja = (existente && existente.ultimoPrecioCaja && Number(existente.ultimoPrecioCaja) > 0)
+                ? Number(existente.ultimoPrecioCaja)
+                : 0;
+            let variacionCosto = 0;
+            if (costoAnteriorCaja > 0 && precioCajaActual > 0) {
+                variacionCosto = (Dominio && typeof Dominio.calcularVariacionCostoPorcentaje === 'function')
+                    ? Dominio.calcularVariacionCostoPorcentaje(precioCajaActual, costoAnteriorCaja)
+                    : Math.round(((precioCajaActual - costoAnteriorCaja) / costoAnteriorCaja) * 10000) / 100;
+            } else if (existente && existente.variacionCosto !== undefined) {
+                variacionCosto = existente.variacionCosto;
+            }
+            const historialCostos = Array.isArray(existente && existente.historialCostos) ? [...existente.historialCostos] : [];
+            if (precioCajaActual > 0) {
+                historialCostos.unshift({
+                    fecha: fechaCompra,
+                    precioCaja: precioCajaActual,
+                    costoUnitarioFiscal: costoUnitCalculado,
+                    proveedor: proveedor || (existente && existente.proveedorHabitual) || '',
+                    rnc: rncProveedor || (existente && existente.rncProveedor) || '',
+                    descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+                    tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
+                    aplicaItbis: tasaItbis > 0
+                });
+                if (historialCostos.length > 20) historialCostos.length = 20;
+            }
+            const fichaPlano = {
+                ...(existente || {}),
+                ...fichaPublica,
+                ubicacion: lineaProducto.ubicacion || (existente && existente.ubicacion) || '',
+                proveedorHabitual: proveedor || (existente && existente.proveedorHabitual) || '',
+                rncProveedor: rncProveedor || (existente && existente.rncProveedor) || '',
+                ultimoPrecioCaja: precioCajaActual > 0 ? precioCajaActual : ((existente && existente.ultimoPrecioCaja) || undefined),
+                costoAnteriorCaja,
+                variacionCosto,
+                costoUnitarioFiscal: costoUnitCalculado,
+                preciosVenta: preciosVentaActual || (existente && existente.preciosVenta ? existente.preciosVenta : null),
+                historialCostos,
+                descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+                tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto'
+            };
+            dicActual[codigo] = fichaPlano;
+            escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicActual);
+            const clonSnapshot = Dominio.clonarObjetoSeguro(fichaPlano);
+            encolarOperacionIdb(async () => {
+                const db = await abrirBaseDatos();
+                if (!db) return;
+                const regIdb = await empaquetarProductoParaIdb(clonSnapshot);
+                if (!regIdb) return;
+                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                tx.objectStore(STORES.DICCIONARIO).put(regIdb);
+            });
+            return true;
+        }
+
+        // Con bóveda configurada: cacheStorage mantiene exclusivamente fichas sanitarias públicas
+        dicActual[codigo] = fichaPublica;
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicActual);
+
         encolarOperacionIdb(async () => {
             const db = await abrirBaseDatos();
             if (!db) return;
-            const regIdb = await empaquetarProductoParaIdb(clonSnapshot);
-            if (!regIdb) return;
+            const blobPrevio = (await obtenerSobresCodigoJit(codigo)) || {};
+            let cajaPrevia = null;
+            let adminPrevio = null;
+
+            if (cajaAbierta && blobPrevio._segCaja) {
+                try { cajaPrevia = await Seg.descifrarDeCaja(blobPrevio._segCaja, codigo); } catch (_) {}
+            }
+            if (adminAbierto) {
+                if (blobPrevio._segCifrado) {
+                    try {
+                        const leg = await Seg.descifrarJson(blobPrevio._segCifrado);
+                        cajaPrevia = cajaPrevia || extraerCamposCajaProducto(leg);
+                        adminPrevio = extraerCamposAdminProducto(leg);
+                    } catch (_) {}
+                }
+                if (blobPrevio._segAdmin) {
+                    try {
+                        const adm = await Seg.descifrarJson(blobPrevio._segAdmin, { scope: 'admin', codigoBarras: codigo });
+                        adminPrevio = { ...(adminPrevio || {}), ...adm };
+                    } catch (_) {}
+                }
+            }
+
+            if (adminAbierto) {
+                const costoAnt = (cajaPrevia && cajaPrevia.ultimoPrecioCaja > 0) ? Number(cajaPrevia.ultimoPrecioCaja) : 0;
+                let varPct = (cajaPrevia && cajaPrevia.variacionCosto !== undefined) ? cajaPrevia.variacionCosto : 0;
+                if (costoAnt > 0 && precioCajaActual > 0) {
+                    varPct = (Dominio && typeof Dominio.calcularVariacionCostoPorcentaje === 'function')
+                        ? Dominio.calcularVariacionCostoPorcentaje(precioCajaActual, costoAnt)
+                        : Math.round(((precioCajaActual - costoAnt) / costoAnt) * 10000) / 100;
+                }
+                const historial = Array.isArray(adminPrevio && adminPrevio.historialCostos) ? [...adminPrevio.historialCostos] : [];
+                if (precioCajaActual > 0) {
+                    historial.unshift({
+                        fecha: fechaCompra,
+                        precioCaja: precioCajaActual,
+                        costoUnitarioFiscal: costoUnitCalculado,
+                        proveedor: proveedor || (adminPrevio && adminPrevio.proveedorHabitual) || '',
+                        rnc: rncProveedor || (adminPrevio && adminPrevio.rncProveedor) || '',
+                        descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+                        tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
+                        aplicaItbis: tasaItbis > 0
+                    });
+                    if (historial.length > 20) historial.length = 20;
+                }
+
+                const fichaCompleta = {
+                    ...fichaPublica,
+                    ultimoPrecioCaja: precioCajaActual > 0 ? precioCajaActual : ((cajaPrevia && cajaPrevia.ultimoPrecioCaja) || undefined),
+                    costoAnteriorCaja: costoAnt,
+                    variacionCosto: varPct,
+                    costoUnitarioFiscal: costoUnitCalculado,
+                    preciosVenta: preciosVentaActual || (cajaPrevia && cajaPrevia.preciosVenta) || null,
+                    ubicacion: lineaProducto.ubicacion || (adminPrevio && adminPrevio.ubicacion) || '',
+                    proveedorHabitual: proveedor || (adminPrevio && adminPrevio.proveedorHabitual) || '',
+                    rncProveedor: rncProveedor || (adminPrevio && adminPrevio.rncProveedor) || '',
+                    historialCostos: historial,
+                    descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+                    tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto'
+                };
+                const reg = await empaquetarProductoParaIdb(fichaCompleta);
+                if (!reg) return;
+                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                tx.objectStore(STORES.DICCIONARIO).put(reg);
+                return;
+            }
+
+            if (cajaAbierta) {
+                const costoAnt = (cajaPrevia && cajaPrevia.ultimoPrecioCaja > 0) ? Number(cajaPrevia.ultimoPrecioCaja) : 0;
+                let varPct = (cajaPrevia && cajaPrevia.variacionCosto !== undefined) ? cajaPrevia.variacionCosto : 0;
+                if (costoAnt > 0 && precioCajaActual > 0) {
+                    varPct = (Dominio && typeof Dominio.calcularVariacionCostoPorcentaje === 'function')
+                        ? Dominio.calcularVariacionCostoPorcentaje(precioCajaActual, costoAnt)
+                        : Math.round(((precioCajaActual - costoAnt) / costoAnt) * 10000) / 100;
+                }
+                const fichaCaja = {
+                    ...fichaPublica,
+                    ultimoPrecioCaja: precioCajaActual > 0 ? precioCajaActual : ((cajaPrevia && cajaPrevia.ultimoPrecioCaja) || undefined),
+                    costoAnteriorCaja: costoAnt,
+                    variacionCosto: varPct,
+                    costoUnitarioFiscal: costoUnitCalculado,
+                    preciosVenta: preciosVentaActual || (cajaPrevia && cajaPrevia.preciosVenta) || null
+                };
+                if (Seg.tieneBuzonPublico() && (precioCajaActual > 0 || proveedor)) {
+                    const deltaAdmin = {
+                        fecha: fechaCompra,
+                        precioCaja: precioCajaActual,
+                        costoUnitarioFiscal: costoUnitCalculado,
+                        proveedor,
+                        rnc: rncProveedor,
+                        descuentoValor: Number(lineaProducto.descuentoValor) || 0,
+                        tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
+                        aplicaItbis: tasaItbis > 0
+                    };
+                    const sobreDelta = await Seg.sellarParaBuzonAdmin(deltaAdmin, { scope: 'delta_producto', codigoBarras: codigo });
+                    const listaPend = Array.isArray(blobPrevio._segPendienteAdmin) ? [...blobPrevio._segPendienteAdmin, sobreDelta] : [sobreDelta];
+                    fichaCaja._segPendienteAdmin = listaPend.slice(-20);
+                }
+                const reg = await empaquetarProductoParaIdb(fichaCaja);
+                if (!reg) return;
+                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                tx.objectStore(STORES.DICCIONARIO).put(reg);
+                return;
+            }
+
+            // Bloqueado total: actualiza únicamente ficha sanitaria pública conservando secretos cifrados intactos
+            const reg = await empaquetarProductoParaIdb(fichaPublica);
+            if (!reg) return;
             const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-            tx.objectStore(STORES.DICCIONARIO).put(regIdb);
+            tx.objectStore(STORES.DICCIONARIO).put(reg);
         });
 
         return true;
@@ -774,7 +1067,7 @@
         return true;
     }
 
-    // --- HISTORIAL (7 DÍAS) Y BORRADOR ACTIVO ---
+    // --- HISTORIAL (7 DÍAS), BUZÓN SELLADO Y BORRADOR ACTIVO ---
     function obtenerHistorialFacturas() {
         const Seg = obtenerSeguridad();
         if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
@@ -787,7 +1080,7 @@
     function guardarHistorialFacturas(listaFacturas) {
         const Seg = obtenerSeguridad();
         if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
-            return { exito: false, bloqueado: true, error: 'Bóveda bloqueada. Desbloquea con contraseña de administrador para guardar facturas.' };
+            return { exito: false, bloqueado: true, error: 'Bóveda bloqueada. Desbloquea con contraseña de administrador para modificar facturas.' };
         }
         const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, listaFacturas);
         const listaClonada = (listaFacturas || []).map(f => Dominio.clonarObjetoSeguro(f)).filter(f => f && f.id);
@@ -798,7 +1091,7 @@
             let payloads = listaClonada;
             if (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado()) {
                 payloads = await Promise.all(listaClonada.map(async fac => {
-                    const env = await Seg.cifrarJson(fac);
+                    const env = await Seg.cifrarJson(fac, { id: fac.id, store: STORES.HISTORIAL });
                     return {
                         id: fac.id,
                         timestampGuardado: fac.timestampGuardado || Date.now(),
@@ -813,6 +1106,56 @@
         });
 
         return resultado;
+    }
+
+    async function archivarFacturaEnBuzon(facturaCerrada) {
+        if (!facturaCerrada || !facturaCerrada.id) {
+            return { exito: false, error: 'Factura inválida para archivar.' };
+        }
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado()) {
+            const actual = obtenerHistorialFacturas();
+            actual.unshift(Dominio.clonarObjetoSeguro(facturaCerrada));
+            return guardarHistorialFacturas(actual);
+        }
+
+        const cajaActiva = typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : !Seg.estaBloqueado();
+        if (!cajaActiva) {
+            return { exito: false, bloqueado: true, error: 'Ingresa tu PIN de Mostrador o Contraseña Admin para archivar la factura.' };
+        }
+
+        const clon = Dominio.clonarObjetoSeguro(facturaCerrada);
+        if (!Seg.estaBloqueado()) {
+            const historial = obtenerHistorialFacturas();
+            const idx = historial.findIndex(f => f.id === clon.id);
+            if (idx >= 0) historial[idx] = clon;
+            else historial.unshift(clon);
+            return guardarHistorialFacturas(historial);
+        }
+
+        if (!Seg.tieneBuzonPublico || !Seg.tieneBuzonPublico()) {
+            return { exito: false, bloqueado: true, error: 'Buzón sellado no disponible aún. Desbloquea Admin una vez para inicializar llaves.' };
+        }
+
+        const sobreBuzon = await Seg.sellarParaBuzonAdmin(clon, {
+            id: clon.id,
+            store: STORES.HISTORIAL,
+            buzon: true
+        });
+        const regIdb = {
+            id: clon.id,
+            timestampGuardado: clon.timestampGuardado || Date.now(),
+            ...sobreBuzon
+        };
+
+        await encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
+            if (!db) return;
+            const tx = db.transaction([STORES.HISTORIAL], 'readwrite');
+            tx.objectStore(STORES.HISTORIAL).put(regIdb);
+        });
+
+        return { exito: true, selladaEnBuzon: true };
     }
 
     function limpiarHistorialExpirado7Dias() {
@@ -833,6 +1176,7 @@
         const fechaEmision = Dominio.obtenerFechaLocalISO();
         return {
             id: null,
+            folioInterno: '',
             proveedor: '',
             numeroFactura: '',
             fechaEmision,
@@ -846,7 +1190,8 @@
 
     function cargarBorradorActivo() {
         const Seg = obtenerSeguridad();
-        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+        const puedeVerCaja = !Seg || !Seg.estaConfigurado() || (typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : !Seg.estaBloqueado());
+        if (!puedeVerCaja) {
             return crearSesionVacia();
         }
         const borrador = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, null);
@@ -866,7 +1211,8 @@
 
     function guardarBorradorActivo(sesionActual) {
         const Seg = obtenerSeguridad();
-        if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
+        const puedeGuardarCaja = !Seg || !Seg.estaConfigurado() || (typeof Seg.estaCajaActiva === 'function' ? Seg.estaCajaActiva() : !Seg.estaBloqueado());
+        if (!puedeGuardarCaja) {
             return { exito: false, bloqueado: true };
         }
         const resultado = escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, sesionActual);
@@ -875,9 +1221,16 @@
         encolarOperacionIdb(async () => {
             const db = await abrirBaseDatos();
             if (!db) return;
-            const payload = (Seg && Seg.estaConfigurado() && !Seg.estaBloqueado())
-                ? await Seg.cifrarJson(clon)
-                : clon;
+            let payload = clon;
+            if (Seg && Seg.estaConfigurado()) {
+                if (typeof Seg.estaCajaConfigurada === 'function' && Seg.estaCajaConfigurada()) {
+                    payload = await Seg.cifrarParaCaja(clon, 'borrador');
+                } else if (!Seg.estaBloqueado()) {
+                    payload = await Seg.cifrarJson(clon, { scope: 'borrador' });
+                } else {
+                    return;
+                }
+            }
             const tx = db.transaction([STORES.BORRADOR], 'readwrite');
             tx.objectStore(STORES.BORRADOR).put(payload, 'activo');
         });
@@ -1256,16 +1609,88 @@
         };
     }
 
-        // --- EDICIÓN DELIBERADA DE FICHA MAESTRA EN CATÁLOGO / AJUSTES ---
+    function exportarLaboratoriosJson() {
+        const labs = obtenerDirectorioLaboratorios();
+        const sobre = Dominio.generarSobreLaboratorios(labs);
+        const fechaIso = Dominio.obtenerFechaLocalISO();
+        descargarObjetoComoJson(sobre, `laboratorios-sanitarios-${fechaIso}.json`, CONSTANTES.TIPO_ARCHIVO_DIRECTORIO_LABORATORIOS);
+        return {
+            exito: true,
+            totalLaboratorios: overTotalLabs(sobre)
+        };
+    }
+
+    function overTotalLabs(sobre) {
+        return (sobre && sobre.resumen && sobre.resumen.totalLaboratorios) || 0;
+    }
+
+    function importarLaboratoriosJson(objetoCandidato) {
+        if (!objetoCandidato || typeof objetoCandidato !== 'object') {
+            return { exito: false, error: 'El archivo seleccionado no es un JSON válido.' };
+        }
+        let datos = objetoCandidato;
+        if (Dominio && typeof Dominio.verificarSobreDatos === 'function') {
+            const verif = Dominio.verificarSobreDatos(objetoCandidato, CONSTANTES.TIPO_ARCHIVO_DIRECTORIO_LABORATORIOS);
+            if (verif.esValido) {
+                datos = verif.datos;
+            } else if (!verif.esLegacy) {
+                return { exito: false, error: verif.error };
+            }
+        }
+        const listaRaw = Array.isArray(datos)
+            ? datos
+            : (datos.datos && Array.isArray(datos.datos.laboratorios))
+                ? datos.datos.laboratorios
+                : (Array.isArray(datos.laboratorios) ? datos.laboratorios : null);
+
+        if (!listaRaw) {
+            return { exito: false, error: 'El archivo no contiene una lista de laboratorios válida.' };
+        }
+        const limpios = Dominio.sanitizarDirectorioLaboratoriosPublico(listaRaw);
+        if (limpios.length === 0) {
+            return { exito: false, error: 'No se encontraron laboratorios válidos para importar.' };
+        }
+
+        const actuales = obtenerDirectorioLaboratorios();
+        const porNombre = new Map(actuales.map(l => [String(l.nombre || '').toLowerCase().trim(), { ...l }]));
+        let agregados = 0;
+        let actualizados = 0;
+        for (const lab of limpios) {
+            const k = lab.nombre.toLowerCase().trim();
+            if (porNombre.has(k)) {
+                porNombre.set(k, { ...porNombre.get(k), ...lab, id: porNombre.get(k).id });
+                actualizados++;
+            } else {
+                porNombre.set(k, lab);
+                agregados++;
+            }
+        }
+        const finalLista = Array.from(porNombre.values());
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, finalLista);
+        escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, finalLista);
+
+        encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
+            if (!db) return;
+            const tx = db.transaction([STORES.LABORATORIOS], 'readwrite');
+            const st = tx.objectStore(STORES.LABORATORIOS);
+            finalLista.forEach(l => st.put(l));
+        });
+
+        return { exito: true, agregados, actualizados, total: finalLista.length };
+    }
+
+    // --- EDICIÓN DELIBERADA DE FICHA MAESTRA EN CATÁLOGO / AJUSTES ---
     function guardarFichaProductoCatalogo(ficha) {
         if (!ficha || !ficha.codigoBarras) return { exito: false, error: 'Código de barras no proporcionado.' };
         const codigo = Dominio.normalizarCodigoBarras(ficha.codigoBarras);
         if (!codigo) return { exito: false, error: 'Código de barras no válido.' };
 
-        const diccionario = obtenerDiccionarioCodigos();
+        const diccionario = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
         const existente = diccionario[codigo] || {};
         const Seg = obtenerSeguridad();
-        const estaBloqueado = Boolean(Seg && Seg.estaConfigurado() && Seg.estaBloqueado());
+        const configurado = Boolean(Seg && Seg.estaConfigurado());
+        const estaBloqueado = Boolean(configurado && Seg.estaBloqueado());
 
         const tipo = ficha.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
         const unidadesPorCaja = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Math.max(1, parseInt(ficha.unidadesPorCaja, 10) || 1);
@@ -1276,8 +1701,8 @@
             ? Dominio.estandarizarNombreFarmaceutico(nombreCrudo)
             : nombreCrudo;
 
-        const basePublica = {
-            ...(estaBloqueado ? Dominio.sanitizarFichaPublicaCatalogo(existente) : existente),
+        const basePublica = Dominio.sanitizarFichaPublicaCatalogo({
+            ...existente,
             codigoBarras: codigo,
             nombre: nombreFinal,
             nombreComercial: String(ficha.nombreComercial || ficha.nombre || existente.nombreComercial || nombreFinal).trim(),
@@ -1289,59 +1714,88 @@
             formaFarmaceutica: String(ficha.formaFarmaceutica || '').trim(),
             registroSanitario: String(ficha.registroSanitario || '').trim(),
             condicionVenta: String(ficha.condicionVenta || 'OTC').trim(),
-            ubicacion: String(ficha.ubicacion || '').trim(),
             tipo,
             unidadesPorCaja,
             aplicaItbis: tasaItbis > 0,
             tasaItbis,
             esLeche: Boolean(ficha.esLeche),
             actualizadoEn: new Date().toISOString()
-        };
+        });
 
-        const fichaActualizada = estaBloqueado
-            ? Dominio.sanitizarFichaPublicaCatalogo(basePublica)
-            : {
+        let fichaParaIdb = { ...basePublica };
+        let costoEditado = undefined;
+        if (!estaBloqueado) {
+            if (ficha.ultimoPrecioCaja !== undefined && ficha.ultimoPrecioCaja !== null && ficha.ultimoPrecioCaja !== '') {
+                const n = Number(ficha.ultimoPrecioCaja);
+                if (Number.isFinite(n) && n > 0) costoEditado = n;
+            }
+            fichaParaIdb = {
                 ...basePublica,
-                proveedorHabitual: String(ficha.proveedorHabitual || existente.proveedorHabitual || '').trim(),
-                rncProveedor: String(ficha.rncProveedor || existente.rncProveedor || '').trim(),
-                ultimoPrecioCaja: Number(ficha.ultimoPrecioCaja !== undefined ? ficha.ultimoPrecioCaja : (existente.ultimoPrecioCaja || 0))
+                ubicacion: String(ficha.ubicacion !== undefined ? ficha.ubicacion : (existente.ubicacion || '')).trim(),
+                proveedorHabitual: String(ficha.proveedorHabitual || '').trim(),
+                rncProveedor: String(ficha.rncProveedor || '').trim()
             };
+            if (costoEditado !== undefined) {
+                fichaParaIdb.ultimoPrecioCaja = costoEditado;
+            } else if (ficha.ultimoPrecioCaja === '' || ficha.ultimoPrecioCaja === null) {
+                fichaParaIdb._forzarLimpiarCaja = true;
+            }
+        }
 
         // Auto-alimentación inteligente: Registrar laboratorio si es nuevo (público)
-        if (fichaActualizada.laboratorio && fichaActualizada.laboratorio.length >= 2) {
-            const labExistente = buscarLaboratorioPorNombre(fichaActualizada.laboratorio);
+        if (basePublica.laboratorio && basePublica.laboratorio.length >= 2) {
+            const labExistente = buscarLaboratorioPorNombre(basePublica.laboratorio);
             if (!labExistente) {
                 guardarLaboratorioEnDirectorio({
-                    nombre: fichaActualizada.laboratorio,
+                    nombre: basePublica.laboratorio,
                     origen: 'Nacional RD'
                 });
             }
         }
-        // Auto-alimentación inteligente de proveedor solo si bóveda está desbloqueada/disponible
-        if (!estaBloqueado && fichaActualizada.proveedorHabitual && fichaActualizada.proveedorHabitual.length >= 2) {
-            const provExistente = buscarProveedorPorNombre(fichaActualizada.proveedorHabitual);
+        // Auto-alimentación inteligente de proveedor solo si Admin está disponible
+        if (!estaBloqueado && fichaParaIdb.proveedorHabitual && fichaParaIdb.proveedorHabitual.length >= 2) {
+            const provExistente = buscarProveedorPorNombre(fichaParaIdb.proveedorHabitual);
             if (!provExistente) {
                 guardarProveedorEnDirectorio({
-                    nombre: fichaActualizada.proveedorHabitual,
-                    rnc: fichaActualizada.rncProveedor || ''
+                    nombre: fichaParaIdb.proveedorHabitual,
+                    rnc: fichaParaIdb.rncProveedor || ''
                 });
             }
         }
 
-        diccionario[codigo] = fichaActualizada;
+        const fichaParaRam = configurado ? basePublica : fichaParaIdb;
+        diccionario[codigo] = fichaParaRam;
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
 
-        const clonSnapshot = Dominio.clonarObjetoSeguro(fichaActualizada);
+        const clonSnapshot = Dominio.clonarObjetoSeguro(fichaParaIdb);
         encolarOperacionIdb(async () => {
             const db = await abrirBaseDatos();
             if (!db) return;
+            // Si Admin está desbloqueado y había historial previo en _segAdmin, preservarlo si no venía en ficha
+            if (configurado && !estaBloqueado) {
+                const blobPrev = await obtenerSobresCodigoJit(codigo);
+                if (blobPrev) {
+                    let adminPrev = {};
+                    if (blobPrev._segAdmin) {
+                        try { adminPrev = await Seg.descifrarJson(blobPrev._segAdmin, { scope: 'admin', codigoBarras: codigo }); } catch (_) {}
+                    } else if (blobPrev._segCifrado) {
+                        try { adminPrev = extraerCamposAdminProducto(await Seg.descifrarJson(blobPrev._segCifrado)) || {}; } catch (_) {}
+                    }
+                    if (!clonSnapshot.historialCostos && Array.isArray(adminPrev.historialCostos)) {
+                        clonSnapshot.historialCostos = adminPrev.historialCostos;
+                    }
+                    if (!clonSnapshot.rncProveedor && adminPrev.rncProveedor) {
+                        clonSnapshot.rncProveedor = adminPrev.rncProveedor;
+                    }
+                }
+            }
             const regIdb = await empaquetarProductoParaIdb(clonSnapshot);
             if (!regIdb) return;
             const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
             tx.objectStore(STORES.DICCIONARIO).put(regIdb);
         });
 
-        return { exito: true, producto: fichaActualizada };
+        return { exito: true, producto: basePublica };
     }
 
     // --- VADEMÉCUM MAESTRO OFICIAL DIGEMAPS (CATÁLOGO DE REFERENCIA RD) ---
@@ -1472,16 +1926,20 @@
         };
     }
 
-    // --- CICLO DE VIDA CRIPTOGRÁFICO DE LA BÓVEDA (PANEL DE ADMINISTRADOR) ---
-    function limpiarRamPorBloqueo() {
+    // --- CICLO DE VIDA CRIPTOGRÁFICO DE LA BÓVEDA (BÓVEDA BIFURCADA, BUZÓN SELLADO Y SYNC P2P) ---
+    function limpiarRamPorBloqueo(opciones = {}) {
+        const mantenerCaja = Boolean(opciones && opciones.mantenerCaja);
         const dicActual = cacheStorage.get(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS);
         if (dicActual && typeof dicActual === 'object') {
             cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(dicActual));
         }
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, []);
-        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, crearSesionVacia());
-        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, Dominio.clonarObjetoSeguro(REGLAS_NEGOCIO_POR_DEFECTO));
+
+        if (!mantenerCaja) {
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, crearSesionVacia());
+            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, Dominio.clonarObjetoSeguro(REGLAS_NEGOCIO_POR_DEFECTO));
+        }
         limpiarLocalStorageSensible();
     }
 
@@ -1502,7 +1960,7 @@
     async function migrarTodoACifradoIdb(snapshot) {
         const Seg = obtenerSeguridad();
         if (!Seg || !Seg.estaConfigurado() || Seg.estaBloqueado()) {
-            throw new Error('Se requiere bóveda desbloqueada para cifrar datos.');
+            throw new Error('Se requiere bóveda de administrador desbloqueada para cifrar datos.');
         }
         return encolarOperacionIdb(async () => {
             const db = await abrirBaseDatos();
@@ -1515,14 +1973,23 @@
             const encHist = await Promise.all((snapshot.historial || []).filter(f => f && f.id).map(async fac => ({
                 id: fac.id,
                 timestampGuardado: fac.timestampGuardado || Date.now(),
-                ...(await Seg.cifrarJson(fac))
+                ...(await Seg.cifrarJson(fac, { id: fac.id, store: STORES.HISTORIAL }))
             })));
 
-            const encBorrador = await Seg.cifrarJson(snapshot.borrador || crearSesionVacia());
-            const encReglas = await Seg.cifrarJson(snapshot.reglas || REGLAS_NEGOCIO_POR_DEFECTO);
+            const borradorObj = snapshot.borrador || crearSesionVacia();
+            const encBorrador = (typeof Seg.estaCajaConfigurada === 'function' && Seg.estaCajaConfigurada())
+                ? await Seg.cifrarParaCaja(borradorObj, 'borrador')
+                : await Seg.cifrarJson(borradorObj, { scope: 'borrador' });
+
+            const reglasObj = snapshot.reglas || REGLAS_NEGOCIO_POR_DEFECTO;
+            const encReglas = await Seg.cifrarJson(reglasObj);
+            const encReglasCaja = (typeof Seg.estaCajaConfigurada === 'function' && Seg.estaCajaConfigurada())
+                ? await Seg.cifrarParaCaja(reglasObj, 'reglas_caja')
+                : null;
+
             const encProvs = await Promise.all((snapshot.proveedores || []).filter(p => p && p.id).map(async prov => ({
                 id: prov.id,
-                ...(await Seg.cifrarJson(prov))
+                ...(await Seg.cifrarJson(prov, { id: prov.id, store: STORES.PROVEEDORES }))
             })));
 
             const storesTx = [STORES.DICCIONARIO, STORES.HISTORIAL, STORES.BORRADOR, STORES.CONFIGURACION, STORES.PROVEEDORES];
@@ -1530,6 +1997,7 @@
             const sDic = tx.objectStore(STORES.DICCIONARIO);
             const sHist = tx.objectStore(STORES.HISTORIAL);
             const sProv = tx.objectStore(STORES.PROVEEDORES);
+            const sCfg = tx.objectStore(STORES.CONFIGURACION);
 
             sDic.clear();
             empaquetadosDic.forEach(p => sDic.put(p));
@@ -1541,13 +2009,56 @@
             encProvs.forEach(p => sProv.put(p));
 
             tx.objectStore(STORES.BORRADOR).put(encBorrador, 'activo');
-            tx.objectStore(STORES.CONFIGURACION).put(encReglas, 'reglas_activas');
+            sCfg.put(encReglas, 'reglas_activas');
+            if (encReglasCaja) {
+                sCfg.put(encReglasCaja, 'reglas_caja');
+            }
 
             await new Promise((resolve, reject) => {
                 tx.oncomplete = () => resolve();
                 tx.onerror = () => reject(tx.error || new Error('Error cifrando stores en IndexedDB'));
             });
         });
+    }
+
+    async function descifrarParaCajaEnRam() {
+        const Seg = obtenerSeguridad();
+        if (!Seg || (typeof Seg.estaCajaActiva === 'function' && !Seg.estaCajaActiva())) {
+            throw new Error('Sesión de mostrador bloqueada.');
+        }
+        const db = await abrirBaseDatos();
+        if (!db) return false;
+
+        const crudo = await new Promise(resolve => {
+            try {
+                const tx = db.transaction([STORES.BORRADOR, STORES.CONFIGURACION], 'readonly');
+                const rBor = tx.objectStore(STORES.BORRADOR).get('activo');
+                const rRegCaja = tx.objectStore(STORES.CONFIGURACION).get('reglas_caja');
+                tx.oncomplete = () => resolve({ ok: true, borrador: rBor.result || null, reglasCaja: rRegCaja.result || null });
+                tx.onerror = () => resolve({ ok: false });
+            } catch (_) {
+                resolve({ ok: false });
+            }
+        });
+        if (!crudo.ok) return false;
+
+        if (crudo.borrador) {
+            let borDec = null;
+            if (crudo.borrador._segCaja) {
+                try { borDec = await Seg.descifrarDeCaja(crudo.borrador, 'borrador'); } catch (_) {}
+            } else if (!crudo.borrador._segCifrado) {
+                borDec = crudo.borrador;
+            }
+            if (borDec) cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, borDec);
+        }
+
+        if (crudo.reglasCaja && crudo.reglasCaja._segCaja) {
+            try {
+                const regDec = await Seg.descifrarDeCaja(crudo.reglasCaja, 'reglas_caja');
+                cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, regDec);
+            } catch (_) {}
+        }
+        return true;
     }
 
     async function descifrarTodoDesdeIdbEnRam() {
@@ -1583,18 +2094,62 @@
 
         if (!crudo.ok) return false;
 
-        const dicMap = {};
-        for (const item of crudo.dic) {
-            const p = await desempaquetarProductoDesdeIdb(item);
-            if (p && p.codigoBarras) dicMap[p.codigoBarras] = p;
-        }
-        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
-
-        const histDec = [];
-        for (const fac of crudo.hist) {
-            if (fac && fac._segCifrado) {
+        // 1. Proveedores
+        const provDec = [];
+        for (const pv of crudo.prov) {
+            if (pv && pv._segCifrado) {
                 try {
-                    const dec = await Seg.descifrarJson(fac);
+                    provDec.push(await Seg.descifrarJson(pv, pv.aad ? { id: pv.id, store: STORES.PROVEEDORES } : null));
+                } catch (e) {
+                    console.warn('[Cripto] Error descifrando proveedor:', e);
+                }
+            } else if (pv && pv.id) {
+                provDec.push(pv);
+            }
+        }
+        let listaProvsFinal = fusionarSemillasConGuardados(provDec, PROVEEDORES_SEMILLA);
+        const provNombresSet = new Set(listaProvsFinal.map(p => String(p.nombre || '').toLowerCase().trim()));
+        const provNuevosParaIdb = [];
+        const registrarProveedorConsolidado = (nombreProv, rncProv) => {
+            const nom = String(nombreProv || '').trim();
+            if (nom.length < 2 || provNombresSet.has(nom.toLowerCase())) return;
+            const nuevoProv = {
+                id: rncProv ? ('prov_' + String(rncProv).replace(/\D/g, '')) : ('prov_' + Dominio.generarIdUnico()),
+                rnc: String(rncProv || '').replace(/\D/g, ''),
+                nombre: nom,
+                razonSocial: nom,
+                telefono: '',
+                contacto: '',
+                diasCredito: 30,
+                descuentoHabitual: 0,
+                actualizadoEn: new Date().toISOString()
+            };
+            listaProvsFinal.push(nuevoProv);
+            provNuevosParaIdb.push(nuevoProv);
+            provNombresSet.add(nom.toLowerCase());
+        };
+
+        // 2. Historial + Consolidación de facturas selladas en Buzón Ciego (_buzonSellado)
+        const histDec = [];
+        const buzonConsolidadoParaIdb = [];
+        for (const fac of crudo.hist) {
+            if (fac && fac._buzonSellado) {
+                try {
+                    const dec = await Seg.abrirDeBuzonAdmin(fac, fac.aadMeta || { id: fac.id, store: STORES.HISTORIAL, buzon: true });
+                    histDec.push(dec);
+                    if (dec.proveedor) registrarProveedorConsolidado(dec.proveedor, dec.rnc);
+                    const envAdmin = await Seg.cifrarJson(dec, { id: dec.id, store: STORES.HISTORIAL });
+                    buzonConsolidadoParaIdb.push({
+                        id: dec.id,
+                        timestampGuardado: dec.timestampGuardado || fac.timestampGuardado || Date.now(),
+                        ...envAdmin
+                    });
+                } catch (e) {
+                    console.warn('[Cripto] Error abriendo factura de buzón:', e);
+                }
+            } else if (fac && fac._segCifrado) {
+                try {
+                    const dec = await Seg.descifrarJson(fac, fac.aad ? { id: fac.id, store: STORES.HISTORIAL } : null);
                     histDec.push(dec);
                 } catch (e) {
                     console.warn('[Cripto] Error descifrando factura:', e);
@@ -1604,33 +2159,99 @@
             }
         }
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, histDec);
-
-        const provDec = [];
-        for (const pv of crudo.prov) {
-            if (pv && pv._segCifrado) {
-                try {
-                    provDec.push(await Seg.descifrarJson(pv));
-                } catch (e) {
-                    console.warn('[Cripto] Error descifrando proveedor:', e);
-                }
-            } else if (pv && pv.id) {
-                provDec.push(pv);
-            }
-        }
-        const listaProvsFinal = fusionarSemillasConGuardados(provDec, PROVEEDORES_SEMILLA);
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, listaProvsFinal);
 
-        if (crudo.borrador) {
-            const borDec = crudo.borrador._segCifrado
-                ? await Seg.descifrarJson(crudo.borrador).catch(() => crearSesionVacia())
-                : crudo.borrador;
-            cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, borDec);
+        // 3. Catálogo Público en cacheStorage + Consolidación de _segPendienteAdmin / migración _segCifrado legacy
+        const dicMap = {};
+        const productosReempaquetar = [];
+        for (const item of crudo.dic) {
+            const pPub = await desempaquetarProductoDesdeIdb(item);
+            if (!pPub || !pPub.codigoBarras) continue;
+            dicMap[pPub.codigoBarras] = pPub;
+
+            const tienePendiente = Array.isArray(item._segPendienteAdmin) && item._segPendienteAdmin.length > 0;
+            const esLegacySinBifurcar = Boolean(item._segCifrado && !item._segCaja && !item._segAdmin);
+            if (tienePendiente || esLegacySinBifurcar) {
+                try {
+                    let combinado = { ...pPub };
+                    if (item._segCifrado) {
+                        const leg = await Seg.descifrarJson(item._segCifrado);
+                        combinado = { ...combinado, ...leg };
+                    }
+                    if (item._segAdmin) {
+                        const adm = await Seg.descifrarJson(item._segAdmin, { scope: 'admin', codigoBarras: pPub.codigoBarras });
+                        combinado = { ...combinado, ...adm };
+                    }
+                    if (item._segCaja) {
+                        const caj = await Seg.descifrarDeCaja(item._segCaja, pPub.codigoBarras);
+                        combinado = { ...combinado, ...caj };
+                    }
+                    if (tienePendiente) {
+                        const historial = Array.isArray(combinado.historialCostos) ? [...combinado.historialCostos] : [];
+                        for (const sobreDelta of item._segPendienteAdmin) {
+                            try {
+                                const delta = await Seg.abrirDeBuzonAdmin(sobreDelta, { scope: 'delta_producto', codigoBarras: pPub.codigoBarras });
+                                if (delta && delta.precioCaja > 0) {
+                                    historial.unshift(delta);
+                                }
+                                if (delta && delta.proveedor) {
+                                    combinado.proveedorHabitual = delta.proveedor;
+                                    if (delta.rnc) combinado.rncProveedor = delta.rnc;
+                                    registrarProveedorConsolidado(delta.proveedor, delta.rnc);
+                                }
+                            } catch (_) {}
+                        }
+                        combinado.historialCostos = historial.slice(0, 20);
+                    }
+                    combinado._limpiarPendienteAdmin = true;
+                    const regNuevo = await empaquetarProductoParaIdb(combinado);
+                    if (regNuevo) productosReempaquetar.push(regNuevo);
+                } catch (e) {
+                    console.warn('[Cripto] Error consolidando deltas del producto:', pPub.codigoBarras, e);
+                }
+            }
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
+
+        // Persistir consolidaciones en IndexedDB
+        if (buzonConsolidadoParaIdb.length > 0 || productosReempaquetar.length > 0 || provNuevosParaIdb.length > 0) {
+            await encolarOperacionIdb(async () => {
+                const encProvsNuevos = await Promise.all(provNuevosParaIdb.map(async pv => ({
+                    id: pv.id,
+                    ...(await Seg.cifrarJson(pv, { id: pv.id, store: STORES.PROVEEDORES }))
+                })));
+                const txCons = db.transaction([STORES.HISTORIAL, STORES.DICCIONARIO, STORES.PROVEEDORES], 'readwrite');
+                const stH = txCons.objectStore(STORES.HISTORIAL);
+                buzonConsolidadoParaIdb.forEach(h => stH.put(h));
+                const stD = txCons.objectStore(STORES.DICCIONARIO);
+                productosReempaquetar.forEach(pr => stD.put(pr));
+                const stP = txCons.objectStore(STORES.PROVEEDORES);
+                encProvsNuevos.forEach(pv => stP.put(pv));
+                await new Promise(res => { txCons.oncomplete = res; txCons.onerror = res; });
+            });
         }
 
+        // 4. Borrador activo
+        if (crudo.borrador) {
+            let borDec = null;
+            if (crudo.borrador._segCaja) {
+                try { borDec = await Seg.descifrarDeCaja(crudo.borrador, 'borrador'); } catch (_) {}
+            } else if (crudo.borrador._segCifrado) {
+                try { borDec = await Seg.descifrarJson(crudo.borrador, crudo.borrador.aad ? { scope: 'borrador' } : null); } catch (_) {}
+            } else {
+                borDec = crudo.borrador;
+            }
+            if (borDec) cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, borDec);
+        }
+
+        // 5. Reglas de cálculo
         if (crudo.reglas) {
-            const regDec = crudo.reglas._segCifrado
-                ? await Seg.descifrarJson(crudo.reglas).catch(() => REGLAS_NEGOCIO_POR_DEFECTO)
-                : crudo.reglas;
+            let regDec = REGLAS_NEGOCIO_POR_DEFECTO;
+            if (crudo.reglas._segCifrado) {
+                try { regDec = await Seg.descifrarJson(crudo.reglas); } catch (_) {}
+            } else {
+                regDec = crudo.reglas;
+            }
             cacheStorage.set(CONSTANTES.CLAVES_STORAGE.REGLAS_NEGOCIO, regDec);
         }
 
@@ -1643,8 +2264,9 @@
         if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
 
         const provActuales = obtenerDirectorioProveedores();
+        const dicActualPlano = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
         const snapshot = {
-            diccionario: Dominio.clonarObjetoSeguro(obtenerDiccionarioCodigos()),
+            diccionario: Dominio.clonarObjetoSeguro(dicActualPlano),
             historial: Dominio.clonarObjetoSeguro(obtenerHistorialFacturas()),
             borrador: Dominio.clonarObjetoSeguro(cargarBorradorActivo()),
             reglas: Dominio.clonarObjetoSeguro(obtenerReglasNegocio()),
@@ -1654,6 +2276,8 @@
         const res = await Seg.configurarContrasenaMaestra(contrasena, opciones);
         await persistirMetadatosSeguridad(res.metadatos);
         await migrarTodoACifradoIdb(snapshot);
+        // En memoria pública RAM del catálogo solo permanecen fichas sanitarias públicas
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(snapshot.diccionario));
         limpiarLocalStorageSensible();
 
         return {
@@ -1665,15 +2289,88 @@
     async function desbloquearBoveda(contrasena) {
         const Seg = obtenerSeguridad();
         if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
-        await Seg.desbloquear(contrasena);
+        const res = await Seg.desbloquear(contrasena);
+        if (res && res.metadatosActualizados) {
+            await persistirMetadatosSeguridad(res.metadatosActualizados);
+        }
         await descifrarTodoDesdeIdbEnRam();
         return { exito: true };
+    }
+
+    async function desbloquearCajaBoveda(pinCaja) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        await Seg.desbloquearCaja(pinCaja);
+        await descifrarParaCajaEnRam();
+        return { exito: true };
+    }
+
+    async function configurarPinCajaBoveda(pinCaja) {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        const res = await Seg.configurarPinCaja(pinCaja);
+        await persistirMetadatosSeguridad(res.metadatos);
+
+        // Re-empaquetar sobres _segCaja + borrador + reglas_caja bajo la nueva clave de Caja
+        const reglas = obtenerReglasNegocio();
+        const borrador = cargarBorradorActivo();
+        const db = await abrirBaseDatos();
+        if (db) {
+            await encolarOperacionIdb(async () => {
+                const encReglasCaja = await Seg.cifrarParaCaja(reglas, 'reglas_caja');
+                const encBor = await Seg.cifrarParaCaja(borrador, 'borrador');
+                const items = Array.from(encDiccionarioBlobs.keys());
+                const dicPub = obtenerDiccionarioCodigos();
+                const nuevosRegs = [];
+                for (const cod of items) {
+                    const full = await obtenerDetalleProductoAdmin(cod);
+                    if (full) {
+                        const r = await empaquetarProductoParaIdb(full);
+                        if (r) nuevosRegs.push(r);
+                    } else if (dicPub[cod]) {
+                        const r = await empaquetarProductoParaIdb(dicPub[cod]);
+                        if (r) nuevosRegs.push(r);
+                    }
+                }
+                const tx = db.transaction([STORES.CONFIGURACION, STORES.BORRADOR, STORES.DICCIONARIO], 'readwrite');
+                tx.objectStore(STORES.CONFIGURACION).put(encReglasCaja, 'reglas_caja');
+                tx.objectStore(STORES.BORRADOR).put(encBor, 'activo');
+                const stDic = tx.objectStore(STORES.DICCIONARIO);
+                nuevosRegs.forEach(r => stDic.put(r));
+                await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+            });
+        }
+        return { exito: true };
+    }
+
+    async function desactivarPinCajaBoveda() {
+        const Seg = obtenerSeguridad();
+        if (!Seg) throw new Error('Módulo de seguridad no inicializado.');
+        const res = Seg.desactivarPinCaja();
+        await persistirMetadatosSeguridad(res.metadatos);
+        await encolarOperacionIdb(async () => {
+            const db = await abrirBaseDatos();
+            if (!db) return;
+            const tx = db.transaction([STORES.CONFIGURACION], 'readwrite');
+            tx.objectStore(STORES.CONFIGURACION).delete('reglas_caja');
+        });
+        return { exito: true };
+    }
+
+    function bloquearAdminBoveda() {
+        const Seg = obtenerSeguridad();
+        if (Seg && typeof Seg.bloquearAdminManteniendoCaja === 'function') {
+            Seg.bloquearAdminManteniendoCaja();
+        } else if (Seg) {
+            Seg.bloquear();
+        }
+        limpiarRamPorBloqueo({ mantenerCaja: Boolean(Seg && Seg.estaCajaActiva && Seg.estaCajaActiva()) });
     }
 
     function bloquearBoveda() {
         const Seg = obtenerSeguridad();
         if (Seg) Seg.bloquear();
-        limpiarRamPorBloqueo();
+        limpiarRamPorBloqueo({ mantenerCaja: false });
     }
 
     async function cambiarContrasenaBoveda(actual, nueva) {
@@ -1712,7 +2409,7 @@
     async function purgarDatosPrivadosLocales() {
         const Seg = obtenerSeguridad();
         if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
-            throw new Error('Debes desbloquear la bóveda antes de purgar datos privados.');
+            throw new Error('Debes desbloquear la sesión de Administrador antes de purgar datos privados.');
         }
         const dicPublico = Dominio.sanitizarDiccionarioPublico(obtenerDiccionarioCodigos());
         encDiccionarioBlobs.clear();
@@ -1730,7 +2427,6 @@
             reglas: REGLAS_NEGOCIO_POR_DEFECTO,
             proveedores: [...PROVEEDORES_SEMILLA]
         }).catch(async () => {
-            // Si no hay cifrado configurado todavía, limpiar IDB directamente
             const db = await abrirBaseDatos();
             if (!db) return;
             const tx = db.transaction([STORES.DICCIONARIO, STORES.HISTORIAL, STORES.BORRADOR, STORES.CONFIGURACION, STORES.PROVEEDORES], 'readwrite');
@@ -1747,11 +2443,162 @@
         return { exito: true, totalProductosConservados: Object.keys(dicPublico).length };
     }
 
-    // Suscribirse al bloqueo automático por inactividad para limpiar RAM de inmediato
+    // --- EMPAREJAMIENTO Y SINCRONIZACIÓN P2P CIFRADA ENTRE CAJAS DE LA FARMACIA ---
+    async function emparejarDispositivoP2P(tarjetaPeerJson, alias = 'Caja Hermana') {
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado() || Seg.estaBloqueado()) {
+            throw new Error('Desbloquea como Administrador para vincular otra PC de tu farmacia.');
+        }
+        const tarjeta = (typeof tarjetaPeerJson === 'string') ? JSON.parse(tarjetaPeerJson) : tarjetaPeerJson;
+        const res = await Seg.agregarPeerConfiable(tarjeta, alias);
+        await persistirMetadatosSeguridad(res.metadatos);
+        return res;
+    }
+
+    async function revocarDispositivoP2P(deviceId) {
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado() || Seg.estaBloqueado()) {
+            throw new Error('Desbloquea como Administrador para revocar un dispositivo.');
+        }
+        const res = await Seg.revocarPeerConfiable(deviceId);
+        await persistirMetadatosSeguridad(res.metadatos);
+        return res;
+    }
+
+    async function exportarSyncCifradaParaPeer(peerId, opciones = {}) {
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado() || Seg.estaBloqueado()) {
+            throw new Error('Desbloquea como Administrador para generar sincronización cifrada.');
+        }
+
+        const dicPublico = obtenerDiccionarioCodigos();
+        const productosSync = {};
+        for (const cod of Object.keys(dicPublico)) {
+            const detalle = await obtenerDetalleProductoAdmin(cod);
+            if (detalle) productosSync[cod] = detalle;
+        }
+
+        const payload = {
+            diccionario: productosSync,
+            laboratorios: Dominio.sanitizarDirectorioLaboratoriosPublico(obtenerDirectorioLaboratorios()),
+            reglas: obtenerReglasNegocio()
+        };
+        if (opciones.incluirProveedores !== false) {
+            payload.proveedores = Dominio.clonarObjetoSeguro(obtenerDirectorioProveedores());
+        }
+
+        const res = await Seg.empaquetarSyncParaPeer(peerId, payload, opciones);
+        await persistirMetadatosSeguridad(res.metadatos);
+        return {
+            exito: true,
+            paquete: res.paquete,
+            codigoEntrega: res.codigoEntrega,
+            seq: res.seq,
+            totalProductos: Object.keys(productosSync).length
+        };
+    }
+
+    async function importarSyncCifradaDePeer(paqueteJson, codigoEntrega = '') {
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado() || Seg.estaBloqueado()) {
+            throw new Error('Desbloquea como Administrador para recibir sincronización cifrada.');
+        }
+        const paquete = (typeof paqueteJson === 'string') ? JSON.parse(paqueteJson) : paqueteJson;
+        const res = await Seg.abrirSyncDePeer(paquete, codigoEntrega);
+        await persistirMetadatosSeguridad(res.metadatos);
+
+        const datos = res.datos || {};
+        const dicEntranteCrudo = (datos.diccionario && typeof datos.diccionario === 'object') ? datos.diccionario : {};
+
+        // Validación defensiva post-descifrado de cada ficha entrante (sin reemplazar ni admitir fechas futuras)
+        const maxFechaMs = Date.now() + 24 * 60 * 60 * 1000;
+        const dicEntranteValidado = {};
+        for (const [cod, item] of Object.entries(dicEntranteCrudo)) {
+            const pub = Dominio.sanitizarFichaPublicaCatalogo(item);
+            if (!pub || !pub.codigoBarras) continue;
+            const extra = {};
+            if (item.ultimoPrecioCaja !== undefined) {
+                const vp = Dominio.validarPrecioCompra(item.ultimoPrecioCaja, { permitirCero: false });
+                if (vp.esValido) extra.ultimoPrecioCaja = vp.valor;
+            }
+            if (item.costoAnteriorCaja !== undefined && Number(item.costoAnteriorCaja) > 0) {
+                extra.costoAnteriorCaja = Number(item.costoAnteriorCaja);
+            }
+            if (item.variacionCosto !== undefined && Number.isFinite(Number(item.variacionCosto))) {
+                extra.variacionCosto = Number(item.variacionCosto);
+            }
+            if (item.costoUnitarioFiscal) extra.costoUnitarioFiscal = String(item.costoUnitarioFiscal).slice(0, 32);
+            if (item.preciosVenta && typeof item.preciosVenta === 'object') {
+                extra.preciosVenta = Dominio.clonarObjetoSeguro(item.preciosVenta);
+            }
+            if (item.proveedorHabitual) extra.proveedorHabitual = Dominio.sanitizarEntradaTexto(item.proveedorHabitual, 120);
+            if (item.rncProveedor) extra.rncProveedor = String(item.rncProveedor).replace(/\D/g, '').slice(0, 11);
+            if (item.ubicacion) extra.ubicacion = Dominio.sanitizarEntradaTexto(item.ubicacion, 120);
+            if (Array.isArray(item.historialCostos)) {
+                extra.historialCostos = item.historialCostos.slice(0, 20).map(h => ({
+                    fecha: String(h.fecha || '').slice(0, 20),
+                    precioCaja: Number(h.precioCaja) || 0,
+                    costoUnitarioFiscal: String(h.costoUnitarioFiscal || '').slice(0, 32),
+                    proveedor: Dominio.sanitizarEntradaTexto(h.proveedor || '', 120),
+                    rnc: String(h.rnc || '').replace(/\D/g, '').slice(0, 11),
+                    descuentoValor: Number(h.descuentoValor) || 0,
+                    tipoDescuento: h.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
+                    aplicaItbis: Boolean(h.aplicaItbis)
+                }));
+            }
+            const fechaMs = new Date(pub.actualizadoEn || 0).getTime();
+            pub.actualizadoEn = new Date(Number.isFinite(fechaMs) && fechaMs > 0 ? Math.min(fechaMs, maxFechaMs) : Date.now()).toISOString();
+            dicEntranteValidado[pub.codigoBarras] = { ...pub, ...extra };
+        }
+
+        // Reconstruir diccionario completo local puntualmente solo para fusionar con seguridad
+        const dicLocalCompleto = {};
+        const dicPubLocal = obtenerDiccionarioCodigos();
+        for (const cod of Object.keys(dicPubLocal)) {
+            const det = await obtenerDetalleProductoAdmin(cod);
+            dicLocalCompleto[cod] = det || dicPubLocal[cod];
+        }
+
+        const fusion = Dominio.fusionarDiccionarios(dicLocalCompleto, dicEntranteValidado, { modo: 'fusion' });
+        const db = await abrirBaseDatos();
+        if (db) {
+            await encolarOperacionIdb(async () => {
+                const empaquetados = (await Promise.all(
+                    Object.values(fusion.diccionarioFusionado).map(empaquetarProductoParaIdb)
+                )).filter(Boolean);
+                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                const st = tx.objectStore(STORES.DICCIONARIO);
+                empaquetados.forEach(item => st.put(item));
+                await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+            });
+        }
+        cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(fusion.diccionarioFusionado));
+
+        if (Array.isArray(datos.laboratorios) && datos.laboratorios.length > 0) {
+            importarLaboratoriosJson({ laboratorios: datos.laboratorios });
+        }
+        if (Array.isArray(datos.proveedores) && datos.proveedores.length > 0) {
+            datos.proveedores.forEach(pv => {
+                if (pv && pv.nombre) guardarProveedorEnDirectorio(pv);
+            });
+        }
+        if (datos.reglas && typeof datos.reglas === 'object') {
+            guardarReglasNegocio(datos.reglas);
+        }
+
+        return {
+            exito: true,
+            origenPeer: res.origenPeer,
+            seq: res.seq,
+            estadisticas: fusion.estadisticas
+        };
+    }
+
+    // Suscribirse al bloqueo automático / degradación para limpiar secretos administrativos de RAM
     if (AppFarmacia.Seguridad && typeof AppFarmacia.Seguridad.suscribirCambioEstado === 'function') {
         AppFarmacia.Seguridad.suscribirCambioEstado(estado => {
             if (estado && estado.configurado && estado.bloqueado) {
-                limpiarRamPorBloqueo();
+                limpiarRamPorBloqueo({ mantenerCaja: Boolean(estado.cajaDesbloqueada) });
             }
         });
     }
@@ -1759,12 +2606,28 @@
     AppFarmacia.Almacenamiento = Object.freeze({
         activarCifradoConContrasena,
         desbloquearBoveda,
+        desbloquearCajaBoveda,
+        configurarPinCajaBoveda,
+        desactivarPinCajaBoveda,
+        bloquearAdminBoveda,
         bloquearBoveda,
         cambiarContrasenaBoveda,
         regenerarCodigoRecuperacionBoveda,
         recuperarBovedaConCodigo,
         actualizarAutoBloqueoBoveda,
         purgarDatosPrivadosLocales,
+
+        emparejarDispositivoP2P,
+        revocarDispositivoP2P,
+        exportarSyncCifradaParaPeer,
+        importarSyncCifradaDePeer,
+
+        obtenerCostoOperativoProducto,
+        obtenerDetalleProductoAdmin,
+        obtenerResumenCostosTablaSiAdmin,
+        archivarFacturaEnBuzon,
+        exportarLaboratoriosJson,
+        importarLaboratoriosJson,
 
         guardarVademecumMaestro,
         obtenerVademecumMaestro,

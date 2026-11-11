@@ -466,7 +466,8 @@
         const csvGenerado = Dominio.generarCsvCatalogoMaestro(mockDictCsv);
         const encabezadoCsv = csvGenerado.split(/\r?\n/)[0];
         afirmarIgualdad(encabezadoCsv.includes('codigo_barras,nombre,nombre_comercial,principio_activo'), true, 'CSV Público: Encabezados sanitarios normalizados');
-        afirmarIgualdad(encabezadoCsv.includes('proveedor_habitual') || encabezadoCsv.includes('rnc_proveedor') || encabezadoCsv.includes('ultimo_costo_caja'), false, 'CSV Público: Encabezados excluyen columnas comerciales privadas');
+        afirmarIgualdad(encabezadoCsv.split(',').length, 17, 'CSV Público: Exactamente 17 columnas sanitarias (sin ubicacion física)');
+        afirmarIgualdad(encabezadoCsv.includes('proveedor_habitual') || encabezadoCsv.includes('rnc_proveedor') || encabezadoCsv.includes('ultimo_costo_caja') || encabezadoCsv.includes('ubicacion'), false, 'CSV Público: Encabezados excluyen columnas comerciales privadas y ubicación');
         afirmarIgualdad(csvGenerado.includes('"Amoxil 500mg"'), true, 'CSV Público: Fila de producto sanitario preservada');
         afirmarIgualdad(csvGenerado.includes('"GlaxoSmithKline"'), true, 'CSV Público: Preservación de laboratorio');
         afirmarIgualdad(csvGenerado.includes('"Droguería Betances"'), false, 'CSV Público: Purga proveedor habitual');
@@ -475,6 +476,7 @@
         afirmarIgualdad(csvGenerado.includes('360.00'), false, 'CSV Público: Purga último costo por caja');
         afirmarIgualdad(csvGenerado.includes('20.00%'), false, 'CSV Público: Purga variación de costo');
         afirmarIgualdad(csvGenerado.includes('15.60'), false, 'CSV Público: Purga precios de venta');
+        afirmarIgualdad(csvGenerado.includes('Tramo A-2'), false, 'CSV Público: Purga ubicación física en estantería');
         afirmarIgualdad(csvGenerado.includes('ultimoPrecioCaja') || csvGenerado.includes('historialCostos') || csvGenerado.includes('proveedorHabitual') || csvGenerado.includes('2024-01-15'), false, 'CSV Público: Purga historial y claves internas');
         afirmarIgualdad(csvGenerado.includes('"\'=SUM(A1)"'), true, 'CSV Público: Neutraliza inyección de fórmula =SUM(A1)');
         afirmarIgualdad(csvGenerado.includes('"\'+cmd"') && csvGenerado.includes('"\'-TestLab"') && csvGenerado.includes('"\'@alert"'), true, 'CSV Público: Neutraliza prefijos +, - y @ en celdas CSV');
@@ -514,8 +516,13 @@
             afirmarIgualdad(recuperado.nombre, nombreEsperado, 'Blindaje: Preserva nombre oficial e impide sobreescritura casual');
             afirmarIgualdad(recuperado.tipo, 'divisible', 'Blindaje: Preserva empaque divisible oficial');
             afirmarIgualdad(recuperado.unidadesPorCaja, 30, 'Blindaje: Preserva unidades por caja oficiales (30)');
-            afirmarIgualdad(recuperado.ultimoPrecioCaja, 350, 'Blindaje: Actualiza costo de compra correctamente (350)');
-            afirmarIgualdad(recuperado.costoAnteriorCaja, 300, 'Blindaje: Registra costo anterior de compra (300)');
+            const bovedaActivaEnTest = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado());
+            if (!bovedaActivaEnTest) {
+                afirmarIgualdad(recuperado.ultimoPrecioCaja, 350, 'Blindaje: Actualiza costo de compra correctamente (350)');
+                afirmarIgualdad(recuperado.costoAnteriorCaja, 300, 'Blindaje: Registra costo anterior de compra (300)');
+            } else {
+                afirmarIgualdad('ultimoPrecioCaja' in recuperado || 'costoAnteriorCaja' in recuperado, false, 'Blindaje: Caché pública jamás expone costos con bóveda configurada');
+            }
 
             // Edición deliberada desde Catálogo / Ajustes
             const edicionDeliberada = {
@@ -1156,6 +1163,69 @@
             'Sanitizador Diccionario: Elimina 100% de costos, proveedores y sobres cifrados'
         );
 
+        // 39. verificarSobreDatos: soporte de arreglos de tipos válidos
+        const sobreParcheFirmado = Dominio.firmarSobreDatos({ tipo: 'parche-farmacia-catalogo', ok: true }, 'parche-farmacia-catalogo');
+        afirmarIgualdad(
+            Dominio.verificarSobreDatos(sobreParcheFirmado, ['respaldo-farmacia-diccionario', 'parche-farmacia-catalogo']).esValido,
+            true,
+            'verificarSobreDatos: Acepta arreglo de tipos permitidos'
+        );
+        afirmarIgualdad(
+            Dominio.verificarSobreDatos(sobreParcheFirmado, ['respaldo-farmacia-diccionario']).esValido,
+            false,
+            'verificarSobreDatos: Rechaza tipo ausente del arreglo permitido'
+        );
+
+        // 40. Exportación Pública de Laboratorios (sin secretos ni Prototype Pollution)
+        const labsSucios = [
+            { id: 'lab_1', nombre: 'Laboratorios Rowe', razonSocial: 'Rowe C. por A.', origen: 'Nacional', titularRegistro: 'Rowe SRL', telefono: '809-555-0100', costoSecret: 999 }
+        ];
+        const sobreLabs = Dominio.generarSobreLaboratorios(labsSucios);
+        afirmarIgualdad(sobreLabs.tipo, AppFarmacia.Configuracion.CONSTANTES.TIPO_ARCHIVO_DIRECTORIO_LABORATORIOS, 'Sobre Laboratorios: Tipo correcto');
+        afirmarIgualdad(sobreLabs.datos.laboratorios.length, 1, 'Sobre Laboratorios: Mantiene registro válido');
+        afirmarIgualdad('costoSecret' in sobreLabs.datos.laboratorios[0], false, 'Sobre Laboratorios: Purga campos no permitidos');
+
+        // 41. Huella de Factura (detección de duplicados sin numeroFactura)
+        const huellaA = Dominio.generarHuellaFactura({
+            proveedor: 'Drogueria X',
+            fechaEmision: '2026-11-10',
+            totalFisico: 1500.50,
+            productos: [{ codigoBarras: '746001', cajasCompradas: 2, totalLineaFinal: 1500.50 }]
+        });
+        const huellaB = Dominio.generarHuellaFactura({
+            proveedor: 'Drogueria X',
+            fechaEmision: '2026-11-10',
+            totalFisico: 1500.50,
+            numeroFactura: 'NCF-IGNORADO',
+            productos: [{ codigoBarras: '746001', cajasCompradas: 2, totalLineaFinal: 1500.50 }]
+        });
+        afirmarIgualdad(huellaA.length > 0 && huellaA === huellaB, true, 'Huella Factura: Idéntica independiente de numeroFactura');
+
+        // 42. Validación de producto sin herencia artificial de laboratorio desde proveedor
+        const valSinLabPermitido = Dominio.validarDatosMinimosProducto({ nombre: 'Paracetamol 500mg', laboratorio: '', tipo: 'entero', permitirSinLaboratorio: true });
+        afirmarIgualdad(valSinLabPermitido.esValido, true, 'Producto: Permite mostrar/guardar ingreso rápido sin laboratorio');
+        const valSinLabEstricto = Dominio.validarDatosMinimosProducto({ nombre: 'Paracetamol 500mg', laboratorio: '', tipo: 'entero' });
+        afirmarIgualdad(valSinLabEstricto.esValido, false, 'Producto: Exige laboratorio cuando permitirSinLaboratorio no es true');
+
+        // 43. Fusión conserva sobres Dual-Key (_segCaja, _segAdmin, _segPendienteAdmin) y limpia ubicacion pública
+        const resFusionDual = Dominio.fusionarDiccionarios({
+            '746900': {
+                codigoBarras: '746900',
+                nombre: 'Omeprazol 20mg',
+                ubicacion: 'Gaveta B',
+                _segCaja: { _segCifrado: true, ct: 'c1' },
+                _segAdmin: { _segCifrado: true, ct: 'a1' },
+                _segPendienteAdmin: [{ ct: 'p1' }]
+            }
+        }, {
+            '746900': { codigoBarras: '746900', nombre: 'Omeprazol 20mg Capsulas', ultimoPrecioCaja: 0 }
+        }, { modo: 'fusion' });
+        const fusedDual = resFusionDual.diccionarioFusionado['746900'];
+        afirmarIgualdad(fusedDual._segCaja?.ct, 'c1', 'Fusión Dual-Key: Conserva _segCaja');
+        afirmarIgualdad(fusedDual._segAdmin?.ct, 'a1', 'Fusión Dual-Key: Conserva _segAdmin');
+        afirmarIgualdad(Array.isArray(fusedDual._segPendienteAdmin) && fusedDual._segPendienteAdmin.length === 1, true, 'Fusión Dual-Key: Conserva _segPendienteAdmin');
+        afirmarIgualdad('ultimoPrecioCaja' in fusedDual, false, 'Fusión Dual-Key: Omite costo sintético cero/ausente');
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;
@@ -1247,6 +1317,51 @@
             await Seg.desbloquear('ClaveRecuperada#2028');
             const descifradoTrasRecup = await Seg.descifrarJson(sobreCifrado);
             afirmarIgualdad(descifradoTrasRecup.proveedorHabitual, 'Drogueria Privada SRL', 'Seguridad S8: Mantiene integridad de datos cifrados tras recuperación');
+
+            // S9. Dual-Key: PIN de Mostrador (K_Caja) vs Admin + Aislamiento de sobres
+            await Seg.configurarPinCaja('4589');
+            const sobreCaja = await Seg.cifrarParaCaja({ ultimoPrecioCaja: 420.5 }, '746999');
+            Seg.bloquearAdminManteniendoCaja();
+            afirmarIgualdad(Seg.obtenerEstado().nivelAcceso, 'SOLO_CAJA', 'Seguridad S9: Degrada limpiamente a SOLO_CAJA');
+            afirmarIgualdad(Seg.estaCajaActiva() && Seg.estaBloqueado(), true, 'Seguridad S9: Caja activa mientras Admin permanece bloqueado');
+            const descCaja = await Seg.descifrarDeCaja(sobreCaja, '746999');
+            afirmarIgualdad(descCaja.ultimoPrecioCaja, 420.5, 'Seguridad S9: Descifra _segCaja JIT en modo SOLO_CAJA');
+            let rechazoAdminEnCaja = false;
+            try { await Seg.cifrarJson({ x: 1 }); } catch (_) { rechazoAdminEnCaja = true; }
+            afirmarIgualdad(rechazoAdminEnCaja, true, 'Seguridad S9: Bloquea operaciones cifrarJson de Admin en modo SOLO_CAJA');
+
+            // S10. Buzón Sellado Ciego (PK_Admin / SK_Admin): sella sin Admin, abre solo con Admin
+            const sobreBuzon = await Seg.sellarParaBuzonAdmin({ proveedor: 'Drogueria Ciega', totalFisico: 980 }, { id: 'buz_test' });
+            let rechazoAbrirBuzonSinAdmin = false;
+            try { await Seg.abrirDeBuzonAdmin(sobreBuzon, { id: 'buz_test' }); } catch (_) { rechazoAbrirBuzonSinAdmin = true; }
+            afirmarIgualdad(rechazoAbrirBuzonSinAdmin, true, 'Seguridad S10: Impide abrir buzón sin K_Admin');
+            await Seg.desbloquear('ClaveRecuperada#2028');
+            const abiertoBuzon = await Seg.abrirDeBuzonAdmin(sobreBuzon, { id: 'buz_test' });
+            afirmarIgualdad(abiertoBuzon.proveedor === 'Drogueria Ciega' && abiertoBuzon.totalFisico === 980, true, 'Seguridad S10: Admin abre buzón sellado tras desbloquear');
+
+            // S11. Tarjeta P2P + Emparejamiento SAS + Paquete .cfpatch autenticado + Rechazo de contraseña débil
+            const cardLocal = Seg.obtenerTarjetaEmparejamiento();
+            afirmarIgualdad(Boolean(cardLocal && cardLocal.tipo === 'chroniris-peer-card-v1' && cardLocal.deviceId), true, 'Seguridad S11: Emite tarjeta P2P persistente');
+            const cryptoApi = (typeof globalThis !== 'undefined' && globalThis.crypto) || (typeof window !== 'undefined' && window.crypto);
+            const peerEcdh = await cryptoApi.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+            const peerEcdsa = await cryptoApi.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+            const peerCard = {
+                tipo: 'chroniris-peer-card-v1',
+                deviceId: 'peer-hermana-test-01',
+                idEncPub: await cryptoApi.subtle.exportKey('jwk', peerEcdh.publicKey),
+                idSignPub: await cryptoApi.subtle.exportKey('jwk', peerEcdsa.publicKey)
+            };
+            const sas1 = await Seg.calcularCodigoSas(cardLocal, peerCard);
+            const sas2 = await Seg.calcularCodigoSas(peerCard, cardLocal);
+            afirmarIgualdad(/^\d{3}-\d{3}$/.test(sas1) && sas1 === sas2, true, 'Seguridad S11: Código SAS simétrico de 6 dígitos');
+            await Seg.agregarPeerConfiable(peerCard, 'Caja 2 Prueba');
+            const paqueteSync = await Seg.empaquetarSyncParaPeer(peerCard.deviceId, { diccionario: { '746001': { ultimoPrecioCaja: 777 } } });
+            afirmarIgualdad(paqueteSync.paquete.tipo, 'chroniris-sync-cifrado-v1', 'Seguridad S11: Empaqueta delta .cfpatch cifrado para peer');
+            afirmarIgualdad(JSON.stringify(paqueteSync.paquete).includes('777'), false, 'Seguridad S11: Paquete .cfpatch oculta costos cifrados');
+
+            let rechazoPassDebil = false;
+            try { await Seg.cambiarContrasena('ClaveRecuperada#2028', 'corta123'); } catch (_) { rechazoPassDebil = true; }
+            afirmarIgualdad(rechazoPassDebil, true, 'Seguridad S11: Rechaza contraseña menor a 10 caracteres');
 
             console.info('%c[Todas las pruebas de cifrado AES-256-GCM superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
             console.groupEnd();

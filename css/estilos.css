@@ -2183,15 +2183,12 @@ dialog.farmacia-modal .modal-actions {
         gap: 4px;
         flex-shrink: 0;
     }
-    .factura-acciones #btnImprimirActual span {
-        display: none;
-    }
     .factura-acciones #btnDescartar span {
         display: none;
     }
     .factura-acciones #btnFinalizarFactura {
-        padding: 0 8px;
-        font-size: 10.5px;
+        padding: 0 8px !important;
+        font-size: 11px !important;
     }
     .factura-campos-grid {
         grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)) !important;
@@ -2267,6 +2264,13 @@ dialog.farmacia-modal .modal-actions {
 
 /* SOLO EN DISPOSITIVOS MÓVILES REALMENTE PEQUEÑOS (<540px) */
 @media (max-width: 539px) {
+    .solo-desktop {
+        display: none !important;
+    }
+    .factura-top-bar {
+        flex-wrap: wrap !important;
+        gap: 6px;
+    }
     .cockpit-col-calc .grid-operativo {
         grid-template-columns: 1fr !important;
         gap: 6px;
@@ -2916,6 +2920,20 @@ html[data-paleta="cobalto"] .subtab-btn.activo {
     background: var(--color-exito-fondo);
     color: var(--color-exito);
     border-color: var(--color-exito-borde);
+}
+.badge-seguridad-btn.solo-caja {
+    background: rgba(37, 99, 235, 0.14);
+    color: #1d4ed8;
+    border-color: rgba(37, 99, 235, 0.4);
+}
+[data-tema="oscuro"] .badge-seguridad-btn.solo-caja {
+    color: #93c5fd;
+}
+#tabsUnlockDual .btn-icono.activo {
+    background: var(--color-primario);
+    color: #ffffff;
+    border-color: var(--color-primario);
+    font-weight: 700;
 }
 .badge-seguridad-estado {
     display: inline-flex;

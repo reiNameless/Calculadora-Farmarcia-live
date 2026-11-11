@@ -15,7 +15,8 @@
 
     function sincronizarYGuardarSesion() {
         Almacenamiento.guardarBorradorActivo(sesionActual);
-        if (!sesionActual.id || !sesionActual.proveedor || !sesionActual.numeroFactura || UI.Factura.buscarFacturaDuplicada?.()) return;
+        if (!sesionActual.id || !sesionActual.proveedor || UI.Factura.buscarFacturaDuplicada?.()) return;
+        if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) return;
 
         const historial = Almacenamiento.obtenerHistorialFacturas();
         const idx = historial.findIndex(f => f.id === sesionActual.id);
@@ -68,10 +69,10 @@
         if (!sesionActual.fechaVencimiento && sesionActual.fechaEmision) {
             sesionActual.fechaVencimiento = Dominio.sumarDiasAFechaISO(sesionActual.fechaEmision, 30);
         }
-        el('facProveedor').value = sesionActual.proveedor;
+        el('facProveedor').value = sesionActual.proveedor || '';
         if (el('facRnc')) el('facRnc').value = sesionActual.rnc || '';
         UI.Factura.actualizarDatalistProveedores?.();
-        el('facNumero').value = sesionActual.numeroFactura;
+        if (el('facNumero')) el('facNumero').value = '';
         el('facFechaEmision').value = sesionActual.fechaEmision;
         if (el('facFechaVencimiento')) el('facFechaVencimiento').value = sesionActual.fechaVencimiento;
         el('facTotalFisico').value = sesionActual.totalFisico || '';
@@ -82,7 +83,8 @@
             }
         }
         el('avisoEdicion').style.display = sesionActual.id ? 'flex' : 'none';
-        el('txtFinalizar').textContent = sesionActual.id ? 'Guardar cambios y cerrar' : 'Finalizar (F4)';
+        el('txtFinalizar').textContent = sesionActual.id ? 'Guardar cambios y cerrar' : 'Finalizar';
+        if (el('txtFinalizarKbd')) el('txtFinalizarKbd').style.display = sesionActual.id ? 'none' : '';
         el('txtDescartar').textContent = sesionActual.id ? 'Salir de edición' : 'Descartar';
 
         UI.Calculadora.actualizarEtiquetasReglasUI();
@@ -323,14 +325,18 @@
             if (btnCerrarModalAtajos) btnCerrarModalAtajos.addEventListener('click', cerrarModalAtajos);
             if (btnCerrarAtajosFooter) btnCerrarAtajosFooter.addEventListener('click', cerrarModalAtajos);
 
-            // Tecla Escape para cerrar drawer o modal de atajos
+            // Tecla Escape para cerrar diálogo abierto o drawer si no hay modal encima
             window.addEventListener('keydown', e => {
                 if (e.key === 'Escape') {
+                    const dialogoAbierto = document.querySelector('dialog[open]');
+                    if (dialogoAbierto) {
+                        if (dialogoAbierto === modalAtajos) {
+                            cerrarModalAtajos();
+                        }
+                        return;
+                    }
                     if (drawerBoveda && drawerBoveda.classList.contains('abierto')) {
                         cerrarBoveda();
-                    }
-                    if (modalAtajos && modalAtajos.open) {
-                        cerrarModalAtajos();
                     }
                 }
             });

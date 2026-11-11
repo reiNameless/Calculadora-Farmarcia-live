@@ -14,26 +14,29 @@
     function buscarFacturaDuplicada() {
         const Estado = AppFarmacia.Estado;
         const sesionActual = Estado.sesionActual;
-        const prov = sesionActual.proveedor.toLowerCase();
-        const num = sesionActual.numeroFactura.toLowerCase();
-        if (!prov || !num) return null;
-        return Almacenamiento.obtenerHistorialFacturas().find(
-            f => f.id !== sesionActual.id &&
-                 String(f.proveedor).toLowerCase() === prov &&
-                 String(f.numeroFactura).toLowerCase() === num
-        ) || null;
+        if (!sesionActual || !sesionActual.proveedor || !Array.isArray(sesionActual.productos) || sesionActual.productos.length === 0) {
+            return null;
+        }
+        const huellaActual = Dominio.generarHuellaFactura(sesionActual);
+        if (!huellaActual) return null;
+        return Almacenamiento.obtenerHistorialFacturas().find(f => {
+            if (!f || f.id === sesionActual.id) return false;
+            const huellaGuardada = f.huellaContenido || Dominio.generarHuellaFactura(f);
+            return huellaGuardada === huellaActual;
+        }) || null;
     }
 
     function verificarDuplicadoUI() {
         const Estado = AppFarmacia.Estado;
         const alerta = el('alertaFacturaDuplicada');
+        if (!alerta) return false;
         const duplicada = buscarFacturaDuplicada();
         if (!duplicada) {
             alerta.style.display = 'none';
             return false;
         }
         alerta.style.display = 'flex';
-        alerta.innerHTML = `<span>${iconoSvg('warn')} El proveedor <b>${escaparHtml(Estado.sesionActual.proveedor)}</b> ya tiene la factura <b>#${escaparHtml(Estado.sesionActual.numeroFactura)}</b>.</span>
+        alerta.innerHTML = `<span>${iconoSvg('warn')} El proveedor <b>${escaparHtml(Estado.sesionActual.proveedor)}</b> ya tiene una recepción idéntica registrada el <b>${escaparHtml(Estado.sesionActual.fechaEmision)}</b>.</span>
             <button type="button" class="btn-secundario-sm" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;" data-reabrir="${escaparHtml(duplicada.id)}">${iconoSvg('folder')} Reabrir Existente</button>`;
         alerta.querySelector('[data-reabrir]').onclick = () => UI.Historial.reabrirFacturaDeHistorial(duplicada.id);
         return true;
@@ -113,7 +116,7 @@
             : (x) => String(x || '').trim();
         Estado.sesionActual.proveedor = san(el('facProveedor').value, 120);
         if (el('facRnc')) Estado.sesionActual.rnc = san(el('facRnc').value, 20);
-        Estado.sesionActual.numeroFactura = san(el('facNumero').value, 50);
+        Estado.sesionActual.numeroFactura = '';
         Estado.sesionActual.fechaEmision = el('facFechaEmision').value;
         const inputVenc = el('facFechaVencimiento');
         if (inputVenc) {
@@ -200,8 +203,8 @@
         const Estado = AppFarmacia.Estado;
         const sesionActual = Estado.sesionActual;
         const prov = sesionActual.proveedor || 'Sin proveedor';
-        const num = sesionActual.numeroFactura ? `#${sesionActual.numeroFactura}` : 'Sin número';
-        el('topInvoiceText').textContent = `${sesionActual.id ? 'Editando: ' : ''}Factura: ${prov} (${num})`;
+        const fechaTxt = sesionActual.fechaEmision || '';
+        el('topInvoiceText').textContent = `${sesionActual.id ? 'Editando: ' : ''}Recepción: ${prov}${fechaTxt ? ` (${fechaTxt})` : ''}`;
         el('topItemsCount').textContent = `${sesionActual.productos.length} productos`;
 
         const totalCodigos = Object.keys(Almacenamiento.obtenerDiccionarioCodigos()).length;
@@ -745,41 +748,64 @@
                 btnFinalizar.classList.add('btn-loading');
             }
 
-            if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado()) {
-                const desbloqueado = UI.Seguridad ? await UI.Seguridad.solicitarDesbloqueoSiNecesario() : false;
-                if (!desbloqueado) {
-                    return UI.Notificaciones.mostrarMensaje('Bóveda cifrada bloqueada: ingresa la contraseña de administrador para archivar la factura.', 'warning');
+            if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado()) {
+                const cajaActiva = typeof AppFarmacia.Seguridad.estaCajaActiva === 'function'
+                    ? AppFarmacia.Seguridad.estaCajaActiva()
+                    : !AppFarmacia.Seguridad.estaBloqueado();
+                if (!cajaActiva) {
+                    const desbloqueado = UI.Seguridad
+                        ? await (UI.Seguridad.solicitarAccesoCajaOAdmin ? UI.Seguridad.solicitarAccesoCajaOAdmin() : UI.Seguridad.solicitarDesbloqueoSiNecesario())
+                        : false;
+                    if (!desbloqueado) {
+                        return UI.Notificaciones.mostrarMensaje('Bóveda bloqueada: ingresa PIN de Mostrador o Contraseña Admin para sellar y archivar la factura.', 'warning');
+                    }
                 }
             }
 
             const Estado = AppFarmacia.Estado;
             actualizarCabeceraFacturaDesdeUI();
-            if (!Estado.sesionActual.proveedor || !Estado.sesionActual.numeroFactura || !Estado.sesionActual.fechaEmision) {
-                UI.Notificaciones.mostrarMensaje('Completa Proveedor, Número de Factura y Fecha de Emisión antes de guardar.', 'error');
+            if (!Estado.sesionActual.proveedor || !Estado.sesionActual.fechaEmision) {
+                UI.Notificaciones.mostrarMensaje('Completa Proveedor y Fecha de Emisión antes de guardar.', 'error');
                 fijarCabeceraFacturaColapsada(false);
                 activarTabCockpit('factura');
                 el('seccionDatosFactura').scrollIntoView({ behavior: 'smooth' });
                 return;
             }
             if (!Estado.sesionActual.productos.length) {
-                return UI.Notificaciones.mostrarMensaje('Agrega al menos un producto antes de finalizar la factura.', 'error');
+                return UI.Notificaciones.mostrarMensaje('Agrega al menos un producto antes de finalizar la recepción.', 'error');
             }
             if (verificarDuplicadoUI()) {
-                return UI.Notificaciones.mostrarMensaje('Este proveedor ya tiene registrada una factura con ese número.', 'error');
+                return UI.Notificaciones.mostrarMensaje('Este proveedor ya tiene registrada una recepción idéntica en esa fecha.', 'error');
             }
 
-            const historial = Almacenamiento.obtenerHistorialFacturas();
             const resumen = Dominio.calcularResumenCuadreFactura(Estado.sesionActual.productos, Estado.sesionActual.totalFisico);
-
-            // DAT-05: Guarda fórmulas usadas
+            const folioInterno = Estado.sesionActual.folioInterno || Dominio.generarFolioRecepcionInterno(Estado.sesionActual.fechaEmision);
             const facturaCerrada = {
                 ...Dominio.clonarObjetoSeguro(Estado.sesionActual),
                 id: Estado.sesionActual.id || Dominio.generarIdUnico(),
+                folioInterno,
+                numeroFactura: '',
+                huellaContenido: Dominio.generarHuellaFactura(Estado.sesionActual),
                 totalCalculado: resumen.sumaAcumulada,
                 timestampGuardado: Date.now(),
                 reglasCalculoUsadas: Dominio.clonarObjetoSeguro(Estado.reglasActivas)
             };
 
+            const esSoloCaja = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+            if (esSoloCaja && typeof Almacenamiento.archivarFacturaEnBuzon === 'function') {
+                const resBuzon = await Almacenamiento.archivarFacturaEnBuzon(facturaCerrada);
+                if (!resBuzon || !resBuzon.exito) {
+                    return UI.Notificaciones.mostrarMensaje((resBuzon && resBuzon.error) || 'No se pudo sellar la factura en el buzón.', 'error');
+                }
+                Estado.vaciarSesion();
+                if (UI.Calculadora && typeof UI.Calculadora.limpiarEstadoOperativoCaja === 'function') {
+                    UI.Calculadora.limpiarEstadoOperativoCaja();
+                }
+                UI.Notificaciones.mostrarMensaje('Factura sellada en Buzón de Administración (pantalla limpia para el siguiente turno).', 'success');
+                return;
+            }
+
+            const historial = Almacenamiento.obtenerHistorialFacturas();
             const idx = historial.findIndex(f => f.id === facturaCerrada.id);
             if (idx >= 0) historial[idx] = facturaCerrada;
             else historial.unshift(facturaCerrada);
@@ -798,6 +824,9 @@
             }
 
             Estado.vaciarSesion();
+            if (UI.Calculadora && typeof UI.Calculadora.limpiarEstadoOperativoCaja === 'function') {
+                UI.Calculadora.limpiarEstadoOperativoCaja();
+            }
             UI.Notificaciones.mostrarMensaje('Factura archivada de forma segura en el historial.', 'success');
         } finally {
             operacionGuardadoEnCurso = false;
@@ -961,7 +990,6 @@
             fijarCabeceraFacturaColapsada(colapsadaInicial);
         } catch (_) {}
 
-        if (el('btnImprimirActual')) el('btnImprimirActual').addEventListener('click', () => UI.Historial.imprimirFactura(Estado.sesionActual));
         if (el('btnFinalizarFactura')) el('btnFinalizarFactura').addEventListener('click', finalizarYGuardarFactura);
         if (el('btnDescartar')) el('btnDescartar').addEventListener('click', async () => {
             if (Estado.sesionActual.id || (await UI.Notificaciones.mostrarConfirmacion('¿Deseas descartar la factura en curso y limpiar todos los datos?', 'Descartar Factura'))) {

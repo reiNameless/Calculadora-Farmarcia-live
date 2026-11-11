@@ -15,6 +15,25 @@
     let tasaItbisSeleccionada = 0;
     let tipoDescuentoSeleccionado = 'monto'; // 'monto' ($) o 'porcentaje' (%)
     let fichaVademecumSeleccionada = null; // Enlazado progresivo con Vademécum Maestro RD
+    let ultimoCostoJitActual = null; // Solo 1 producto activo descifrado al vuelo en mostrador
+    let escaneoJitToken = 0;
+
+    function limpiarEstadoOperativoCaja() {
+        ultimoCostoJitActual = null;
+        if (el('badgeVariacionCostoCockpit')) {
+            el('badgeVariacionCostoCockpit').style.display = 'none';
+        }
+    }
+
+    function obtenerCostoAnteriorMemoria(codigoNormalizado, prodDic) {
+        if (ultimoCostoJitActual && ultimoCostoJitActual.codigo === codigoNormalizado && Number(ultimoCostoJitActual.ultimoPrecioCaja) > 0) {
+            return Number(ultimoCostoJitActual.ultimoPrecioCaja);
+        }
+        if (prodDic && prodDic.ultimoPrecioCaja && Number(prodDic.ultimoPrecioCaja) > 0) {
+            return Number(prodDic.ultimoPrecioCaja);
+        }
+        return 0;
+    }
 
     function fijarItbis(tasa) {
         tasaItbisSeleccionada = tasa;
@@ -98,9 +117,7 @@
         const prodDic = (codigoNormalizado && AppFarmacia.Almacenamiento)
             ? AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoNormalizado)
             : null;
-        const costoAnterior = (prodDic && prodDic.ultimoPrecioCaja && Number(prodDic.ultimoPrecioCaja) > 0)
-            ? Number(prodDic.ultimoPrecioCaja)
-            : 0;
+        const costoAnterior = obtenerCostoAnteriorMemoria(codigoNormalizado, prodDic);
 
         const resumenActual = Dominio.calcularResumenCuadreFactura(sesionActual.productos, sesionActual.totalFisico);
         const aplicaItbis = tasaItbisSeleccionada > 0;
@@ -136,18 +153,11 @@
         // Feedback en tiempo real: Radar de Variación de Costos de Droguerías
         const badgeRadar = el('badgeVariacionCostoCockpit');
         if (badgeRadar) {
-            const codigoCrudo = el('calcCodigoBarras') ? el('calcCodigoBarras').value.trim() : '';
-            const codigoNormalizado = Dominio.normalizarCodigoBarras(codigoCrudo);
-            const prodDic = (codigoNormalizado && AppFarmacia.Almacenamiento)
-                ? AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codigoNormalizado)
-                : null;
-            const costoAnterior = (prodDic && prodDic.ultimoPrecioCaja && Number(prodDic.ultimoPrecioCaja) > 0)
-                ? Number(prodDic.ultimoPrecioCaja)
-                : 0;
+            const costoAnteriorRadar = costoAnterior;
 
-            if (costoAnterior > 0 && vPrecio.esValido && vPrecio.valor > 0) {
+            if (costoAnteriorRadar > 0 && vPrecio.esValido && vPrecio.valor > 0) {
                 const umbralInflacion = (reglasActivas && reglasActivas.porcentajeAlertaInflacion) || 5;
-                const analisis = Dominio.analizarVariacionCosto(vPrecio.valor, costoAnterior, umbralInflacion);
+                const analisis = Dominio.analizarVariacionCosto(vPrecio.valor, costoAnteriorRadar, umbralInflacion);
                 badgeRadar.style.display = 'inline-flex';
                 if (analisis.esAlza) {
                     badgeRadar.className = 'badge-radar-costo alza' + (analisis.esAlertaCritica ? ' critica' : '');
@@ -160,13 +170,13 @@
                 } else {
                     badgeRadar.className = 'badge-radar-costo igual';
                     badgeRadar.textContent = '=';
-                    badgeRadar.title = `Sin variación: El costo coincide con la última compra ($${costoAnterior.toFixed(2)}).`;
+                    badgeRadar.title = `Sin variación: El costo coincide con la última compra ($${costoAnteriorRadar.toFixed(2)}).`;
                 }
             } else if (vPrecio.esValido && vPrecio.valor === 0) {
                 badgeRadar.style.display = 'inline-flex';
                 badgeRadar.className = 'badge-radar-costo bonificacion';
                 badgeRadar.textContent = '0$';
-                badgeRadar.title = `Bonificación cruzada: Costo $0.00. Precios de venta basados en costo habitual ($${costoAnterior.toFixed(2)}).`;
+                badgeRadar.title = `Bonificación cruzada: Costo $0.00. Precios de venta basados en costo habitual ($${costoAnteriorRadar.toFixed(2)}).`;
             } else {
                 badgeRadar.style.display = 'none';
             }
@@ -312,7 +322,8 @@
         calcularEnVivo();
     }
 
-    function procesarEscaneoCodigoBarras(mostrarNotificacion = true) {
+    async function procesarEscaneoCodigoBarras(mostrarNotificacion = true) {
+        const miToken = ++escaneoJitToken;
         const textoEntrada = el('calcCodigoBarras').value.trim();
         // Detección y extracción automática de GS1 DataMatrix bidimensional (2D)
         const parsed2D = (Dominio && typeof Dominio.parsearCodigoGs1DataMatrix === 'function')
@@ -331,7 +342,10 @@
         }
 
         const codigo = Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value);
-        if (!codigo) return;
+        if (!codigo) {
+            ultimoCostoJitActual = null;
+            return;
+        }
 
         // Validación según estándar oficial GS1 (EAN-13, UPC-A, EAN-8, ITF-14)
         const valEstandar = Dominio.validarCodigoBarrasEstandar(codigo);
@@ -364,23 +378,16 @@
                 if (badgeCat) badgeCat.style.display = 'none';
             }
 
-            // 2. Costo Caja Base (autocompletado solicitado expresamente)
-            if (aprendido.ultimoPrecioCaja && Number(aprendido.ultimoPrecioCaja) > 0) {
-                el('calcPrecioCaja').value = Number(aprendido.ultimoPrecioCaja).toFixed(2);
-            }
-
-            // 3. ITBIS
+            // 2. ITBIS, Es Leche y Forma de Venta / Unidades
             const tasa = aprendido.tasaItbis !== undefined
                 ? Number(aprendido.tasaItbis)
                 : (aprendido.aplicaItbis ? 18 : 0);
             fijarItbis(tasa);
 
-            // 4. Es Leche
             if (el('calcEsLeche')) {
                 el('calcEsLeche').checked = Boolean(aprendido.esLeche);
             }
 
-            // 5. Forma de Venta (Tipo) y Unidades por Caja (Autocompletado persistente)
             if (aprendido.tipo) {
                 el('calcTipo').value = (aprendido.tipo === CONSTANTES.CATEGORIAS.ENTERO)
                     ? CONSTANTES.CATEGORIAS.ENTERO
@@ -393,22 +400,51 @@
                 el('calcUnidadesCaja').value = Number(aprendido.unidadesPorCaja);
             }
 
+            // 3. Descifrado Puntual JIT del último costo operativo (solo 1 código, sin cargar catálogo en RAM)
+            let opCosto = null;
+            if (Almacenamiento && typeof Almacenamiento.obtenerCostoOperativoProducto === 'function') {
+                opCosto = await Almacenamiento.obtenerCostoOperativoProducto(codigo).catch(() => null);
+            }
+            if (miToken !== escaneoJitToken) return;
+
+            const costoCargado = (opCosto && Number(opCosto.ultimoPrecioCaja) > 0)
+                ? Number(opCosto.ultimoPrecioCaja)
+                : ((aprendido.ultimoPrecioCaja && Number(aprendido.ultimoPrecioCaja) > 0) ? Number(aprendido.ultimoPrecioCaja) : 0);
+            const variacionCargada = (opCosto && opCosto.variacionCosto !== undefined)
+                ? Number(opCosto.variacionCosto)
+                : (aprendido.variacionCosto !== undefined ? Number(aprendido.variacionCosto) : 0);
+
+            if (costoCargado > 0) {
+                ultimoCostoJitActual = {
+                    codigo,
+                    ultimoPrecioCaja: costoCargado,
+                    costoAnteriorCaja: (opCosto && Number(opCosto.costoAnteriorCaja)) || 0,
+                    variacionCosto: variacionCargada
+                };
+                el('calcPrecioCaja').value = costoCargado.toFixed(2);
+            } else {
+                ultimoCostoJitActual = { codigo, ultimoPrecioCaja: 0, costoAnteriorCaja: 0, variacionCosto: 0 };
+            }
+
             if (mostrarNotificacion) {
                 const nombreMostrar = (aprendido.nombre && !aprendido.nombre.startsWith('Producto #') && aprendido.nombre !== 'Producto sin nombre')
                     ? `"${aprendido.nombre}"`
                     : `código ${codigo}`;
-                const textoCosto = aprendido.ultimoPrecioCaja ? ` | Costo: ${Number(aprendido.ultimoPrecioCaja).toFixed(2)}` : '';
+                const textoCosto = costoCargado > 0 ? ` | Costo: ${costoCargado.toFixed(2)}` : '';
                 let textoRadar = '';
-                if (aprendido.variacionCosto && Number(aprendido.variacionCosto) !== 0) {
-                    const v = Number(aprendido.variacionCosto);
-                    textoRadar = v > 0 ? ` [Alza previa: +${v}%]` : ` [Baja previa: ${v}%]`;
+                if (variacionCargada && variacionCargada !== 0) {
+                    textoRadar = variacionCargada > 0 ? ` [Alza previa: +${variacionCargada}%]` : ` [Baja previa: ${variacionCargada}%]`;
                 }
-                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}${textoCosto}${textoRadar}). Ingresa Cajas.`, 'success');
+                const avisoBloqueado = (!costoCargado && AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueadoTotal && AppFarmacia.Seguridad.estaBloqueadoTotal())
+                    ? ' (Bóveda bloqueada: ingresa PIN Caja para ver último costo)'
+                    : '';
+                UI.Notificaciones.mostrarMensaje(`Código reconocido (${nombreMostrar}${textoCosto}${textoRadar}). Ingresa Cajas.${avisoBloqueado}`, 'success');
             }
             calcularEnVivo();
             el('calcCajasCompradas').focus();
             el('calcCajasCompradas').select();
         } else {
+            ultimoCostoJitActual = null;
             const inputNombre = el('calcNombre');
             const badgeCat = el('badgeEstadoProducto');
             inputNombre.readOnly = false;
@@ -532,17 +568,26 @@
         const prodDic = (codigoBarrasNormalizado && Almacenamiento)
             ? Almacenamiento.buscarProductoPorCodigo(codigoBarrasNormalizado)
             : null;
+        let opJit = (ultimoCostoJitActual && ultimoCostoJitActual.codigo === codigoBarrasNormalizado)
+            ? ultimoCostoJitActual
+            : null;
+        if (!opJit && codigoBarrasNormalizado && Almacenamiento && typeof Almacenamiento.obtenerCostoOperativoProducto === 'function') {
+            opJit = await Almacenamiento.obtenerCostoOperativoProducto(codigoBarrasNormalizado).catch(() => null);
+        }
         let costoAnteriorCaja = undefined;
         let variacionCosto = undefined;
 
         const umbralInflacion = (reglasActivas && reglasActivas.porcentajeAlertaInflacion) || 5;
-        if (prodDic && prodDic.ultimoPrecioCaja && Number(prodDic.ultimoPrecioCaja) > 0) {
-            costoAnteriorCaja = Number(prodDic.ultimoPrecioCaja);
+        const costoRefPrevio = (opJit && Number(opJit.ultimoPrecioCaja) > 0)
+            ? Number(opJit.ultimoPrecioCaja)
+            : ((prodDic && prodDic.ultimoPrecioCaja && Number(prodDic.ultimoPrecioCaja) > 0) ? Number(prodDic.ultimoPrecioCaja) : 0);
+        if (costoRefPrevio > 0) {
+            costoAnteriorCaja = costoRefPrevio;
             const analisis = Dominio.analizarVariacionCosto(vPrecio.valor, costoAnteriorCaja, umbralInflacion);
             variacionCosto = analisis.porcentaje;
             if (analisis.esAlertaCritica) {
                 if (Dominio.emitirBipAlerta) Dominio.emitirBipAlerta();
-                UI.Notificaciones.mostrarMensaje(`[ALZA DE COSTO]: "${prodDic.nombre || el('calcNombre').value}" subió +${analisis.porcentaje}% (+$${analisis.diferenciaMonto.toFixed(2)}/caja)`, 'warning');
+                UI.Notificaciones.mostrarMensaje(`[ALZA DE COSTO]: "${(prodDic && prodDic.nombre) || el('calcNombre').value}" subió +${analisis.porcentaje}% (+$${analisis.diferenciaMonto.toFixed(2)}/caja)`, 'warning');
             }
         }
 
@@ -573,10 +618,15 @@
             || (prodDic && (prodDic.nombre || prodDic.nombreComercial))
             || `Producto #${sesionActual.productos.length + 1}`;
 
-        // Validación obligatoria de datos mínimos (nombre, concentración/unidad, laboratorio, tipo)
+        const labSinFugaProveedor = (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio)
+            || (prodDic && prodDic.laboratorio)
+            || '';
+
+        // Validación obligatoria de datos mínimos (cero herencia de proveedor privado hacia laboratorio público)
         const datosParaValidar = {
             nombre: nombreFinalLinea,
-            laboratorio: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio) || (prodDic && prodDic.laboratorio) || (sesionActual && sesionActual.proveedor) || '',
+            laboratorio: labSinFugaProveedor,
+            permitirSinLaboratorio: true,
             concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || '',
             tipo,
             unidadesPorCaja: vUnidades.valor,
@@ -599,7 +649,7 @@
             nombre: nombreFinalLinea,
             nombreComercial: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.nombreComercial) || (prodDic && prodDic.nombreComercial) || nombreFinalLinea,
             principioActivo: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.principioActivo) || (prodDic && prodDic.principioActivo) || '',
-            laboratorio: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio) || (prodDic && prodDic.laboratorio) || (sesionActual && sesionActual.proveedor) || '',
+            laboratorio: labSinFugaProveedor,
             costoReferencia: costoAnteriorCaja,
             esBonificacionCruzada: vPrecio.valor === 0,
             concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || '',
@@ -626,6 +676,7 @@
         aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea, sesionActual);
         Estado.agregarProductoASesion(nuevaLinea);
         fichaVademecumSeleccionada = null;
+        ultimoCostoJitActual = null;
         } finally {
             agregandoProductoEnCurso = false;
             if (btnAgregar) {
@@ -649,6 +700,7 @@
         if (el('badgeEstadoProducto')) el('badgeEstadoProducto').style.display = 'none';
         if (el('calcCodigoBarras')) el('calcCodigoBarras').style.borderColor = '';
         if (el('calcEsLeche')) el('calcEsLeche').checked = false;
+        limpiarEstadoOperativoCaja();
 
         // Reset de ITBIS al default (Exento / 0%)
         fijarItbis(0);
@@ -1076,6 +1128,7 @@
                         el('calcNombre').style.backgroundColor = '';
                     }
                     if (el('badgeEstadoProducto')) el('badgeEstadoProducto').style.display = 'none';
+                    limpiarEstadoOperativoCaja();
                 }
                 const soloDigitos = e.target.value.replace(/\D/g, '');
                 if (e.target.value !== soloDigitos) {
@@ -1148,10 +1201,10 @@
                     : [];
 
                 const htmlDic = coincidenciasDic.map(p => {
-                    const descCosto = p.ultimoPrecioCaja ? ` - $${Number(p.ultimoPrecioCaja).toFixed(2)}` : '';
                     const nom = Dominio.escaparHtml(p.nombre || p.nombreComercial || '');
                     const cod = Dominio.escaparHtml(p.codigoBarras || '');
-                    return `<option value="${nom}" label="[EN FARMACIA] ${nom} [${cod}]${descCosto}"></option>`;
+                    const lab = p.laboratorio ? ` • ${Dominio.escaparHtml(p.laboratorio)}` : '';
+                    return `<option value="${nom}" label="[EN FARMACIA] ${nom} [${cod}]${lab}"></option>`;
                 }).join('');
 
                 const htmlVad = coincidenciasVad.map(v => {
@@ -1190,9 +1243,6 @@
                         inputNombre.style.backgroundColor = 'var(--color-superficie-resaltada)';
                         if (el('badgeEstadoProducto')) el('badgeEstadoProducto').style.display = 'none';
                     }
-                    if (el('calcPrecioCaja') && !el('calcPrecioCaja').value && encontrado.ultimoPrecioCaja) {
-                        el('calcPrecioCaja').value = Number(encontrado.ultimoPrecioCaja).toFixed(2);
-                    }
                     if (encontrado.tipo && el('calcTipo')) {
                         el('calcTipo').value = encontrado.tipo;
                         actualizarVisibilidadCategoria();
@@ -1205,6 +1255,24 @@
                     }
                     const tasa = encontrado.tasaItbis !== undefined ? Number(encontrado.tasaItbis) : (encontrado.aplicaItbis ? 18 : 0);
                     fijarItbis(tasa);
+                    if (encontrado.codigoBarras && Almacenamiento && typeof Almacenamiento.obtenerCostoOperativoProducto === 'function') {
+                        Almacenamiento.obtenerCostoOperativoProducto(encontrado.codigoBarras).then(op => {
+                            if (op && Number(op.ultimoPrecioCaja) > 0) {
+                                ultimoCostoJitActual = {
+                                    codigo: encontrado.codigoBarras,
+                                    ultimoPrecioCaja: Number(op.ultimoPrecioCaja),
+                                    costoAnteriorCaja: Number(op.costoAnteriorCaja) || 0,
+                                    variacionCosto: Number(op.variacionCosto) || 0
+                                };
+                                if (el('calcPrecioCaja') && !el('calcPrecioCaja').value) {
+                                    el('calcPrecioCaja').value = Number(op.ultimoPrecioCaja).toFixed(2);
+                                }
+                                calcularEnVivo();
+                            }
+                        }).catch(() => {});
+                    } else if (el('calcPrecioCaja') && !el('calcPrecioCaja').value && encontrado.ultimoPrecioCaja) {
+                        el('calcPrecioCaja').value = Number(encontrado.ultimoPrecioCaja).toFixed(2);
+                    }
                     calcularEnVivo();
                 } else if (Almacenamiento && typeof Almacenamiento.buscarEnVademecum === 'function') {
                     const matchesVad = Almacenamiento.buscarEnVademecum(valMayus, 3);
@@ -1844,6 +1912,7 @@
         actualizarVisibilidadCategoria,
         procesarEscaneoCodigoBarras,
         establecerBloqueoReglas,
+        limpiarEstadoOperativoCaja,
         actualizarEtiquetasReglasUI,
         inicializarEventosCalculadora,
         iniciarEscaneoCamara,

@@ -10,15 +10,49 @@
     const el = id => document.getElementById(id);
     const escaparHtml = texto => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const iconoSvg = nombre => `<svg class="ico" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const crearIconoSvg = (nombre, clase = 'ico') => {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', clase);
+        svg.setAttribute('aria-hidden', 'true');
+        const use = document.createElementNS(SVG_NS, 'use');
+        use.setAttribute('href', `#i-${nombre}`);
+        svg.appendChild(use);
+        return svg;
+    };
 
-    function limpiarEtiquetaSubcategoria(subCat, macro) {
-        if (!subCat) return '';
-        let limpia = String(subCat).trim();
-        if (limpia.includes('/')) {
-            limpia = limpia.split('/').slice(1).join('/').trim();
+    const CLAVE_MODO_ORDEN_CATALOGO = 'calc_orden_catalogo';
+    let modoOrdenCatalogo = (() => {
+        try {
+            const guardado = localStorage.getItem(CLAVE_MODO_ORDEN_CATALOGO);
+            return guardado === 'nombre_az' ? 'nombre_az' : 'categoria_az';
+        } catch (_) {
+            return 'categoria_az';
         }
-        limpia = limpia.replace(/^(antibiótic[oa]s?|antidiabétic[oa]s?|suplementos?)\s+/i, '').trim();
-        return limpia ? (limpia.charAt(0).toUpperCase() + limpia.slice(1)) : subCat;
+    })();
+
+    function actualizarBotonOrdenCatalogo() {
+        const btn = el('btnAlternarOrdenCatalogo');
+        const txt = el('txtOrdenCatalogo');
+        const esGlobalAz = modoOrdenCatalogo === 'nombre_az';
+        if (txt) {
+            txt.textContent = esGlobalAz ? 'Vista: A–Z Global' : 'Vista: Categorías (A–Z)';
+        }
+        if (btn) {
+            btn.setAttribute('aria-pressed', esGlobalAz ? 'true' : 'false');
+        }
+    }
+
+    function cumpleFiltroItbisCatalogo(item, filtroItbis) {
+        if (!filtroItbis) return true;
+        const tasa = (item && item.tasaItbis !== undefined && Number.isFinite(Number(item.tasaItbis)))
+            ? Number(item.tasaItbis)
+            : (item && item.aplicaItbis ? 18 : 0);
+        if (filtroItbis === '0') return tasa === 0;
+        if (filtroItbis === 'gravados') return tasa > 0;
+        if (filtroItbis === '18') return tasa === 18;
+        if (filtroItbis === '16') return tasa === 16;
+        return true;
     }
 
     // Población estructurada del <select> de categorías con <optgroup> por Macrocategoría clínica
@@ -39,7 +73,7 @@
         const macrosBase = [
             'Antibióticos', 'Antidiabéticos', 'Cardiovascular & Hipertensión',
             'Analgésicos & Antiinflamatorios', 'Antialérgicos & Respiratorio',
-            'Gastrointestinal & Digestivo', 'Pediatría & Cuidado Infantil',
+            'Endocrinología', 'Gastrointestinal & Digestivo', 'Pediatría & Cuidado Infantil',
             'Cuidado Personal & Cosmética', 'Salud Bucodental',
             'Primeros Auxilios & Material Médico', 'Vitaminas & Suplementos',
             'Conveniencia & Bebidas', 'General / Otros'
@@ -55,31 +89,57 @@
             catMap.get(macro).add(sub);
         });
 
-        // Asegurar que la categoría del producto actual esté contemplada
+        // Asegurar que todas las macrocategorías canónicas y la del producto actual estén contempladas
+        macrosBase.forEach(macro => {
+            if (catMap.has(macro) && catMap.get(macro).size === 0) {
+                catMap.get(macro).add(macro);
+            }
+        });
         let encontrada = false;
         if (categoriaSeleccionada) {
-            const macroActual = Dominio.obtenerMacroCategoria(categoriaSeleccionada);
+            const macroActual = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
+                ? Dominio.obtenerMacroCategoria(categoriaSeleccionada)
+                : 'General / Otros';
             if (!catMap.has(macroActual)) catMap.set(macroActual, new Set());
             catMap.get(macroActual).add(categoriaSeleccionada);
         }
 
-        let html = '<option value="">-- Selecciona Categoría Terapéutica --</option>';
-        Array.from(catMap.keys()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })).forEach(macro => {
+        const fragSel = document.createDocumentFragment();
+        const optVacia = document.createElement('option');
+        optVacia.value = '';
+        optVacia.textContent = '-- Selecciona Categoría Terapéutica --';
+        fragSel.appendChild(optVacia);
+
+        const macrosOrdenadas = Array.from(catMap.keys()).sort((a, b) => {
+            if (a === 'General / Otros') return 1;
+            if (b === 'General / Otros') return -1;
+            return a.localeCompare(b, 'es', { sensitivity: 'base' });
+        });
+        macrosOrdenadas.forEach(macro => {
             const subs = Array.from(catMap.get(macro)).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
             if (subs.length > 0) {
-                html += `<optgroup label="${escaparHtml(macro)}">`;
+                const grp = document.createElement('optgroup');
+                grp.label = macro;
                 subs.forEach(s => {
-                    const isSel = (s.toLowerCase() === (categoriaSeleccionada || '').toLowerCase());
+                    const isSel = s.toLowerCase() === (categoriaSeleccionada || '').toLowerCase();
                     if (isSel) encontrada = true;
-                    html += `<option value="${escaparHtml(s)}"${isSel ? ' selected' : ''}>${escaparHtml(s)}</option>`;
+                    const opt = document.createElement('option');
+                    opt.value = s;
+                    opt.textContent = s;
+                    if (isSel) opt.selected = true;
+                    grp.appendChild(opt);
                 });
-                html += '</optgroup>';
+                fragSel.appendChild(grp);
             }
         });
 
         // Opción especial para agregar una categoría que no exista
-        html += `<option value="__NUEVA__"${(!encontrada && categoriaSeleccionada) ? ' selected' : ''}>+ Escribir nueva categoría...</option>`;
-        sel.innerHTML = html;
+        const optNueva = document.createElement('option');
+        optNueva.value = '__NUEVA__';
+        optNueva.textContent = '+ Escribir nueva categoría...';
+        if (!encontrada && categoriaSeleccionada) optNueva.selected = true;
+        fragSel.appendChild(optNueva);
+        sel.replaceChildren(fragSel);
 
         if (!encontrada && categoriaSeleccionada && inputNueva) {
             sel.value = '__NUEVA__';
@@ -258,197 +318,354 @@
             </div>`;
     }
 
-    function renderizarDiccionarioUI(filtroTermino = '', filtroCategoria = '') {
+    let ultimaVersionCatDic = -1;
+    let ultimoConteoCatDic = -1;
+
+    function crearBadgeCatalogo(texto, estiloCss, titulo = '') {
+        const span = document.createElement('span');
+        span.className = 'badge';
+        span.style.cssText = estiloCss;
+        span.textContent = texto;
+        if (titulo) span.title = titulo;
+        return span;
+    }
+
+    function renderizarDiccionarioUI(filtroTermino, filtroCategoria, filtroItbis) {
         const contenedor = el('contenedorDiccionario');
         if (!contenedor) return;
+        const inputFiltro = el('filtroBuscadorDiccionario');
+        const selCat = el('filtroCategoriaDiccionario');
+        const selItbis = el('filtroItbisDiccionario');
+
+        const terminoEfectivo = filtroTermino !== undefined ? String(filtroTermino) : (inputFiltro ? inputFiltro.value : '');
+        const catFiltroEfectivo = filtroCategoria !== undefined ? String(filtroCategoria) : (selCat ? selCat.value : '');
+        const itbisFiltroEfectivo = filtroItbis !== undefined ? String(filtroItbis) : (selItbis ? selItbis.value : '');
+
         const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
         const todosLosItems = Object.values(diccionario || {});
 
-        // 1. Actualizar dinámicamente el selector de categorías agrupado por Macro-Categorías (Rol 01 / EGM)
-        const selCat = el('filtroCategoriaDiccionario');
-        if (selCat) {
-            const catActualSeleccionada = filtroCategoria || selCat.value || '';
+        // 1. Actualizar selector de macrocategorías limpias (A-Z, 'General / Otros' al final) solo si cambió el catálogo
+        const versionDic = (Almacenamiento && typeof Almacenamiento.obtenerVersionDiccionario === 'function')
+            ? Almacenamiento.obtenerVersionDiccionario()
+            : -1;
+        if (selCat && (versionDic === -1 || versionDic !== ultimaVersionCatDic || todosLosItems.length !== ultimoConteoCatDic)) {
+            ultimaVersionCatDic = versionDic;
+            ultimoConteoCatDic = todosLosItems.length;
+            const catActualSeleccionada = catFiltroEfectivo || selCat.value || '';
             const macroMap = new Map();
 
-            todosLosItems.forEach(p => {
-                const subCat = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+            for (let i = 0; i < todosLosItems.length; i++) {
+                const p = todosLosItems[i];
+                const subCat = (p && p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
                 const macro = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
                     ? Dominio.obtenerMacroCategoria(subCat)
                     : subCat;
-
-                if (!macroMap.has(macro)) {
-                    macroMap.set(macro, { total: 0, subcategorias: new Map() });
-                }
-                const entradaMacro = macroMap.get(macro);
-                entradaMacro.total += 1;
-                entradaMacro.subcategorias.set(subCat, (entradaMacro.subcategorias.get(subCat) || 0) + 1);
-            });
-
-            const macrosOrdenadas = Array.from(macroMap.keys()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-
-            let optionsHtml = `<option value="">Todas las categorías (${todosLosItems.length} productos)</option>`;
-            macrosOrdenadas.forEach(macro => {
-                const entrada = macroMap.get(macro);
-                const subKeys = Array.from(entrada.subcategorias.keys()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-
-                const selectedMacro = catActualSeleccionada === `macro:${macro}` || catActualSeleccionada === macro ? ' selected' : '';
-
-                if (subKeys.length <= 1 && subKeys[0] === macro) {
-                    optionsHtml += `<option value="macro:${escaparHtml(macro)}"${selectedMacro}>${escaparHtml(macro)} (${entrada.total})</option>`;
-                } else {
-                    optionsHtml += `<optgroup label="${escaparHtml(macro)} (${entrada.total})">`;
-                    optionsHtml += `<option value="macro:${escaparHtml(macro)}"${selectedMacro}>★ Todos en ${escaparHtml(macro)} (${entrada.total})</option>`;
-                    subKeys.forEach(sub => {
-                        const count = entrada.subcategorias.get(sub);
-                        const selectedSub = catActualSeleccionada === `sub:${sub}` || catActualSeleccionada === sub ? ' selected' : '';
-                        const etiquetaLimpia = limpiarEtiquetaSubcategoria(sub, macro);
-                        optionsHtml += `<option value="sub:${escaparHtml(sub)}"${selectedSub}>   ${escaparHtml(etiquetaLimpia)} (${count})</option>`;
-                    });
-                    optionsHtml += `</optgroup>`;
-                }
-            });
-            selCat.innerHTML = optionsHtml;
-        }
-
-        let listaItems = [...todosLosItems];
-
-        // 2. Filtro por categoría o macro-categoría seleccionada
-        const catFiltro = filtroCategoria || (selCat ? selCat.value : '');
-        if (catFiltro) {
-            if (catFiltro.startsWith('macro:')) {
-                const targetMacro = catFiltro.slice(6);
-                listaItems = listaItems.filter(p => {
-                    const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
-                    return (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
-                        ? Dominio.obtenerMacroCategoria(c) === targetMacro
-                        : c === targetMacro;
-                });
-            } else if (catFiltro.startsWith('sub:')) {
-                const targetSub = catFiltro.slice(4).toLowerCase();
-                listaItems = listaItems.filter(p => {
-                    const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
-                    return c.toLowerCase() === targetSub;
-                });
-            } else {
-                const target = catFiltro.toLowerCase();
-                listaItems = listaItems.filter(p => {
-                    const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
-                    const macro = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
-                        ? Dominio.obtenerMacroCategoria(c).toLowerCase()
-                        : '';
-                    return c.toLowerCase() === target || macro === target;
-                });
+                macroMap.set(macro, (macroMap.get(macro) || 0) + 1);
             }
+
+            const macrosOrdenadas = Array.from(macroMap.keys()).sort((a, b) => {
+                if (a === 'General / Otros') return 1;
+                if (b === 'General / Otros') return -1;
+                return a.localeCompare(b, 'es', { sensitivity: 'base' });
+            });
+
+            const fragOpts = document.createDocumentFragment();
+            const optTodas = document.createElement('option');
+            optTodas.value = '';
+            optTodas.textContent = `Todas las categorías (${todosLosItems.length})`;
+            fragOpts.appendChild(optTodas);
+
+            macrosOrdenadas.forEach(macro => {
+                const count = macroMap.get(macro) || 0;
+                const opt = document.createElement('option');
+                opt.value = `macro:${macro}`;
+                opt.textContent = `${macro} (${count})`;
+                if (catActualSeleccionada === `macro:${macro}` || catActualSeleccionada === macro) {
+                    opt.selected = true;
+                }
+                fragOpts.appendChild(opt);
+            });
+            selCat.replaceChildren(fragOpts);
         }
 
-        // 3. Filtro difuso o por texto
-        if (filtroTermino && filtroTermino.trim().length >= 2) {
-            listaItems = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
-                ? Dominio.buscarEnCatalogoFuzzy(filtroTermino.trim(), Object.fromEntries(listaItems.map(p => [p.codigoBarras, p])), 100)
-                : listaItems.filter(p => (p.nombre && p.nombre.toLowerCase().includes(filtroTermino.toLowerCase())) || (p.codigoBarras && p.codigoBarras.includes(filtroTermino)));
+        // 2. Filtrado por categoría, régimen ITBIS y término de búsqueda
+        const qTerm = terminoEfectivo.trim();
+        let listaItems;
+
+        if (!catFiltroEfectivo && !itbisFiltroEfectivo && qTerm.length >= 2 &&
+            Almacenamiento && typeof Almacenamiento.buscarProductosEnDiccionarioRapido === 'function') {
+            listaItems = Almacenamiento.buscarProductosEnDiccionarioRapido(qTerm, 150);
+        } else {
+            listaItems = todosLosItems.slice();
+            if (catFiltroEfectivo) {
+                if (catFiltroEfectivo.startsWith('macro:')) {
+                    const targetMacro = catFiltroEfectivo.slice(6);
+                    listaItems = listaItems.filter(p => {
+                        const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+                        return (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
+                            ? Dominio.obtenerMacroCategoria(c) === targetMacro
+                            : c === targetMacro;
+                    });
+                } else if (catFiltroEfectivo.startsWith('sub:')) {
+                    const targetSub = catFiltroEfectivo.slice(4).toLowerCase();
+                    listaItems = listaItems.filter(p => {
+                        const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+                        return c.toLowerCase() === targetSub;
+                    });
+                } else {
+                    const target = catFiltroEfectivo.toLowerCase();
+                    listaItems = listaItems.filter(p => {
+                        const c = (p.categoria && p.categoria.trim()) ? p.categoria.trim() : 'General / Otros';
+                        const macro = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
+                            ? Dominio.obtenerMacroCategoria(c).toLowerCase()
+                            : '';
+                        return c.toLowerCase() === target || macro === target;
+                    });
+                }
+            }
+
+            if (itbisFiltroEfectivo) {
+                listaItems = listaItems.filter(p => cumpleFiltroItbisCatalogo(p, itbisFiltroEfectivo));
+            }
+
+            if (qTerm.length >= 2) {
+                listaItems = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
+                    ? Dominio.buscarEnCatalogoFuzzy(qTerm, listaItems, 150)
+                    : listaItems.filter(p => (p.nombre && p.nombre.toLowerCase().includes(qTerm.toLowerCase())) || (p.codigoBarras && p.codigoBarras.includes(qTerm)));
+            }
         }
 
         if (!listaItems.length) {
-            contenedor.innerHTML = (filtroTermino || catFiltro)
-                ? `<div class="text-center p-18 text-muted">No se encontraron productos coincidentes en el catálogo.</div>`
-                : `<div class="text-center p-18 text-muted">Aún no hay códigos de barra memorizados. Escanea un producto en la calculadora y agrégalo para aprenderlo.</div>`;
+            const vacio = document.createElement('div');
+            vacio.className = 'text-center p-18 text-muted';
+            vacio.textContent = (qTerm || catFiltroEfectivo || itbisFiltroEfectivo)
+                ? 'No se encontraron productos coincidentes con los filtros aplicados.'
+                : 'Aún no hay productos memorizados. Escanea o agrega un producto con nombre en la calculadora para catalogarlo.';
+            contenedor.replaceChildren(vacio);
             return;
         }
 
-        // 4. ORGANIZACIÓN DETERMINÍSTICA: Categoría (A-Z) y dentro de cada categoría, Nombre Ascendente (A-Z)
-        listaItems.sort((a, b) => {
-            const catA = (a.categoria && a.categoria.trim()) ? a.categoria.trim() : 'General / Otros';
-            const catB = (b.categoria && b.categoria.trim()) ? b.categoria.trim() : 'General / Otros';
-            const cmpCat = catA.localeCompare(catB, 'es', { sensitivity: 'base' });
-            if (cmpCat !== 0) return cmpCat;
+        // 3. ORDENACIÓN DETERMINÍSTICA: por Macrocategoría (A-Z) + Nombre Ascendente (A-Z), o A-Z Global
+        const ordenFinal = (Dominio && typeof Dominio.ordenarProductosCatalogo === 'function')
+            ? Dominio.ordenarProductosCatalogo(listaItems, { modoOrden: modoOrdenCatalogo })
+            : listaItems.slice();
 
-            const nomA = (a.nombre || a.nombreComercial || '').trim();
-            const nomB = (b.nombre || b.nombreComercial || '').trim();
-            return nomA.localeCompare(nomB, 'es', { sensitivity: 'base' });
+        // Pre-contar por macrocategoría en el resultado visible para mostrar conteo en encabezados
+        const conteoVisiblePorMacro = new Map();
+        ordenFinal.forEach(item => {
+            const macro = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
+                ? Dominio.obtenerMacroCategoria(item.categoria)
+                : ((item.categoria && item.categoria.trim()) || 'General / Otros');
+            conteoVisiblePorMacro.set(macro, (conteoVisiblePorMacro.get(macro) || 0) + 1);
         });
 
-        // 5. Renderizado en cuadrícula con cabeceras de categoría si no hay término difuso específico
-        let filasHtml = '';
-        let ultimaCategoria = null;
+        // 4. Construcción DOM segura (DocumentFragment, cero innerHTML dinámico)
+        const fragContenedor = document.createDocumentFragment();
 
-        listaItems.forEach(item => {
+        const barraEstado = document.createElement('div');
+        barraEstado.style.cssText = 'font-size:12px;color:var(--color-texto-secundario);padding:4px 0 8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;';
+        const spanResumen = document.createElement('span');
+        const textoGrupos = modoOrdenCatalogo === 'categoria_az'
+            ? ` en ${conteoVisiblePorMacro.size} categoría${conteoVisiblePorMacro.size === 1 ? '' : 's'}`
+            : '';
+        spanResumen.textContent = `Mostrando ${ordenFinal.length} producto${ordenFinal.length === 1 ? '' : 's'}${textoGrupos} • Orden: ${modoOrdenCatalogo === 'nombre_az' ? 'Nombre Global (A–Z)' : 'Categoría → Nombre (A–Z)'}`;
+        barraEstado.appendChild(spanResumen);
+        fragContenedor.appendChild(barraEstado);
+
+        const tablaWrap = document.createElement('div');
+        tablaWrap.className = 'table-responsive';
+        const tabla = document.createElement('table');
+
+        const thead = document.createElement('thead');
+        const trHead = document.createElement('tr');
+        ['Código de Barras', 'Producto / Laboratorio', 'Categoría / Tipo', 'Trae x Caja', 'Último Costo Caja', 'Acciones'].forEach(colTitulo => {
+            const th = document.createElement('th');
+            th.textContent = colTitulo;
+            trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+        tabla.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+        const mostrarEncabezadosGrupo = modoOrdenCatalogo === 'categoria_az' && !qTerm;
+        let ultimaMacro = null;
+
+        ordenFinal.forEach(item => {
             const cod = item.codigoBarras || '';
-            const codEscapado = escaparHtml(cod);
-            const categoriaActual = (item.categoria && item.categoria.trim()) ? item.categoria.trim() : 'General / Otros';
+            const subCatRaw = (item.categoria && item.categoria.trim()) ? item.categoria.trim() : '';
+            const macroActual = (Dominio && typeof Dominio.obtenerMacroCategoria === 'function')
+                ? Dominio.obtenerMacroCategoria(subCatRaw)
+                : (subCatRaw || 'General / Otros');
 
-            // Insertar separador de categoría si cambia
-            if (!filtroTermino && categoriaActual !== ultimaCategoria) {
-                ultimaCategoria = categoriaActual;
-                filasHtml += `<tr class="fila-grupo-categoria">
-                    <td colspan="6" style="background:var(--color-fondo-panel);font-weight:700;font-size:12px;color:var(--color-primario);padding:8px 12px;border-top:1.5px solid var(--color-borde);border-bottom:1px solid var(--color-borde);">
-                        ${escaparHtml(categoriaActual)}
-                    </td>
-                </tr>`;
+            if (mostrarEncabezadosGrupo && macroActual !== ultimaMacro) {
+                ultimaMacro = macroActual;
+                const trGrupo = document.createElement('tr');
+                trGrupo.className = 'fila-grupo-categoria';
+                const tdGrupo = document.createElement('td');
+                tdGrupo.colSpan = 6;
+                tdGrupo.style.cssText = 'background:var(--color-fondo-panel);font-weight:700;font-size:12px;color:var(--color-primario);padding:8px 12px;border-top:1.5px solid var(--color-borde);border-bottom:1px solid var(--color-borde);';
+                const totalGrupo = conteoVisiblePorMacro.get(macroActual) || 0;
+                tdGrupo.textContent = `${macroActual} (${totalGrupo})`;
+                trGrupo.appendChild(tdGrupo);
+                tbody.appendChild(trGrupo);
             }
 
-            const badges = [];
-            if (item.esLeche) {
-                badges.push('<span class="badge" style="font-size:10px;background:var(--color-primario-fondo);color:var(--color-primario);padding:1px 5px;border-radius:3px;margin-left:4px;">Leche 10%</span>');
+            const tr = document.createElement('tr');
+
+            // Columna 1: Código de barras (+ badge Interno si es prefijo 200...)
+            const tdCod = document.createElement('td');
+            tdCod.className = 'mono';
+            tdCod.appendChild(document.createTextNode(cod));
+            if (Dominio && typeof Dominio.esCodigoBarrasInterno === 'function' && Dominio.esCodigoBarrasInterno(cod)) {
+                tdCod.appendChild(document.createElement('br'));
+                tdCod.appendChild(crearBadgeCatalogo(
+                    'Interno',
+                    'font-size:9px;background:var(--color-superficie-resaltada);border:1px solid var(--color-borde-fuerte);color:var(--color-texto-secundario);padding:1px 5px;border-radius:3px;',
+                    'Código interno GS1 (prefijo 200) asignado automáticamente'
+                ));
             }
-            if (item.tasaItbis > 0 || item.aplicaItbis) {
-                const tasa = item.tasaItbis || 18;
-                badges.push(`<span class="badge" style="font-size:10px;background:var(--color-alerta-fondo);color:var(--color-alerta);padding:1px 5px;border-radius:3px;margin-left:4px;">+${tasa}% ITBIS</span>`);
-            }
+            tr.appendChild(tdCod);
+
+            // Columna 2: Nombre + badges fiscales + subtítulo
+            const tdNom = document.createElement('td');
             const nombreTexto = item.nombre || item.nombreComercial || 'Producto sin nombre';
-            const subtitulo = [item.principioActivo, item.laboratorio].filter(Boolean).join(' • ');
+            const strongNom = document.createElement('strong');
+            strongNom.textContent = nombreTexto;
+            tdNom.appendChild(strongNom);
 
-            const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
-
-            let badgeVariacion = '';
-            if (!estaBloqueado && item.variacionCosto && Number(item.variacionCosto) !== 0) {
-                const varNum = Number(item.variacionCosto);
-                const bg = varNum > 0 ? '#fee2e2' : '#dcfce7';
-                const color = varNum > 0 ? '#dc2626' : '#16a34a';
-                badgeVariacion = `<span class="badge" style="font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;" title="Variación respecto a la compra anterior">${varNum > 0 ? '+' : ''}${varNum}%</span>`;
+            if (item.esLeche) {
+                tdNom.appendChild(crearBadgeCatalogo(
+                    'Leche 10%',
+                    'font-size:10px;background:var(--color-primario-fondo);color:var(--color-primario);padding:1px 5px;border-radius:3px;margin-left:4px;'
+                ));
             }
 
-            const tieneCostoLocal = item.ultimoPrecioCaja !== undefined && item.ultimoPrecioCaja !== null && Number(item.ultimoPrecioCaja) > 0;
-            const celdaCostoHtml = estaBloqueado
-                ? `<span class="badge-cifrado-celda" title="Costo cifrado con AES-256. Desbloquea Admin para visualizar.">${iconoSvg('lock')} Cifrado</span>`
-                : `<span data-celda-costo-cod="${codEscapado}">${tieneCostoLocal ? `$${Number(item.ultimoPrecioCaja).toFixed(2)}${badgeVariacion}` : '—'}</span>`;
+            const tasaItbis = (item.tasaItbis !== undefined && Number.isFinite(Number(item.tasaItbis)))
+                ? Number(item.tasaItbis)
+                : (item.aplicaItbis ? 18 : 0);
+            if (tasaItbis > 0) {
+                tdNom.appendChild(crearBadgeCatalogo(
+                    `+${tasaItbis}% ITBIS`,
+                    'font-size:10px;background:var(--color-alerta-fondo);color:var(--color-alerta);padding:1px 5px;border-radius:3px;margin-left:4px;'
+                ));
+            } else {
+                tdNom.appendChild(crearBadgeCatalogo(
+                    'Exento 0%',
+                    'font-size:10px;background:var(--color-exito-fondo);color:var(--color-exito);padding:1px 5px;border-radius:3px;margin-left:4px;',
+                    'Exento de ITBIS (0%)'
+                ));
+            }
 
-            filasHtml += `<tr>
-                <td class="mono">${escaparHtml(cod)}</td>
-                <td>
-                    <strong>${escaparHtml(nombreTexto)}</strong>${badges.join('')}
-                    ${subtitulo ? `<div style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(subtitulo)}</div>` : ''}
-                </td>
-                <td><span style="font-size:11px;color:var(--color-texto-secundario);">${escaparHtml(categoriaActual)}</span><br><span style="font-size:10px;">${item.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero'}</span></td>
-                <td class="mono">${item.unidadesPorCaja}</td>
-                <td class="mono">${celdaCostoHtml}</td>
-                <td style="white-space:nowrap;">
-                    <div style="display:flex;gap:4px;align-items:center;">
-                        <button type="button" class="action-icon-btn" data-usar-codigo="${codEscapado}" title="Cargar en Calculadora" aria-label="Cargar ${escaparHtml(nombreTexto)} en calculadora">${iconoSvg('calc')}</button>
-                        <button type="button" class="action-icon-btn" data-editar-ficha="${codEscapado}" title="Editar Ficha en Catálogo" aria-label="Editar ficha de ${escaparHtml(nombreTexto)}">${iconoSvg('edit')}</button>
-                        <button type="button" class="action-icon-btn text-danger" data-borrar-codigo="${codEscapado}" title="Eliminar del Catálogo" aria-label="Eliminar código ${codEscapado}">${iconoSvg('trash')}</button>
-                    </div>
-                </td>
-            </tr>`;
+            const subtitulo = [item.principioActivo, item.laboratorio].filter(Boolean).join(' • ');
+            if (subtitulo) {
+                const divSub = document.createElement('div');
+                divSub.style.cssText = 'font-size:11px;color:var(--color-texto-secundario);';
+                divSub.textContent = subtitulo;
+                tdNom.appendChild(divSub);
+            }
+            tr.appendChild(tdNom);
+
+            // Columna 3: Categoría limpia + detalle + tipo
+            const tdCat = document.createElement('td');
+            const spanMacro = document.createElement('span');
+            spanMacro.style.cssText = 'font-size:11px;font-weight:600;color:var(--color-texto-principal);';
+            spanMacro.textContent = macroActual;
+            tdCat.appendChild(spanMacro);
+            if (subCatRaw && subCatRaw.toLowerCase() !== macroActual.toLowerCase()) {
+                const divSubCat = document.createElement('div');
+                divSubCat.style.cssText = 'font-size:10px;color:var(--color-texto-secundario);';
+                divSubCat.textContent = subCatRaw;
+                tdCat.appendChild(divSubCat);
+            } else {
+                tdCat.appendChild(document.createElement('br'));
+            }
+            const spanTipo = document.createElement('span');
+            spanTipo.style.cssText = 'font-size:10px;color:var(--color-texto-secundario);';
+            spanTipo.textContent = item.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE ? 'Se divide' : 'Se vende entero';
+            tdCat.appendChild(spanTipo);
+            tr.appendChild(tdCat);
+
+            // Columna 4: Unidades por caja
+            const tdUnid = document.createElement('td');
+            tdUnid.className = 'mono';
+            tdUnid.textContent = String(item.unidadesPorCaja || 1);
+            tr.appendChild(tdUnid);
+
+            // Columna 5: Último Costo Caja (con hidratación JIT si Admin activo)
+            const tdCosto = document.createElement('td');
+            tdCosto.className = 'mono';
+            if (estaBloqueado) {
+                const spanBloq = document.createElement('span');
+                spanBloq.className = 'badge-cifrado-celda';
+                spanBloq.title = 'Costo cifrado con AES-256. Desbloquea Admin para visualizar.';
+                spanBloq.appendChild(crearIconoSvg('lock'));
+                spanBloq.appendChild(document.createTextNode(' Cifrado'));
+                tdCosto.appendChild(spanBloq);
+            } else {
+                const spanCosto = document.createElement('span');
+                spanCosto.setAttribute('data-celda-costo-cod', cod);
+                const tieneCostoLocal = item.ultimoPrecioCaja !== undefined && item.ultimoPrecioCaja !== null && Number(item.ultimoPrecioCaja) > 0;
+                if (tieneCostoLocal) {
+                    spanCosto.textContent = `$${Number(item.ultimoPrecioCaja).toFixed(2)}`;
+                    if (item.variacionCosto && Number(item.variacionCosto) !== 0) {
+                        const varNum = Number(item.variacionCosto);
+                        const bg = varNum > 0 ? '#fee2e2' : '#dcfce7';
+                        const color = varNum > 0 ? '#dc2626' : '#16a34a';
+                        spanCosto.appendChild(crearBadgeCatalogo(
+                            `${varNum > 0 ? '+' : ''}${varNum}%`,
+                            `font-size:9px;background:${bg};color:${color};padding:1px 4px;border-radius:3px;margin-left:4px;`,
+                            'Variación respecto a la compra anterior'
+                        ));
+                    }
+                } else {
+                    spanCosto.textContent = '—';
+                }
+                tdCosto.appendChild(spanCosto);
+            }
+            tr.appendChild(tdCosto);
+
+            // Columna 6: Acciones
+            const tdAcc = document.createElement('td');
+            tdAcc.style.whiteSpace = 'nowrap';
+            const divAcc = document.createElement('div');
+            divAcc.style.cssText = 'display:flex;gap:4px;align-items:center;';
+
+            const btnUsar = document.createElement('button');
+            btnUsar.type = 'button';
+            btnUsar.className = 'action-icon-btn';
+            btnUsar.setAttribute('data-usar-codigo', cod);
+            btnUsar.title = 'Cargar en Calculadora';
+            btnUsar.setAttribute('aria-label', `Cargar ${nombreTexto} en calculadora`);
+            btnUsar.appendChild(crearIconoSvg('calc'));
+
+            const btnEditar = document.createElement('button');
+            btnEditar.type = 'button';
+            btnEditar.className = 'action-icon-btn';
+            btnEditar.setAttribute('data-editar-ficha', cod);
+            btnEditar.title = 'Editar Ficha en Catálogo';
+            btnEditar.setAttribute('aria-label', `Editar ficha de ${nombreTexto}`);
+            btnEditar.appendChild(crearIconoSvg('edit'));
+
+            const btnBorrar = document.createElement('button');
+            btnBorrar.type = 'button';
+            btnBorrar.className = 'action-icon-btn text-danger';
+            btnBorrar.setAttribute('data-borrar-codigo', cod);
+            btnBorrar.title = 'Eliminar del Catálogo';
+            btnBorrar.setAttribute('aria-label', `Eliminar código ${cod}`);
+            btnBorrar.appendChild(crearIconoSvg('trash'));
+
+            divAcc.append(btnUsar, btnEditar, btnBorrar);
+            tdAcc.appendChild(divAcc);
+            tr.appendChild(tdAcc);
+
+            tbody.appendChild(tr);
         });
 
-        contenedor.innerHTML = `
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Código de Barras</th>
-                            <th>Producto / Laboratorio</th>
-                            <th>Categoría / Tipo</th>
-                            <th>Trae x Caja</th>
-                            <th>Último Costo Caja</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${filasHtml}
-                    </tbody>
-                </table>
-            </div>`;
+        tabla.appendChild(tbody);
+        tablaWrap.appendChild(tabla);
+        fragContenedor.appendChild(tablaWrap);
+        contenedor.replaceChildren(fragContenedor);
 
         // Hidratación puntual de costos para tabla solo si Administrador está desbloqueado
         if (AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && !AppFarmacia.Seguridad.estaBloqueado() &&
@@ -460,14 +677,17 @@
                     const codItem = celda.getAttribute('data-celda-costo-cod');
                     const info = mapaCostos.get(codItem);
                     if (info && info.ultimoPrecioCaja !== undefined && Number(info.ultimoPrecioCaja) > 0) {
-                        let extra = '';
+                        const nodos = [document.createTextNode(`$${Number(info.ultimoPrecioCaja).toFixed(2)}`)];
                         if (info.variacionCosto && Number(info.variacionCosto) !== 0) {
                             const v = Number(info.variacionCosto);
                             const bg = v > 0 ? '#fee2e2' : '#dcfce7';
                             const col = v > 0 ? '#dc2626' : '#16a34a';
-                            extra = `<span class="badge" style="font-size:9px;background:${bg};color:${col};padding:1px 4px;border-radius:3px;margin-left:4px;">${v > 0 ? '+' : ''}${v}%</span>`;
+                            nodos.push(crearBadgeCatalogo(
+                                `${v > 0 ? '+' : ''}${v}%`,
+                                `font-size:9px;background:${bg};color:${col};padding:1px 4px;border-radius:3px;margin-left:4px;`
+                            ));
                         }
-                        celda.innerHTML = `$${Number(info.ultimoPrecioCaja).toFixed(2)}${extra}`;
+                        celda.replaceChildren(...nodos);
                     } else {
                         celda.textContent = '—';
                     }
@@ -574,15 +794,38 @@
 
         const inputFiltro = el('filtroBuscadorDiccionario');
         const selCat = el('filtroCategoriaDiccionario');
+        const selItbis = el('filtroItbisDiccionario');
+        const btnOrdenCat = el('btnAlternarOrdenCatalogo');
 
         const aplicarFiltrosDiccionario = () => {
             const termino = inputFiltro ? inputFiltro.value.trim() : '';
             const cat = selCat ? selCat.value : '';
-            renderizarDiccionarioUI(termino, cat);
+            const itbis = selItbis ? selItbis.value : '';
+            renderizarDiccionarioUI(termino, cat, itbis);
         };
 
-        if (inputFiltro) inputFiltro.addEventListener('input', aplicarFiltrosDiccionario);
+        actualizarBotonOrdenCatalogo();
+        if (btnOrdenCat) {
+            btnOrdenCat.addEventListener('click', () => {
+                modoOrdenCatalogo = (modoOrdenCatalogo === 'nombre_az') ? 'categoria_az' : 'nombre_az';
+                try { localStorage.setItem(CLAVE_MODO_ORDEN_CATALOGO, modoOrdenCatalogo); } catch (_) {}
+                actualizarBotonOrdenCatalogo();
+                aplicarFiltrosDiccionario();
+            });
+        }
+
+        let temporizadorFiltroDic = null;
+        if (inputFiltro) {
+            inputFiltro.addEventListener('input', () => {
+                if (temporizadorFiltroDic) clearTimeout(temporizadorFiltroDic);
+                temporizadorFiltroDic = setTimeout(() => {
+                    temporizadorFiltroDic = null;
+                    aplicarFiltrosDiccionario();
+                }, 150);
+            });
+        }
         if (selCat) selCat.addEventListener('change', aplicarFiltrosDiccionario);
+        if (selItbis) selItbis.addEventListener('change', aplicarFiltrosDiccionario);
 
         // Diálogo Modal de Edición de Ficha Maestra
         const modalEdit = el('modalEditarProductoDiccionario');
@@ -590,39 +833,322 @@
         const btnCancelarEdit = el('btnCancelarEditarProducto');
         const formEdit = el('formEditarFichaProducto');
 
+        function limpiarErrorModalProducto() {
+            const boxErr = el('errorModalEditarProducto');
+            if (boxErr) {
+                boxErr.style.display = 'none';
+                boxErr.classList.remove('mostrar');
+                boxErr.textContent = '';
+            }
+            if (formEdit) {
+                formEdit.querySelectorAll('[aria-invalid]').forEach(campo => {
+                    campo.removeAttribute('aria-invalid');
+                    if (campo.id === 'editProdCodigo') {
+                        campo.setAttribute('aria-describedby', 'hintEditProdCodigo');
+                    } else if (campo.getAttribute('aria-describedby') === 'errorModalEditarProducto') {
+                        campo.removeAttribute('aria-describedby');
+                    }
+                });
+            }
+        }
+
+        function mostrarErrorModalProducto(mensaje, idCampo) {
+            const boxErr = el('errorModalEditarProducto');
+            if (boxErr) {
+                boxErr.textContent = String(mensaje || '');
+                boxErr.className = 'alert-banner alert-error mostrar';
+                boxErr.style.display = 'flex';
+            }
+            if (idCampo) {
+                const campo = el(idCampo);
+                if (campo) {
+                    campo.setAttribute('aria-invalid', 'true');
+                    campo.setAttribute(
+                        'aria-describedby',
+                        campo.id === 'editProdCodigo'
+                            ? 'hintEditProdCodigo errorModalEditarProducto'
+                            : 'errorModalEditarProducto'
+                    );
+                    campo.focus();
+                    if (typeof campo.select === 'function') campo.select();
+                }
+            }
+        }
+
+        function sincronizarUnidadesModalProducto() {
+            const selTipo = el('editProdTipo');
+            const inpUnid = el('editProdUnidades');
+            if (!selTipo || !inpUnid) return;
+            if (selTipo.value === CONSTANTES.CATEGORIAS.ENTERO) {
+                inpUnid.value = '1';
+                inpUnid.min = '1';
+                inpUnid.disabled = true;
+            } else {
+                inpUnid.disabled = false;
+                inpUnid.min = '2';
+                if (!inpUnid.value || Number(inpUnid.value) < 1) {
+                    inpUnid.value = '1';
+                }
+            }
+        }
+
+        let temporizadorAutoFicha = null;
+        function limpiarFlagsAutocompletado() {
+            if (temporizadorAutoFicha) {
+                clearTimeout(temporizadorAutoFicha);
+                temporizadorAutoFicha = null;
+            }
+            if (formEdit) {
+                formEdit.querySelectorAll('[data-auto-completado], [data-auto-elegible]').forEach(nodo => {
+                    delete nodo.dataset.autoCompletado;
+                    delete nodo.dataset.autoElegible;
+                });
+            }
+            const hintAuto = el('hintAutoCompletadoFicha');
+            if (hintAuto) {
+                hintAuto.style.display = 'none';
+                hintAuto.textContent = '';
+            }
+        }
+
+        function marcarAutocompletado(campo, valor, etiquetaResumen, resumenLista) {
+            if (!campo || valor === undefined || valor === null || valor === '') return false;
+            const actual = String(campo.value || '').trim();
+            const esAuto = campo.dataset && campo.dataset.autoCompletado === 'true';
+            if (actual !== '' && !esAuto) return false;
+            if (actual === String(valor)) return false;
+            campo.value = String(valor);
+            campo.dataset.autoCompletado = 'true';
+            if (etiquetaResumen && Array.isArray(resumenLista)) {
+                resumenLista.push(`${etiquetaResumen} (${valor})`);
+            }
+            return true;
+        }
+
+        function seleccionarCategoriaAutocompletada(catDetectada, resumenLista) {
+            const selCat = el('editProdCategoria');
+            if (!selCat || !catDetectada) return false;
+            const valActual = String(selCat.value || '').trim();
+            const esAuto = selCat.dataset && selCat.dataset.autoCompletado === 'true';
+            const estaVacioODefault = !valActual || valActual === 'General / Otros';
+            if (!estaVacioODefault && !esAuto) return false;
+
+            const opciones = Array.from(selCat.options || []);
+            const norm = t => String(t || '').toLowerCase().trim();
+            let matchOpt = opciones.find(o => norm(o.value) === norm(catDetectada));
+            if (!matchOpt && Dominio && typeof Dominio.obtenerMacroCategoria === 'function') {
+                const macroObj = Dominio.obtenerMacroCategoria(catDetectada);
+                matchOpt = opciones.find(o => norm(o.value) === norm(macroObj));
+            }
+            if (!matchOpt || !matchOpt.value) return false;
+            if (norm(valActual) === norm(matchOpt.value)) return false;
+            selCat.value = matchOpt.value;
+            selCat.dataset.autoCompletado = 'true';
+            if (el('editProdCategoriaNueva')) {
+                el('editProdCategoriaNueva').style.display = 'none';
+                el('editProdCategoriaNueva').value = '';
+            }
+            if (Array.isArray(resumenLista)) resumenLista.push(`Categoría (${matchOpt.value})`);
+            return true;
+        }
+
+        function aplicarAutocompletadoDesdeNombre() {
+            const inpNom = el('editProdNombre');
+            if (!inpNom || !Dominio || typeof Dominio.extraerMetadatosDesdeNombre !== 'function') return;
+
+            const meta = Dominio.extraerMetadatosDesdeNombre(inpNom.value, {
+                laboratorios: typeof Almacenamiento.obtenerDirectorioLaboratorios === 'function' ? Almacenamiento.obtenerDirectorioLaboratorios() : [],
+                vademecum: typeof Almacenamiento.obtenerVademecumMaestro === 'function' ? Almacenamiento.obtenerVademecumMaestro() : []
+            });
+
+            const resumen = [];
+            marcarAutocompletado(el('editProdConcentracion'), meta.concentracion, 'Dosis', resumen);
+            marcarAutocompletado(el('editProdLaboratorio'), meta.laboratorio, 'Laboratorio', resumen);
+            marcarAutocompletado(el('editProdPrincipioActivo'), meta.principioActivo, 'Principio Activo', resumen);
+            seleccionarCategoriaAutocompletada(meta.categoria, resumen);
+            marcarAutocompletado(el('editProdForma'), meta.formaFarmaceutica, 'Forma', resumen);
+            marcarAutocompletado(el('editProdPresentacion'), meta.presentacion, 'Presentación', resumen);
+            marcarAutocompletado(el('editProdRegistroSanitario'), meta.registroSanitario, 'Registro', resumen);
+
+            const selTipo = el('editProdTipo');
+            if (selTipo && meta.tipo && (selTipo.dataset.autoElegible === 'true' || selTipo.dataset.autoCompletado === 'true')) {
+                if (selTipo.value !== meta.tipo) {
+                    selTipo.value = meta.tipo;
+                    selTipo.dataset.autoCompletado = 'true';
+                    resumen.push(`Venta (${meta.tipo === CONSTANTES.CATEGORIAS.ENTERO ? 'Entero' : 'Divisible'})`);
+                }
+                sincronizarUnidadesModalProducto();
+            }
+
+            const inpUnid = el('editProdUnidades');
+            if (inpUnid && meta.unidadesPorCaja && !inpUnid.disabled &&
+                (inpUnid.dataset.autoElegible === 'true' || inpUnid.dataset.autoCompletado === 'true' || Number(inpUnid.value) <= 1)) {
+                if (Number(inpUnid.value) !== Number(meta.unidadesPorCaja)) {
+                    inpUnid.value = String(meta.unidadesPorCaja);
+                    inpUnid.dataset.autoCompletado = 'true';
+                    resumen.push(`Trae x Caja (${meta.unidadesPorCaja})`);
+                }
+            }
+
+            const selItbis = el('editProdTasaItbis');
+            if (selItbis && meta.tasaItbis !== undefined && (selItbis.dataset.autoElegible === 'true' || selItbis.dataset.autoCompletado === 'true')) {
+                if (selItbis.value !== String(meta.tasaItbis)) {
+                    selItbis.value = String(meta.tasaItbis);
+                    selItbis.dataset.autoCompletado = 'true';
+                    resumen.push(`ITBIS (${meta.tasaItbis}%)`);
+                }
+            }
+
+            const selCond = el('editProdCondicion');
+            if (selCond && meta.condicionVenta && (selCond.dataset.autoElegible === 'true' || selCond.dataset.autoCompletado === 'true')) {
+                if (selCond.value !== meta.condicionVenta) {
+                    selCond.value = meta.condicionVenta;
+                    selCond.dataset.autoCompletado = 'true';
+                    resumen.push(`Condición (${meta.condicionVenta})`);
+                }
+            }
+
+            const chkLeche = el('editProdEsLeche');
+            if (chkLeche && meta.esLeche && (chkLeche.dataset.autoElegible === 'true' || chkLeche.dataset.autoCompletado === 'true')) {
+                if (!chkLeche.checked) {
+                    chkLeche.checked = true;
+                    chkLeche.dataset.autoCompletado = 'true';
+                    resumen.push('Leche (10%)');
+                }
+            }
+
+            const hintAuto = el('hintAutoCompletadoFicha');
+            if (hintAuto) {
+                if (resumen.length > 0) {
+                    hintAuto.textContent = 'Autocompletado desde nombre: ' + resumen.join(', ');
+                    hintAuto.style.display = 'block';
+                } else if (!inpNom.value.trim()) {
+                    hintAuto.textContent = '';
+                    hintAuto.style.display = 'none';
+                }
+            }
+        }
+
         const cerrarModalEdit = () => {
+            limpiarErrorModalProducto();
+            limpiarFlagsAutocompletado();
             if (modalEdit && typeof modalEdit.close === 'function') modalEdit.close();
         };
 
         if (btnCerrarEdit) btnCerrarEdit.addEventListener('click', cerrarModalEdit);
         if (btnCancelarEdit) btnCancelarEdit.addEventListener('click', cerrarModalEdit);
 
+        if (typeof UI.configurarFiltroNumerico === 'function' && el('editProdCodigo')) {
+            UI.configurarFiltroNumerico(el('editProdCodigo'), false);
+        }
+        if (el('editProdTipo')) {
+            el('editProdTipo').addEventListener('change', sincronizarUnidadesModalProducto);
+        }
+
         let guardandoFichaEnCurso = false;
         if (formEdit) {
-            formEdit.addEventListener('submit', e => {
+            const limpiarErrorDeCampoEditado = ev => {
+                const target = ev && ev.target;
+                if (target && typeof target.removeAttribute === 'function') {
+                    target.removeAttribute('aria-invalid');
+                    if (target.id === 'editProdCodigo') {
+                        target.setAttribute('aria-describedby', 'hintEditProdCodigo');
+                    } else if (target.getAttribute('aria-describedby') === 'errorModalEditarProducto') {
+                        target.removeAttribute('aria-describedby');
+                    }
+                    if (target.id && target.id !== 'editProdNombre' && target.dataset) {
+                        delete target.dataset.autoCompletado;
+                        delete target.dataset.autoElegible;
+                    }
+                }
+                const boxErr = el('errorModalEditarProducto');
+                if (boxErr && boxErr.style.display !== 'none') {
+                    boxErr.style.display = 'none';
+                    boxErr.classList.remove('mostrar');
+                    boxErr.textContent = '';
+                }
+            };
+            formEdit.addEventListener('input', limpiarErrorDeCampoEditado);
+            formEdit.addEventListener('change', limpiarErrorDeCampoEditado);
+
+            const inpEditNombre = el('editProdNombre');
+            if (inpEditNombre) {
+                inpEditNombre.addEventListener('input', () => {
+                    if (temporizadorAutoFicha) clearTimeout(temporizadorAutoFicha);
+                    temporizadorAutoFicha = setTimeout(aplicarAutocompletadoDesdeNombre, 220);
+                });
+                inpEditNombre.addEventListener('blur', () => {
+                    if (temporizadorAutoFicha) {
+                        clearTimeout(temporizadorAutoFicha);
+                        temporizadorAutoFicha = null;
+                    }
+                    aplicarAutocompletadoDesdeNombre();
+                });
+            }
+
+            formEdit.addEventListener('submit', async e => {
                 e.preventDefault();
                 if (guardandoFichaEnCurso) return;
+                aplicarAutocompletadoDesdeNombre();
                 const btnSubmit = formEdit.querySelector('button[type="submit"]');
+                limpiarErrorModalProducto();
                 try {
                     guardandoFichaEnCurso = true;
                     if (btnSubmit) {
                         btnSubmit.disabled = true;
                         btnSubmit.classList.add('btn-loading');
                     }
-                    const codigo = el('editProdCodigo').value;
-                    const nombreNormalizado = (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
-                        ? Dominio.normalizarNombreProductoMayusculas(el('editProdNombre').value)
-                        : el('editProdNombre').value.toUpperCase().trim();
+
+                    const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+                    const inputCod = el('editProdCodigo');
+                    const codigoNuevo = Dominio.normalizarCodigoBarras(inputCod ? inputCod.value : '');
+                    const codigoOriginal = Dominio.normalizarCodigoBarras((inputCod && inputCod.dataset && inputCod.dataset.codigoOriginal) || codigoNuevo);
+
+                    if (!codigoNuevo) {
+                        mostrarErrorModalProducto('El código de barras no puede estar vacío.', 'editProdCodigo');
+                        return;
+                    }
+
+                    if (codigoNuevo !== codigoOriginal) {
+                        if (estaBloqueado) {
+                            mostrarErrorModalProducto('Debes activar la sesión de Administrador para editar el código de barras.', 'editProdCodigo');
+                            return;
+                        }
+                        const valGs1 = Dominio.validarCodigoBarrasEstandar(codigoNuevo);
+                        if (!valGs1.esValido) {
+                            mostrarErrorModalProducto(valGs1.error, 'editProdCodigo');
+                            return;
+                        }
+                        const dicActual = Almacenamiento.obtenerDiccionarioCodigos();
+                        if (dicActual[codigoNuevo]) {
+                            mostrarErrorModalProducto(
+                                `Ya existe otro producto registrado con el código ${codigoNuevo} ("${dicActual[codigoNuevo].nombre || 'Sin nombre'}").`,
+                                'editProdCodigo'
+                            );
+                            return;
+                        }
+                    }
+
+                    const nombreCrudo = el('editProdNombre').value.trim();
+                    const nombreNormalizado = nombreCrudo
+                        ? ((Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
+                            ? Dominio.normalizarNombreProductoMayusculas(nombreCrudo)
+                            : nombreCrudo.toUpperCase())
+                        : '';
 
                     const catSelVal = el('editProdCategoria').value;
                     const catFinal = (catSelVal === '__NUEVA__')
                         ? (el('editProdCategoriaNueva') ? el('editProdCategoriaNueva').value.trim() : 'General / Otros')
                         : catSelVal;
 
-                    const estaBloqueado = Boolean(AppFarmacia.Seguridad && AppFarmacia.Seguridad.estaConfigurado() && AppFarmacia.Seguridad.estaBloqueado());
+                    const tipoSel = el('editProdTipo').value;
+                    const unidadesVal = tipoSel === CONSTANTES.CATEGORIAS.ENTERO
+                        ? 1
+                        : parseInt(el('editProdUnidades').value, 10);
 
                     const ficha = {
-                        codigoBarras: codigo,
+                        codigoBarras: codigoNuevo,
+                        codigoBarrasAnterior: codigoOriginal,
                         nombre: nombreNormalizado,
                         categoria: catFinal || 'General / Otros',
                         principioActivo: el('editProdPrincipioActivo').value.trim(),
@@ -630,38 +1156,75 @@
                         laboratorio: el('editProdLaboratorio').value.trim(),
                         formaFarmaceutica: el('editProdForma') ? el('editProdForma').value : '',
                         presentacion: el('editProdPresentacion') ? el('editProdPresentacion').value.trim() : '',
-                        tipo: el('editProdTipo').value,
-                        unidadesPorCaja: el('editProdUnidades').value,
+                        tipo: tipoSel,
+                        unidadesPorCaja: Number.isFinite(unidadesVal) ? unidadesVal : 0,
                         tasaItbis: el('editProdTasaItbis').value,
                         aplicaItbis: Number(el('editProdTasaItbis').value) > 0,
                         condicionVenta: el('editProdCondicion') ? el('editProdCondicion').value : 'OTC',
                         esLeche: Boolean(el('editProdEsLeche') && el('editProdEsLeche').checked),
-                        registroSanitario: el('editProdRegistroSanitario').value.trim()
+                        registroSanitario: el('editProdRegistroSanitario').value.trim(),
+                        permitirSinNombre: true,
+                        permitirNombreVacio: true,
+                        permitirSinLaboratorio: true,
+                        permitirCero: true
                     };
 
                     if (!estaBloqueado) {
                         ficha.ubicacion = el('editProdUbicacion') ? el('editProdUbicacion').value.trim() : '';
                         ficha.proveedorHabitual = el('editProdProveedorHabitual') ? el('editProdProveedorHabitual').value.trim() : '';
                         const costoRaw = el('editProdUltimoCosto') ? el('editProdUltimoCosto').value.trim() : '';
-                        ficha.ultimoPrecioCaja = costoRaw !== '' ? (parseFloat(costoRaw) || '') : '';
+                        if (costoRaw !== '') {
+                            const costoParsed = Number(costoRaw.replace(',', '.'));
+                            if (!Number.isFinite(costoParsed) || costoParsed < 0) {
+                                mostrarErrorModalProducto('El último costo debe ser un número válido mayor o igual a 0.', 'editProdUltimoCosto');
+                                return;
+                            }
+                            ficha.ultimoPrecioCaja = costoParsed;
+                        } else {
+                            ficha.ultimoPrecioCaja = '';
+                        }
                     }
 
                     if (Dominio && typeof Dominio.validarDatosMinimosProducto === 'function') {
                         const valMin = Dominio.validarDatosMinimosProducto(ficha);
                         if (!valMin.esValido) {
-                            UI.Notificaciones.mostrarMensaje(valMin.error, 'error');
+                            const mapaCampos = {
+                                nombre: 'editProdNombre',
+                                concentracion: 'editProdConcentracion',
+                                unidadesPorCaja: 'editProdUnidades',
+                                precioCaja: 'editProdUltimoCosto',
+                                laboratorio: 'editProdLaboratorio'
+                            };
+                            mostrarErrorModalProducto(valMin.error, mapaCampos[valMin.campo] || 'editProdNombre');
                             return;
                         }
                     }
 
-                const res = Almacenamiento.guardarFichaProductoCatalogo(ficha);
-                if (res.exito) {
+                    const res = Almacenamiento.guardarFichaProductoCatalogo(ficha);
+                    if (!res || !res.exito) {
+                        mostrarErrorModalProducto(
+                            (res && res.error) || 'Error al guardar ficha.',
+                            (res && res.campo === 'codigoBarras') ? 'editProdCodigo' : 'editProdNombre'
+                        );
+                        return;
+                    }
+
+                    if (res.promesaPersistencia) {
+                        await res.promesaPersistencia;
+                    }
+
+                    if (codigoNuevo !== codigoOriginal && el('calcCodigoBarras') && Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value) === codigoOriginal) {
+                        UI.Calculadora?.limpiarEstadoOperativoCaja?.();
+                    }
+
                     cerrarModalEdit();
                     aplicarFiltrosDiccionario();
-                    UI.Notificaciones.mostrarMensaje(`Ficha de "${ficha.nombre}" actualizada en el Catálogo Maestro.`, 'success');
-                } else {
-                    UI.Notificaciones.mostrarMensaje(res.error || 'Error al guardar ficha.', 'error');
-                }
+                    if (UI.Factura && typeof UI.Factura.actualizarBarraSuperior === 'function') {
+                        UI.Factura.actualizarBarraSuperior();
+                    }
+                    const nombreMsg = (res.producto && res.producto.nombre) || 'Producto sin nombre';
+                    const extraCod = (codigoNuevo !== codigoOriginal) ? ` (código actualizado a ${codigoNuevo})` : '';
+                    UI.Notificaciones.mostrarMensaje(`Ficha de "${nombreMsg}" actualizada en el Catálogo Maestro${extraCod}.`, 'success');
                 } finally {
                     guardandoFichaEnCurso = false;
                     if (btnSubmit) {
@@ -706,9 +1269,29 @@
                     prod = (await Almacenamiento.obtenerDetalleProductoAdmin(cod)) || prod;
                 }
                 if (prod && el('modalEditarProductoDiccionario')) {
-
-                    el('editProdCodigo').value = prod.codigoBarras || cod;
-                    el('editProdNombre').value = prod.nombre || prod.nombreComercial || '';
+                    limpiarErrorModalProducto();
+                    limpiarFlagsAutocompletado();
+                    const inputCod = el('editProdCodigo');
+                    const codOriginal = prod.codigoBarras || cod;
+                    if (inputCod) {
+                        inputCod.value = codOriginal;
+                        inputCod.dataset.codigoOriginal = codOriginal;
+                        inputCod.readOnly = estaBloqueado;
+                    }
+                    const hintCod = el('hintEditProdCodigo');
+                    if (hintCod) {
+                        const esInterno = Boolean(Dominio && typeof Dominio.esCodigoBarrasInterno === 'function' && Dominio.esCodigoBarrasInterno(codOriginal));
+                        if (estaBloqueado) {
+                            hintCod.textContent = 'Solo lectura (desbloquea Admin para editar código)';
+                        } else if (esInterno) {
+                            hintCod.textContent = 'Código interno GS1 (200...) — Puedes reemplazarlo por el código oficial del fabricante';
+                        } else {
+                            hintCod.textContent = 'Editable en modo Administrador (GS1: 8, 12, 13 o 14 dígitos)';
+                        }
+                    }
+                    const nomProd = String(prod.nombre || prod.nombreComercial || '').trim();
+                    const esPlaceholderNom = !nomProd || /^Producto(\s*#\d+)?$/i.test(nomProd) || nomProd.toLowerCase() === 'producto sin nombre';
+                    el('editProdNombre').value = esPlaceholderNom ? '' : nomProd;
                     poblarSelectorCategoriasEdicion(prod.categoria || '');
                     el('editProdPrincipioActivo').value = prod.principioActivo || '';
                     if (el('editProdConcentracion')) el('editProdConcentracion').value = prod.concentracion || '';
@@ -725,6 +1308,7 @@
                     if (el('editProdPresentacion')) el('editProdPresentacion').value = prod.presentacion || '';
                     el('editProdTipo').value = prod.tipo || 'divisible';
                     el('editProdUnidades').value = prod.unidadesPorCaja || 1;
+                    sincronizarUnidadesModalProducto();
 
                     const inputUltCosto = el('editProdUltimoCosto');
                     if (inputUltCosto) {
@@ -744,7 +1328,17 @@
                         inputUbicacion.value = estaBloqueado ? '' : (prod.ubicacion || '');
                         inputUbicacion.placeholder = estaBloqueado ? 'Cifrado (Requiere Admin)' : 'Ej. Tramo A-2';
                     }
+
+                    if (esPlaceholderNom || !prod.tipo) el('editProdTipo').dataset.autoElegible = 'true';
+                    if (esPlaceholderNom || !prod.unidadesPorCaja || Number(prod.unidadesPorCaja) <= 1) el('editProdUnidades').dataset.autoElegible = 'true';
+                    if (esPlaceholderNom || prod.tasaItbis === undefined) el('editProdTasaItbis').dataset.autoElegible = 'true';
+                    if (el('editProdCondicion') && (esPlaceholderNom || !prod.condicionVenta)) el('editProdCondicion').dataset.autoElegible = 'true';
+                    if (el('editProdEsLeche') && !prod.esLeche) el('editProdEsLeche').dataset.autoElegible = 'true';
+
                     actualizarDatalistsDirectorios();
+                    if (!esPlaceholderNom) {
+                        aplicarAutocompletadoDesdeNombre();
+                    }
                     el('modalEditarProductoDiccionario').showModal();
                 }
                 return;
@@ -804,12 +1398,30 @@
             });
         });
 
-        // Búsquedas en tiempo real para Proveedores y Laboratorios
+        // Búsquedas en tiempo real para Proveedores y Laboratorios (con debounce)
         const inputFiltroProvs = el('filtroBuscadorProveedores');
-        if (inputFiltroProvs) inputFiltroProvs.addEventListener('input', () => renderizarProveedoresUI(inputFiltroProvs.value));
+        if (inputFiltroProvs) {
+            let temporizadorProvs = null;
+            inputFiltroProvs.addEventListener('input', () => {
+                if (temporizadorProvs) clearTimeout(temporizadorProvs);
+                temporizadorProvs = setTimeout(() => {
+                    temporizadorProvs = null;
+                    renderizarProveedoresUI(inputFiltroProvs.value);
+                }, 150);
+            });
+        }
 
         const inputFiltroLabs = el('filtroBuscadorLaboratorios');
-        if (inputFiltroLabs) inputFiltroLabs.addEventListener('input', () => renderizarLaboratoriosUI(inputFiltroLabs.value));
+        if (inputFiltroLabs) {
+            let temporizadorLabs = null;
+            inputFiltroLabs.addEventListener('input', () => {
+                if (temporizadorLabs) clearTimeout(temporizadorLabs);
+                temporizadorLabs = setTimeout(() => {
+                    temporizadorLabs = null;
+                    renderizarLaboratoriosUI(inputFiltroLabs.value);
+                }, 150);
+            });
+        }
 
         // Gestión Modal: Proveedores / Droguerías
         const modalProv = el('modalEditarProveedor');

@@ -53,6 +53,8 @@
             --color-accion: #006654;
             --color-accion-hover: #004D3F;
             --color-accion-fondo: #E2F4EE;
+            --color-primario: #006654;
+            --color-primario-fondo: #E2F4EE;
 
             --color-exito: #047857;
             --color-exito-fondo: #D1FAE5;
@@ -105,6 +107,8 @@
             --color-accion: #10B981;
             --color-accion-hover: #34D399;
             --color-accion-fondo: #064E3B;
+            --color-primario: #10B981;
+            --color-primario-fondo: #064E3B;
 
             --color-exito: #34D399;
             --color-exito-fondo: #064E3B;
@@ -159,6 +163,8 @@
             --color-accion: #1A56DB;
             --color-accion-hover: #1442A6;
             --color-accion-fondo: #EBF2FF;
+            --color-primario: #1A56DB;
+            --color-primario-fondo: #EBF2FF;
 
             --color-exito: #057A55;
             --color-exito-fondo: #DEF7EC;
@@ -210,6 +216,8 @@
             --color-accion: #38BDF8;
             --color-accion-hover: #0EA5E9;
             --color-accion-fondo: #082F49;
+            --color-primario: #38BDF8;
+            --color-primario-fondo: #082F49;
 
             --color-exito: #31C48D;
             --color-exito-fondo: #03543F;
@@ -465,7 +473,6 @@
             transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
         .input-control:focus {
-            outline: none;
             border-color: var(--color-accion) !important;
             box-shadow: var(--sombra-foco) !important;
             background: var(--resaltado-foco-bg) !important;
@@ -1229,7 +1236,6 @@
                         border-color var(--duracion-rapida) ease,
                         box-shadow var(--duracion-rapida) ease,
                         color var(--duracion-rapida) ease;
-            will-change: transform;
         }
         .btn-primario:active, .btn-header:active, .btn-icono:active, .btn-tipo-opcion:active, .btn-itbis-opcion:active, .copy-chip:active, .badge-itbis:active {
             transform: scale(0.96) !important;
@@ -1410,7 +1416,8 @@
 #notificacionGlobal {
     position: sticky;
     top: 60px;
-    z-index: 900;
+    z-index: 1200;
+    box-shadow: var(--sombra-md);
 }
 
 #avisoEdicion {
@@ -1533,9 +1540,20 @@ dialog.farmacia-modal {
     background: var(--color-superficie);
     color: var(--color-texto-principal);
 }
+dialog.farmacia-modal:modal {
+    overscroll-behavior: contain;
+}
 dialog.farmacia-modal::backdrop {
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(3px);
+    overflow: hidden;
+    overscroll-behavior: contain;
+}
+.input-control[readonly] {
+    background: var(--color-fondo-panel);
+}
+.input-control[aria-invalid="true"] {
+    border-color: var(--color-error) !important;
 }
 dialog.farmacia-modal h3 {
     margin-top: 0;
@@ -3001,4 +3019,28 @@ html[data-paleta="cobalto"] .subtab-btn.activo {
 .badge-cifrado-celda svg.ico {
     width: 11px;
     height: 11px;
+}
+.visually-hidden:where(:not(:focus-within, :active)) {
+    position: absolute !important;
+    clip-path: inset(50%) !important;
+    overflow: hidden !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    white-space: nowrap !important;
+}
+.skip-link:focus-visible {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 9999;
+    padding: 8px 14px;
+    border-radius: var(--radio-sm);
+    background: var(--color-accion);
+    color: #ffffff;
+    font-size: var(--texto-sm);
+    font-weight: 700;
+    text-decoration: none;
 }

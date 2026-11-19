@@ -7,7 +7,7 @@
     <meta name="author" content="Chroniris / reiNameless">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="light dark">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://world.openfoodfacts.org; object-src 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://world.openfoodfacts.org; object-src 'none'; base-uri 'none';">
     <script>
         // Anti-Clickjacking Framebusting Protection (Chroniris OS)
         if (window.top !== window.self) {
@@ -82,6 +82,7 @@
 
         <!-- CABECERA MINIMALISTA (EL NOMBRE SOLO ESTÁ EN LA PESTAÑA DEL NAVEGADOR) -->
         <header class="barra-superior">
+            <a href="#contenidoPrincipal" class="skip-link visually-hidden">Saltar al contenido principal</a>
             <div class="header-izquierda" style="flex-wrap:wrap;gap:6px;align-items:center;">
                 <!-- BOTÓN HAMBURGUESA / BÓVEDA (ACCESO A DICCIONARIO, FÓRMULAS, SEGURIDAD, HISTORIAL) -->
                 <button class="btn-header" id="btnAbrirBoveda" title="Abrir Bóveda del Sistema">
@@ -138,7 +139,7 @@
         <!-- CONTENIDO PRINCIPAL DE OPERACIONES (COCKPIT DUAL & MODO POS) -->
         <main id="contenidoPrincipal">
             <!-- BARRA DE PESTAÑAS RESPONSIVA PARA SPLIT-SCREEN / MÓVIL (ROL 02) -->
-            <nav class="cockpit-tabs-barra" id="cockpitTabs" role="tablist" aria-label="Modo de Operación Cockpit">
+            <div class="cockpit-tabs-barra" id="cockpitTabs" role="tablist" aria-label="Modo de Operación Cockpit">
                 <button type="button" class="cockpit-tab activo" id="tabCockpitCalc" role="tab" aria-selected="true" aria-controls="cockpitColumnaCalc">
                     <svg class="ico ico-sm"><use href="#i-calc"/></svg>
                     <span>1. Entrada</span>
@@ -148,7 +149,7 @@
                     <span>2. Factura & Cuadre</span>
                     <span class="badge-tab-count" id="badgeTabFacturaCount">0</span>
                 </button>
-            </nav>
+            </div>
 
             <div class="cockpit-dual-grid" id="cockpitDualGrid">
                 <!-- COLUMNA 1: CALCULADORA RÁPIDA Y PRECIOS EN VIVO (CERO SCROLL) -->
@@ -283,21 +284,28 @@
                         <!-- Tarjeta Salida de Precios en Vivo con Botones de Copiar -->
                         <div class="tarjeta">
                             <div>
-                                <div class="tarjeta-header">
+                                <div class="tarjeta-header" style="gap:6px;flex-wrap:wrap;">
                                     <span class="tarjeta-titulo">
                                         <svg class="ico"><use href="#i-tag"/></svg>
                                         <span>Precios en Vivo</span>
                                     </span>
-                                    <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;color:var(--color-texto-secundario);user-select:none;" title="Alternar entre precios netos sin ITBIS o PVP final con ITBIS">
-                                        <input type="checkbox" id="chkPreciosConItbis" style="width:13px;height:13px;accent-color:var(--color-primario);cursor:pointer;">
-                                        <span>Con ITBIS</span>
-                                    </label>
+                                    <div style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;color:var(--color-texto-secundario);user-select:none;" title="Ver costo unitario sumándole el ITBIS (referencial; el costo fiscal de inventario siempre se guarda neto)">
+                                            <input type="checkbox" id="chkCostoConItbis" style="width:13px;height:13px;accent-color:var(--color-primario);cursor:pointer;">
+                                            <span>Costo +ITBIS</span>
+                                        </label>
+                                        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:600;color:var(--color-texto-secundario);user-select:none;" title="Alternar entre precios netos sin ITBIS o PVP final con ITBIS">
+                                            <input type="checkbox" id="chkPreciosConItbis" style="width:13px;height:13px;accent-color:var(--color-primario);cursor:pointer;">
+                                            <span>Precios +ITBIS</span>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <!-- Costo Unitario Fiscal (8 decimales) + Copiar -->
                                 <div class="costo-unitario-caja">
                                     <div>
-                                        <div style="font-size:11px;color:var(--color-texto-secundario);font-weight:var(--peso-negrita);">COSTO FISCAL (8 DEC)</div>
+                                        <div id="lblTituloCostoUnitario" style="font-size:11px;color:var(--color-texto-secundario);font-weight:var(--peso-negrita);">COSTO FISCAL (8 DEC)</div>
+                                        <div id="subCostoUnitario" style="font-size:10px;color:var(--color-texto-secundario);display:none;font-family:var(--fuente-mono);"></div>
                                     </div>
                                     <div style="display:flex;align-items:center;gap:6px;">
                                         <span class="numero-costo" id="resCostoUnitario">0.00000000</span>
@@ -457,20 +465,21 @@
                         </div>
                         <div class="tabla-contenedor">
                             <table>
+                                <caption class="visually-hidden">Productos en la factura en curso</caption>
                                 <thead>
                                     <tr>
-                                        <th>Producto / Código</th>
-                                        <th style="text-align:right;">Cant</th>
-                                        <th style="text-align:right;">Trae</th>
-                                        <th class="c-caja" style="text-align:right;">Costo Caja</th>
-                                        <th style="text-align:right;">Desc.</th>
-                                        <th class="c-sub" style="text-align:right;">Subtotal</th>
-                                        <th class="c-itbis" style="text-align:center;">ITBIS</th>
-                                        <th style="text-align:right;">Total</th>
-                                        <th class="c-p1" style="text-align:right;">Precio 1</th>
-                                        <th class="c-p2" style="text-align:right;">Precio 2</th>
-                                        <th class="c-p3" style="text-align:right;">Precio 3</th>
-                                        <th style="text-align:center;">Acc</th>
+                                        <th scope="col">Producto / Código</th>
+                                        <th scope="col" style="text-align:right;">Cant</th>
+                                        <th scope="col" style="text-align:right;">Trae</th>
+                                        <th scope="col" class="c-caja" style="text-align:right;">Costo Caja</th>
+                                        <th scope="col" style="text-align:right;">Desc.</th>
+                                        <th scope="col" class="c-sub" style="text-align:right;">Subtotal</th>
+                                        <th scope="col" class="c-itbis" style="text-align:center;">ITBIS</th>
+                                        <th scope="col" style="text-align:right;">Total</th>
+                                        <th scope="col" class="c-p1" style="text-align:right;">Precio 1</th>
+                                        <th scope="col" class="c-p2" style="text-align:right;">Precio 2</th>
+                                        <th scope="col" class="c-p3" style="text-align:right;">Precio 3</th>
+                                        <th scope="col" style="text-align:center;">Acc</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tablaProductosActuales">
@@ -626,7 +635,7 @@
             </div>
 
             <!-- Pestañas internas de la Bóveda -->
-            <nav class="drawer-tabs">
+            <nav class="drawer-tabs" aria-label="Secciones de la Bóveda">
                 <button class="drawer-tab-btn activo" data-boveda-tab="seccionHistorial">
                     <svg class="ico ico-sm"><use href="#i-hist"/></svg>
                     <span>Historial (7d)</span>
@@ -786,15 +795,28 @@
 
                     <!-- Panel 1: Catálogo de Productos y Medicamentos -->
                     <div id="panelCatalogoProductos" class="panel-subtab-catalogo">
-                        <div style="display:flex;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;">
-                            <div style="flex:1;min-width:220px;">
+                        <div style="display:flex;gap:var(--espacio-2);margin-bottom:var(--espacio-2);flex-wrap:wrap;align-items:center;">
+                            <div style="flex:1;min-width:200px;">
                                 <input type="text" id="filtroBuscadorDiccionario" class="input-control" placeholder="Buscar por nombre, código o laboratorio..." autocomplete="off">
                             </div>
-                            <div style="min-width:180px;">
+                            <div style="min-width:170px;">
                                 <select id="filtroCategoriaDiccionario" class="input-control" aria-label="Filtrar por categoría">
-                                    <option value="">Todas las categorías (A-Z)</option>
+                                    <option value="">Todas las categorías (A–Z)</option>
                                 </select>
                             </div>
+                            <div style="min-width:165px;">
+                                <select id="filtroItbisDiccionario" class="input-control" aria-label="Filtrar por régimen ITBIS">
+                                    <option value="">ITBIS: Todos</option>
+                                    <option value="0">Exentos (0% — Medicamentos)</option>
+                                    <option value="gravados">Gravados (18% y 16%)</option>
+                                    <option value="18">Solo 18% ITBIS</option>
+                                    <option value="16">Solo 16% ITBIS</option>
+                                </select>
+                            </div>
+                            <button type="button" id="btnAlternarOrdenCatalogo" class="btn-icono" style="height:36px;white-space:nowrap;" title="Alternar entre agrupación por categoría (A–Z) o lista continua A–Z" aria-pressed="false">
+                                <svg class="ico ico-sm"><use href="#i-list"/></svg>
+                                <span id="txtOrdenCatalogo">Vista: Categorías (A–Z)</span>
+                            </button>
                         </div>
                         <div id="contenedorDiccionario">
                             <div style="font-size:12px;color:var(--color-texto-secundario);padding:8px 0;">14 productos memorizados en este dispositivo.</div>
@@ -1167,8 +1189,9 @@
                         </h4>
                         <div class="manual-cuerpo">
                             <table class="manual-tabla-atajos">
+                                <caption class="visually-hidden">Atajos rápidos de teclado</caption>
                                 <thead>
-                                    <tr><th>Tecla</th><th>Acción Inmediata</th></tr>
+                                    <tr><th scope="col">Tecla</th><th scope="col">Acción Inmediata</th></tr>
                                 </thead>
                                 <tbody>
                                     <tr><td><kbd>F1</kbd></td><td>Abre ventana flotante de referencia rápida</td></tr>
@@ -1196,7 +1219,7 @@
         </dialog>
 
         <!-- Modal: Edición de Ficha Maestra de Producto en Catálogo -->
-        <dialog id="modalEditarProductoDiccionario" class="farmacia-modal" style="max-width:560px;" aria-labelledby="tituloModalEditarFicha" aria-modal="true">
+        <dialog id="modalEditarProductoDiccionario" class="farmacia-modal" style="max-width:560px;" aria-labelledby="tituloModalEditarFicha">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--espacio-2);">
                 <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:var(--texto-base);color:var(--color-primario);">
                     <svg class="ico"><use href="#i-edit"/></svg>
@@ -1211,7 +1234,8 @@
                 <div style="display:flex;gap:var(--espacio-2);flex-wrap:wrap;">
                     <div class="campo" style="flex:1;min-width:140px;">
                         <label class="campo-label" for="editProdCodigo">Código de Barras</label>
-                        <input type="text" id="editProdCodigo" class="input-control input-mono" readonly style="background:var(--color-fondo-panel);">
+                        <input type="text" id="editProdCodigo" class="input-control input-mono" readonly inputmode="numeric" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="hintEditProdCodigo">
+                        <small id="hintEditProdCodigo" class="fs-xs text-muted" style="display:block;margin-top:2px;"></small>
                     </div>
                     <div class="campo" style="flex:1;min-width:180px;">
                         <label class="campo-label" for="editProdCategoria">Categoría Terapéutica</label>
@@ -1222,8 +1246,9 @@
 
                 <!-- Fila 2: Nombre del Producto -->
                 <div class="campo">
-                    <label class="campo-label" for="editProdNombre">Nombre del Producto *</label>
-                    <input type="text" id="editProdNombre" class="input-control" required placeholder="Nombre comercial oficial y presentación">
+                    <label class="campo-label" for="editProdNombre">Nombre del Producto (Opcional)</label>
+                    <input type="text" id="editProdNombre" class="input-control" placeholder="Opcional — o nombre con medida (ej. AMOXICILINA 500 MG)">
+                    <small id="hintAutoCompletadoFicha" class="fs-xs text-muted" aria-live="polite" style="display:none;margin-top:2px;"></small>
                 </div>
 
                 <!-- Fila 3: Principio Activo + Concentración / Dosis -->
@@ -1333,11 +1358,13 @@
                     </div>
                 </div>
 
+                <div id="errorModalEditarProducto" class="alert-banner alert-error" role="alert" aria-live="assertive" style="display:none;margin-bottom:0;"></div>
+
                 <div style="display:flex;justify-content:flex-end;gap:var(--espacio-2);margin-top:var(--espacio-2);">
                     <button type="button" class="btn-icono" id="btnCancelarEditarProducto">Cancelar</button>
-                    <button type="submit" class="btn-icono" style="background:var(--color-primario);color:#fff;border-color:var(--color-primario);">
+                    <button type="submit" class="btn-primario" id="btnGuardarEditarProducto" style="padding:7px 16px;font-size:var(--texto-xs);">
                         <svg class="ico ico-sm"><use href="#i-check"/></svg>
-                        <span>Guardar en Catálogo</span>
+                        <span>Guardar Edición</span>
                     </button>
                 </div>
             </form>

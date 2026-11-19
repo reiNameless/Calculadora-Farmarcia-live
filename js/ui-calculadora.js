@@ -67,12 +67,30 @@
     }
 
     // --- CÁLCULO EN VIVO CON DEBOUNCE (REN-04) ---
-    function animarNumero(id) {
-        const elemento = el(id);
-        if (!elemento) return;
-        elemento.classList.remove('numero-actualizado');
-        void elemento.offsetWidth;
-        elemento.classList.add('numero-actualizado');
+    let rafAnimacionNumeros = null;
+    function animarNumerosLote(ids) {
+        const nodos = [];
+        for (let i = 0; i < ids.length; i++) {
+            const elemento = el(ids[i]);
+            if (elemento) {
+                elemento.classList.remove('numero-actualizado');
+                nodos.push(elemento);
+            }
+        }
+        if (nodos.length === 0) return;
+        if (typeof requestAnimationFrame === 'function') {
+            if (rafAnimacionNumeros) cancelAnimationFrame(rafAnimacionNumeros);
+            rafAnimacionNumeros = requestAnimationFrame(() => {
+                rafAnimacionNumeros = null;
+                for (let i = 0; i < nodos.length; i++) {
+                    nodos[i].classList.add('numero-actualizado');
+                }
+            });
+        } else {
+            for (let i = 0; i < nodos.length; i++) {
+                nodos[i].classList.add('numero-actualizado');
+            }
+        }
     }
 
     function calcularEnVivo() {
@@ -127,6 +145,8 @@
         };
         const chkConItbis = el('chkPreciosConItbis');
         const mostrarConItbis = Boolean(chkConItbis && chkConItbis.checked);
+        const chkCostoItbis = el('chkCostoConItbis');
+        const mostrarCostoConItbis = Boolean(chkCostoItbis && chkCostoItbis.checked);
         const desglose = Dominio.calcularDesglosePrecios(
             vPrecio.esValido ? vPrecio.valor : 0,
             vUnidades.esValido ? vUnidades.valor : 1,
@@ -252,6 +272,15 @@
 
         if (!vPrecio.esValido || !vUnidades.esValido) {
             el('resCostoUnitario').textContent = '0.00000000';
+            if (el('lblTituloCostoUnitario')) {
+                el('lblTituloCostoUnitario').textContent = (aplicaItbis && mostrarCostoConItbis)
+                    ? `COSTO +${tasaItbisSeleccionada}% ITBIS (8 DEC)`
+                    : 'COSTO FISCAL (8 DEC)';
+            }
+            if (el('subCostoUnitario')) {
+                el('subCostoUnitario').textContent = '';
+                el('subCostoUnitario').style.display = 'none';
+            }
             [1, 2, 3].forEach(n => {
                 el('resPrecio' + n).textContent = '$0.00';
                 el('subPrecio' + n).textContent = 'Exacto: 0.00 | Redondeado: 0';
@@ -264,11 +293,34 @@
 
         const usarRedondeo = el('calcRedondeo').checked;
 
-        el('resCostoUnitario').textContent = desglose.costoUnitario;
+        const lblTituloCosto = el('lblTituloCostoUnitario');
+        const subCosto = el('subCostoUnitario');
+        if (aplicaItbis && mostrarCostoConItbis) {
+            el('resCostoUnitario').textContent = desglose.costoUnitarioConItbis;
+            if (lblTituloCosto) lblTituloCosto.textContent = `COSTO +${tasaItbisSeleccionada}% ITBIS (8 DEC)`;
+            if (subCosto) {
+                subCosto.textContent = `Neto fiscal: ${desglose.costoUnitario}`;
+                subCosto.style.display = 'block';
+            }
+        } else if (aplicaItbis) {
+            el('resCostoUnitario').textContent = desglose.costoUnitario;
+            if (lblTituloCosto) lblTituloCosto.textContent = 'COSTO FISCAL (8 DEC)';
+            if (subCosto) {
+                subCosto.textContent = `Con +${tasaItbisSeleccionada}% ITBIS: ${desglose.costoUnitarioConItbis}`;
+                subCosto.style.display = 'block';
+            }
+        } else {
+            el('resCostoUnitario').textContent = desglose.costoUnitario;
+            if (lblTituloCosto) lblTituloCosto.textContent = 'COSTO FISCAL (8 DEC)';
+            if (subCosto) {
+                subCosto.textContent = '';
+                subCosto.style.display = 'none';
+            }
+        }
         if (el('resP1Red')) el('resP1Red').textContent = '$' + desglose.p1Redondeado;
         if (el('resP2Red')) el('resP2Red').textContent = '$' + desglose.p2Redondeado;
         if (el('resP3Red')) el('resP3Red').textContent = '$' + desglose.p3Redondeado;
-        ['resCostoUnitario', 'resPrecio1', 'resPrecio2', 'resPrecio3', 'resSubtotalLinea', 'resAcumuladoConLinea', 'resTotalUnidadesInventario'].forEach(animarNumero);
+        animarNumerosLote(['resCostoUnitario', 'resPrecio1', 'resPrecio2', 'resPrecio3', 'resSubtotalLinea', 'resAcumuladoConLinea', 'resTotalUnidadesInventario']);
         [1, 2, 3].forEach(n => {
             el('resPrecio' + n).textContent = usarRedondeo ? '$' + desglose['p' + n + 'Redondeado'] : '$' + desglose['p' + n + 'Exacto'];
             if (aplicaItbis) {
@@ -516,6 +568,8 @@
         if (agregandoProductoEnCurso) return;
         const btnAgregar = el('btnAgregarProducto');
         let aprendioCodigo = false;
+        let avisoInternoPendiente = '';
+        let avisoOmitidoPendiente = '';
         try {
             agregandoProductoEnCurso = true;
             if (btnAgregar) {
@@ -564,7 +618,37 @@
         const valDescRaw = el('calcDescuento') ? el('calcDescuento').value : '0';
         const descuentoValor = Math.max(0, parseFloat(valDescRaw) || 0);
 
-        const codigoBarrasNormalizado = Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value);
+        const nombreCrudo = el('calcNombre').value.trim();
+        let nombreProcesado = (Dominio && typeof Dominio.sanitizarEntradaTexto === 'function')
+            ? Dominio.sanitizarEntradaTexto(nombreCrudo, 120)
+            : nombreCrudo;
+        if (nombreProcesado && Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function') {
+            nombreProcesado = Dominio.normalizarNombreProductoMayusculas(nombreProcesado);
+        } else if (nombreProcesado && Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
+            nombreProcesado = Dominio.estandarizarNombreFarmaceutico(nombreProcesado);
+        }
+        const esNombrePlaceholder = n => !n || /^Producto(\s*#\d+)?$/i.test(String(n).trim()) || String(n).trim().toLowerCase() === 'producto sin nombre';
+
+        const metaNombre = (nombreProcesado && Dominio && typeof Dominio.extraerMetadatosDesdeNombre === 'function')
+            ? Dominio.extraerMetadatosDesdeNombre(nombreProcesado, {
+                laboratorios: Almacenamiento && typeof Almacenamiento.obtenerDirectorioLaboratorios === 'function' ? Almacenamiento.obtenerDirectorioLaboratorios() : [],
+                vademecum: Almacenamiento && typeof Almacenamiento.obtenerVademecumMaestro === 'function' ? Almacenamiento.obtenerVademecumMaestro() : []
+            })
+            : {};
+
+        let codigoBarrasNormalizado = Dominio.normalizarCodigoBarras(el('calcCodigoBarras').value);
+        let infoCodigoAsignado = { codigoBarras: codigoBarrasNormalizado, esCodigoInterno: false, esNuevoInterno: false, reutilizadoExistente: false };
+        if (!codigoBarrasNormalizado && nombreProcesado && !esNombrePlaceholder(nombreProcesado) &&
+            Almacenamiento && typeof Almacenamiento.resolverCodigoInternoSiFalta === 'function') {
+            const labCandidato = (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio) || metaNombre.laboratorio || '';
+            infoCodigoAsignado = Almacenamiento.resolverCodigoInternoSiFalta({
+                codigoBarras: '',
+                nombre: nombreProcesado,
+                laboratorio: labCandidato
+            });
+            codigoBarrasNormalizado = infoCodigoAsignado.codigoBarras || '';
+        }
+
         const prodDic = (codigoBarrasNormalizado && Almacenamiento)
             ? Almacenamiento.buscarProductoPorCodigo(codigoBarrasNormalizado)
             : null;
@@ -604,30 +688,26 @@
             }
         }
 
-        const nombreCrudo = el('calcNombre').value.trim();
-        let nombreProcesado = (Dominio && typeof Dominio.sanitizarEntradaTexto === 'function')
-            ? Dominio.sanitizarEntradaTexto(nombreCrudo, 120)
-            : nombreCrudo;
-        if (nombreProcesado && Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function') {
-            nombreProcesado = Dominio.normalizarNombreProductoMayusculas(nombreProcesado);
-        } else if (nombreProcesado && Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
-            nombreProcesado = Dominio.estandarizarNombreFarmaceutico(nombreProcesado);
-        }
-        const nombreFinalLinea = nombreProcesado
-            || (fichaVademecumSeleccionada && (fichaVademecumSeleccionada.nombreComercial || fichaVademecumSeleccionada.nombre))
+        const nombreCatalogoRaw = (fichaVademecumSeleccionada && (fichaVademecumSeleccionada.nombreComercial || fichaVademecumSeleccionada.nombre))
             || (prodDic && (prodDic.nombre || prodDic.nombreComercial))
+            || '';
+        const nombreCatalogoValido = esNombrePlaceholder(nombreCatalogoRaw) ? '' : nombreCatalogoRaw;
+        const nombreFinalLinea = nombreProcesado
+            || nombreCatalogoValido
             || `Producto #${sesionActual.productos.length + 1}`;
 
         const labSinFugaProveedor = (fichaVademecumSeleccionada && fichaVademecumSeleccionada.laboratorio)
             || (prodDic && prodDic.laboratorio)
+            || metaNombre.laboratorio
             || '';
 
         // Validación obligatoria de datos mínimos (cero herencia de proveedor privado hacia laboratorio público)
         const datosParaValidar = {
-            nombre: nombreFinalLinea,
+            nombre: nombreProcesado || nombreCatalogoValido,
+            permitirSinNombre: true,
             laboratorio: labSinFugaProveedor,
             permitirSinLaboratorio: true,
-            concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || '',
+            concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || metaNombre.concentracion || '',
             tipo,
             unidadesPorCaja: vUnidades.valor,
             precioCajaBase: vPrecio.valor,
@@ -645,17 +725,19 @@
         }
 
         const nuevaLinea = Dominio.crearLineaProductoInmutable({
-            codigoBarras: el('calcCodigoBarras').value,
+            codigoBarras: codigoBarrasNormalizado,
             nombre: nombreFinalLinea,
-            nombreComercial: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.nombreComercial) || (prodDic && prodDic.nombreComercial) || nombreFinalLinea,
-            principioActivo: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.principioActivo) || (prodDic && prodDic.principioActivo) || '',
+            nombreComercial: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.nombreComercial) || (prodDic && !esNombrePlaceholder(prodDic.nombreComercial) ? prodDic.nombreComercial : '') || (nombreProcesado || nombreCatalogoValido || ''),
+            principioActivo: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.principioActivo) || (prodDic && prodDic.principioActivo) || metaNombre.principioActivo || '',
             laboratorio: labSinFugaProveedor,
             costoReferencia: costoAnteriorCaja,
             esBonificacionCruzada: vPrecio.valor === 0,
-            concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || '',
-            formaFarmaceutica: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.formaFarmaceutica) || (prodDic && prodDic.formaFarmaceutica) || '',
-            registroSanitario: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.registroSanitario) || (prodDic && prodDic.registroSanitario) || '',
-            condicionVenta: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.condicionVenta) || (prodDic && prodDic.condicionVenta) || 'OTC',
+            concentracion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.concentracion) || (prodDic && prodDic.concentracion) || metaNombre.concentracion || '',
+            categoria: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.categoria) || (prodDic && prodDic.categoria) || metaNombre.categoria || '',
+            presentacion: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.presentacion) || (prodDic && prodDic.presentacion) || metaNombre.presentacion || '',
+            formaFarmaceutica: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.formaFarmaceutica) || (prodDic && prodDic.formaFarmaceutica) || metaNombre.formaFarmaceutica || '',
+            registroSanitario: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.registroSanitario) || (prodDic && prodDic.registroSanitario) || metaNombre.registroSanitario || '',
+            condicionVenta: (fichaVademecumSeleccionada && fichaVademecumSeleccionada.condicionVenta) || (prodDic && prodDic.condicionVenta) || metaNombre.condicionVenta || 'OTC',
             cadenaFrio: Boolean(fichaVademecumSeleccionada && fichaVademecumSeleccionada.cadenaFrio),
             tipo,
             precioCajaBase: vPrecio.valor,
@@ -674,6 +756,11 @@
         }, reglasEfectivas);
 
         aprendioCodigo = Almacenamiento.aprenderProductoEnDiccionario(nuevaLinea, sesionActual);
+        if (aprendioCodigo && infoCodigoAsignado && infoCodigoAsignado.esNuevoInterno && nuevaLinea.codigoBarras) {
+            avisoInternoPendiente = `"${nuevaLinea.nombre}" memorizado en catálogo con código interno ${nuevaLinea.codigoBarras}.`;
+        } else if (!aprendioCodigo && !nuevaLinea.codigoBarras) {
+            avisoOmitidoPendiente = 'Línea agregada solo a esta factura (sin código de barras ni nombre para catalogar).';
+        }
         Estado.agregarProductoASesion(nuevaLinea);
         fichaVademecumSeleccionada = null;
         ultimoCostoJitActual = null;
@@ -719,8 +806,12 @@
             const ACTIVAR_ALERTA_DICCIONARIO = false;
             if (ACTIVAR_ALERTA_DICCIONARIO) {
                 UI.Notificaciones.mostrarMensaje(`Producto agregado y código "${nuevaLinea.codigoBarras}" memorizado en el diccionario.`, 'success');
+            } else if (avisoInternoPendiente) {
+                UI.Notificaciones.mostrarMensaje(avisoInternoPendiente, 'info');
             }
             UI.Diccionario.renderizarDiccionarioUI();
+        } else if (avisoOmitidoPendiente) {
+            UI.Notificaciones.mostrarMensaje(avisoOmitidoPendiente, 'info');
         }
 
         // Posicionar cursor listo para el siguiente código o producto
@@ -1184,40 +1275,115 @@
         const datalistSugerencias = el('listaSugerenciasProductos');
         if (inputNombre && datalistSugerencias) {
             inputNombre.style.textTransform = 'uppercase';
+            let temporizadorBusquedaNombre = null;
+            let tokenBusquedaNombre = 0;
 
-            inputNombre.addEventListener('input', () => {
+            const actualizarSugerenciasNombre = () => {
                 const val = inputNombre.value.trim();
+                const miToken = ++tokenBusquedaNombre;
                 if (val.length < 2) {
-                    datalistSugerencias.innerHTML = '';
+                    datalistSugerencias.replaceChildren();
                     return;
                 }
-                const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
-                const coincidenciasDic = (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
-                    ? Dominio.buscarEnCatalogoFuzzy(val, diccionario, 6)
-                    : [];
+
+                const coincidenciasDic = (Almacenamiento && typeof Almacenamiento.buscarProductosEnDiccionarioRapido === 'function')
+                    ? Almacenamiento.buscarProductosEnDiccionarioRapido(val, 6)
+                    : ((Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
+                        ? Dominio.buscarEnCatalogoFuzzy(val, Almacenamiento.obtenerDiccionarioCodigos(), 6)
+                        : []);
 
                 const coincidenciasVad = (Almacenamiento && typeof Almacenamiento.buscarEnVademecum === 'function')
                     ? Almacenamiento.buscarEnVademecum(val, 6)
                     : [];
 
-                const htmlDic = coincidenciasDic.map(p => {
-                    const nom = Dominio.escaparHtml(p.nombre || p.nombreComercial || '');
-                    const cod = Dominio.escaparHtml(p.codigoBarras || '');
-                    const lab = p.laboratorio ? ` • ${Dominio.escaparHtml(p.laboratorio)}` : '';
-                    return `<option value="${nom}" label="[EN FARMACIA] ${nom} [${cod}]${lab}"></option>`;
-                }).join('');
+                const frag = document.createDocumentFragment();
+                const opcionesPorCodigo = new Map();
+                const codigosParaProv = [];
 
-                const htmlVad = coincidenciasVad.map(v => {
-                    const nom = Dominio.escaparHtml(v.nombreComercial || v.nombre || '');
-                    const lab = Dominio.escaparHtml(v.laboratorio || '');
-                    const conc = Dominio.escaparHtml(v.concentracion || '');
-                    return `<option value="${nom}" label="[VADEMÉCUM RD] ${nom} - ${lab} (${conc})"></option>`;
-                }).join('');
+                for (let i = 0; i < coincidenciasDic.length; i++) {
+                    const p = coincidenciasDic[i];
+                    if (!p) continue;
+                    const nom = String(p.nombre || p.nombreComercial || '').trim();
+                    if (!nom) continue;
 
-                datalistSugerencias.innerHTML = htmlDic + htmlVad;
+                    const opt = document.createElement('option');
+                    opt.value = nom;
+
+                    const etiqueta = (Dominio && typeof Dominio.construirEtiquetaSugerenciaProducto === 'function')
+                        ? Dominio.construirEtiquetaSugerenciaProducto(p)
+                        : [p.codigoBarras, p.laboratorio, p.proveedorHabitual].filter(Boolean).join(' • ');
+                    if (etiqueta) {
+                        opt.label = etiqueta;
+                    }
+                    if (p.codigoBarras) {
+                        opcionesPorCodigo.set(p.codigoBarras, { opt, prod: p });
+                        codigosParaProv.push(p.codigoBarras);
+                    }
+                    frag.appendChild(opt);
+                }
+
+                for (let i = 0; i < coincidenciasVad.length; i++) {
+                    const v = coincidenciasVad[i];
+                    if (!v) continue;
+                    const nom = String(v.nombreComercial || v.nombre || '').trim();
+                    if (!nom) continue;
+
+                    const opt = document.createElement('option');
+                    opt.value = nom;
+                    const etVad = ['Vademécum', v.laboratorio, v.concentracion]
+                        .map(s => String(s || '').trim())
+                        .filter(Boolean)
+                        .join(' • ');
+                    if (etVad) {
+                        opt.label = etVad;
+                    }
+                    frag.appendChild(opt);
+                }
+
+                datalistSugerencias.replaceChildren(frag);
+
+                // Si la bóveda está configurada y Admin está activo, hidratar puntualmente proveedores de los <=6 resultados
+                if (codigosParaProv.length > 0 &&
+                    AppFarmacia.Seguridad &&
+                    AppFarmacia.Seguridad.estaConfigurado() &&
+                    !AppFarmacia.Seguridad.estaBloqueado() &&
+                    Almacenamiento &&
+                    typeof Almacenamiento.obtenerProveedoresSugerenciasSiAdmin === 'function') {
+                    Almacenamiento.obtenerProveedoresSugerenciasSiAdmin(codigosParaProv).then(mapaProvs => {
+                        if (miToken !== tokenBusquedaNombre || !mapaProvs || mapaProvs.size === 0) return;
+                        mapaProvs.forEach((proveedor, cod) => {
+                            const ref = opcionesPorCodigo.get(cod);
+                            if (!ref) return;
+                            const etiquetaActualizada = (Dominio && typeof Dominio.construirEtiquetaSugerenciaProducto === 'function')
+                                ? Dominio.construirEtiquetaSugerenciaProducto(ref.prod, { proveedor })
+                                : [ref.prod.codigoBarras, ref.prod.laboratorio, proveedor].filter(Boolean).join(' • ');
+                            if (etiquetaActualizada) {
+                                ref.opt.label = etiquetaActualizada;
+                            }
+                        });
+                    }).catch(() => {});
+                }
+            };
+
+            inputNombre.addEventListener('input', () => {
+                if (temporizadorBusquedaNombre) clearTimeout(temporizadorBusquedaNombre);
+                const val = inputNombre.value.trim();
+                if (val.length < 2) {
+                    tokenBusquedaNombre++;
+                    datalistSugerencias.replaceChildren();
+                    return;
+                }
+                temporizadorBusquedaNombre = setTimeout(() => {
+                    temporizadorBusquedaNombre = null;
+                    actualizarSugerenciasNombre();
+                }, 120);
             });
 
             inputNombre.addEventListener('change', () => {
+                if (temporizadorBusquedaNombre) {
+                    clearTimeout(temporizadorBusquedaNombre);
+                    temporizadorBusquedaNombre = null;
+                }
                 const val = inputNombre.value.trim();
                 if (!val) return;
 
@@ -1226,12 +1392,20 @@
                     : val.toUpperCase();
                 inputNombre.value = valMayus;
 
-                const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
-                const encontrado = Object.values(diccionario || {}).find(p => p && (
+                const esMatchExacto = p => p && (
                     (p.nombre && p.nombre.toUpperCase() === valMayus) ||
                     (p.nombreComercial && p.nombreComercial.toUpperCase() === valMayus) ||
                     p.nombre === val || p.nombreComercial === val
-                ));
+                );
+
+                let encontrado = null;
+                if (Almacenamiento && typeof Almacenamiento.buscarProductosEnDiccionarioRapido === 'function') {
+                    encontrado = Almacenamiento.buscarProductosEnDiccionarioRapido(valMayus, 8).find(esMatchExacto) || null;
+                }
+                if (!encontrado) {
+                    const diccionario = Almacenamiento.obtenerDiccionarioCodigos();
+                    encontrado = Object.values(diccionario || {}).find(esMatchExacto) || null;
+                }
 
                 if (encontrado) {
                     fichaVademecumSeleccionada = null;
@@ -1336,7 +1510,20 @@
             UI.Factura.renderizarTablaProductosActuales();
         });
 
-        // Alternar Precios con ITBIS vs Precios Netos (Preferencia de Mostrador)
+        // Alternar Costo Unitario con ITBIS (referencial) y Precios con ITBIS
+        const chkCostoItbis = el('chkCostoConItbis');
+        if (chkCostoItbis) {
+            try {
+                chkCostoItbis.checked = localStorage.getItem('farmacia_mostrar_costo_con_itbis') === '1';
+            } catch (_) {}
+            chkCostoItbis.addEventListener('change', () => {
+                try {
+                    localStorage.setItem('farmacia_mostrar_costo_con_itbis', chkCostoItbis.checked ? '1' : '0');
+                } catch (_) {}
+                calcularEnVivo();
+            });
+        }
+
         const chkConItbis = el('chkPreciosConItbis');
         if (chkConItbis) {
             try {

@@ -1226,6 +1226,373 @@
         afirmarIgualdad(Array.isArray(fusedDual._segPendienteAdmin) && fusedDual._segPendienteAdmin.length === 1, true, 'Fusión Dual-Key: Conserva _segPendienteAdmin');
         afirmarIgualdad('ultimoPrecioCaja' in fusedDual, false, 'Fusión Dual-Key: Omite costo sintético cero/ausente');
 
+        // 44. Validación ampliada de medidas (ML, CC, GR, %, UNIDAD/ES) y registro sin nombre
+        [
+            'SOLUCION SALINA 0.9%',
+            'ALCOHOL ISOPROPILICO 70%',
+            'ACETAMINOFEN 120 ML',
+            'AMOXICILINA 500 MG',
+            'CREMA TOPICA 30 GR',
+            'JERINGA 5 CC',
+            'GUANTES 100 UNIDADES',
+            'PRUEBA RAPIDA 1 UNIDAD',
+            'SOBRES 20 UDS',
+            'INSULINA 100 U',
+            'GOTAS 2,5 ML',
+            'VITAMINA B12 500 MCG',
+            'SUERO ORAL 1 L'
+        ].forEach(nomMedida => {
+            const rMed = Dominio.validarDatosMinimosProducto({
+                nombre: nomMedida,
+                tipo: 'entero',
+                permitirSinLaboratorio: true,
+                aplicaItbis: false
+            });
+            afirmarIgualdad(rMed.esValido, true, 'Medida aceptada: ' + nomMedida);
+        });
+
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('guantes 10uds'), 'GUANTES 10 UDS', 'Normalizar Mayúsculas: 10uds -> 10 UDS');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('jeringas 20unidades'), 'JERINGAS 20 UNIDADES', 'Normalizar Mayúsculas: 20unidades -> 20 UNIDADES');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('crema 30gr'), 'CREMA 30 GR', 'Normalizar Mayúsculas: 30gr -> 30 GR');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('ampolla 5cc'), 'AMPOLLA 5 CC', 'Normalizar Mayúsculas: 5cc -> 5 CC');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('cloruro 0.9%'), 'CLORURO 0.9%', 'Normalizar Mayúsculas: 0.9% intacto');
+
+        // Registro sin nombre (permitirSinNombre: true)
+        afirmarIgualdad(
+            Dominio.validarDatosMinimosProducto({ nombre: '', tipo: 'entero', permitirSinNombre: true, permitirSinLaboratorio: true }).esValido,
+            true,
+            'Sin Nombre: Permite registrar producto con nombre vacío'
+        );
+        afirmarIgualdad(
+            Dominio.validarDatosMinimosProducto({ nombre: 'Producto #1', tipo: 'entero', permitirSinNombre: true, permitirSinLaboratorio: true }).esValido,
+            true,
+            'Sin Nombre: Permite placeholder interno Producto #1 cuando permitirSinNombre es true'
+        );
+        afirmarIgualdad(
+            Dominio.validarDatosMinimosProducto({ nombre: 'Producto sin nombre', tipo: 'entero', permitirSinNombre: true, permitirSinLaboratorio: true }).esValido,
+            true,
+            'Sin Nombre: Permite Producto sin nombre cuando permitirSinNombre es true'
+        );
+        afirmarIgualdad(
+            Dominio.validarDatosMinimosProducto({ nombre: 'AMOXICILINA', tipo: 'entero', permitirSinNombre: true, permitirSinLaboratorio: true }).esValido,
+            false,
+            'Sin Nombre: Sigue exigiendo medida si se escribe un nombre de medicamento sin dosis/unidad'
+        );
+        afirmarIgualdad(
+            Dominio.validarDatosMinimosProducto({ nombre: 'AB', tipo: 'entero', permitirSinNombre: true, permitirSinLaboratorio: true }).esValido,
+            false,
+            'Sin Nombre: Sigue rechazando nombres cortos menores a 3 caracteres'
+        );
+        afirmarIgualdad(
+            Dominio.validarDatosMinimosProducto({ nombre: '', tipo: 'divisible', unidadesPorCaja: 1, permitirSinNombre: true, permitirSinLaboratorio: true }).esValido,
+            false,
+            'Sin Nombre: Sigue exigiendo unidadesPorCaja >= 2 en productos divisibles'
+        );
+
+        // 45. Edición de código de barras en Catálogo, guardado sin nombre y aprendizaje sin placeholder numérico
+        if (AppFarmacia.Almacenamiento && typeof AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo === 'function') {
+            const codOrig = '7460000000012';
+            const codNuevo = '7460000000029';
+            const codColision = '7460000000036';
+            const codInvalido = '7460000000020';
+
+            try {
+                AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codOrig,
+                    nombre: 'AMOXICILINA 500 MG',
+                    tipo: 'divisible',
+                    unidadesPorCaja: 30,
+                    ultimoPrecioCaja: 250,
+                    ubicacion: 'Estante Z-1'
+                });
+                AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codColision,
+                    nombre: 'PARACETAMOL 500 MG',
+                    tipo: 'entero'
+                });
+
+                // Rechazar cambio a código GS1 inválido
+                const resGs1Mal = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codInvalido,
+                    codigoBarrasAnterior: codOrig,
+                    nombre: 'AMOXICILINA 500 MG',
+                    tipo: 'divisible',
+                    unidadesPorCaja: 30
+                });
+                afirmarIgualdad(resGs1Mal.exito, false, 'Catálogo Código: Rechaza código con dígito verificador GS1 inválido');
+
+                // Rechazar colisión con código existente
+                const resCol = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codColision,
+                    codigoBarrasAnterior: codOrig,
+                    nombre: 'AMOXICILINA 500 MG',
+                    tipo: 'divisible',
+                    unidadesPorCaja: 30
+                });
+                afirmarIgualdad(resCol.exito, false, 'Catálogo Código: Rechaza colisión con producto ya existente');
+
+                // Renombrado válido de código de barras
+                const resRen = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codNuevo,
+                    codigoBarrasAnterior: codOrig,
+                    nombre: 'AMOXICILINA 500 MG',
+                    tipo: 'divisible',
+                    unidadesPorCaja: 30
+                });
+                afirmarIgualdad(resRen.exito, true, 'Catálogo Código: Permite renombrar a un código GS1 válido');
+                afirmarIgualdad(AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codOrig), null, 'Catálogo Código: Elimina clave anterior al renombrar');
+                const prodNuevo = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codNuevo);
+                afirmarIgualdad(Boolean(prodNuevo && prodNuevo.codigoBarras === codNuevo && prodNuevo.ultimoPrecioCaja === 250), true, 'Catálogo Código: Preserva ficha y costo bajo nuevo código');
+
+                // Guardado explícito sin nombre desde Catálogo
+                const resSinNomCat = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codNuevo,
+                    nombre: '',
+                    permitirNombreVacio: true,
+                    tipo: 'entero'
+                });
+                afirmarIgualdad(resSinNomCat.exito && resSinNomCat.producto.nombre === 'Producto sin nombre', true, 'Catálogo Sin Nombre: Guarda nombre vacío como Producto sin nombre');
+
+                // Aprendizaje en calculadora sin nombre -> guarda Producto sin nombre y permite actualizar luego
+                AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codNuevo);
+                AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario({
+                    codigoBarras: codNuevo,
+                    nombre: 'Producto #1',
+                    tipo: 'entero',
+                    unidadesPorCaja: 1,
+                    precioCajaBase: 90
+                });
+                const prodAprendidoSinNom = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codNuevo);
+                afirmarIgualdad(prodAprendidoSinNom && prodAprendidoSinNom.nombre, 'Producto sin nombre', 'Calculadora Sin Nombre: Guarda Producto sin nombre en lugar de Producto #1');
+
+                AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario({
+                    codigoBarras: codNuevo,
+                    nombre: 'ACETAMINOFEN 120 MG / 5 ML',
+                    tipo: 'entero',
+                    unidadesPorCaja: 1,
+                    precioCajaBase: 95
+                });
+                const prodCompletado = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codNuevo);
+                afirmarIgualdad(prodCompletado && prodCompletado.nombre, 'ACETAMINOFEN 120 MG / 5 ML', 'Calculadora Sin Nombre: Permite completar nombre real en escaneo posterior');
+            } finally {
+                AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codOrig);
+                AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codNuevo);
+                AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codColision);
+            }
+        }
+
+        // 46. Costo Unitario con ITBIS Referencial, Palabras Completas de Medida y Autocompletado desde Nombre
+        const desgloseCostoItbis18 = Dominio.calcularDesglosePrecios(100, 10, true, { ...REGLAS_NEGOCIO_POR_DEFECTO, porcentajeItbis: 18 });
+        afirmarIgualdad(desgloseCostoItbis18.costoUnitario, '10.00000000', 'Costo +ITBIS 18%: costoUnitario permanece estrictamente neto (10.00000000)');
+        afirmarIgualdad(desgloseCostoItbis18.costoUnitarioConItbis, '11.80000000', 'Costo +ITBIS 18%: costoUnitarioConItbis es 11.80000000');
+        afirmarIgualdad(desgloseCostoItbis18.itbisCostoUnitario, '1.80000000', 'Costo +ITBIS 18%: itbisCostoUnitario es 1.80000000');
+
+        const desgloseCostoItbis16 = Dominio.calcularDesglosePrecios(100, 10, true, { ...REGLAS_NEGOCIO_POR_DEFECTO, porcentajeItbis: 16 });
+        afirmarIgualdad(desgloseCostoItbis16.costoUnitario, '10.00000000', 'Costo +ITBIS 16%: costoUnitario neto intacto');
+        afirmarIgualdad(desgloseCostoItbis16.costoUnitarioConItbis, '11.60000000', 'Costo +ITBIS 16%: costoUnitarioConItbis es 11.60000000');
+
+        const desgloseCostoExento = Dominio.calcularDesglosePrecios(100, 10, false, REGLAS_NEGOCIO_POR_DEFECTO);
+        afirmarIgualdad(desgloseCostoExento.costoUnitarioConItbis, '10.00000000', 'Costo +ITBIS Exento: igual al neto cuando no aplica ITBIS');
+        afirmarIgualdad(desgloseCostoExento.itbisCostoUnitario, '0.00000000', 'Costo +ITBIS Exento: itbisCostoUnitario es 0.00000000');
+
+        // Normalización y validación de palabras completas en español
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('jarabe 10 onzas'), 'JARABE 10 OZ', 'Normalizar Palabra: 10 onzas -> 10 OZ');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('ibuprofeno 100 miligramos'), 'IBUPROFENO 100 MG', 'Normalizar Palabra: 100 miligramos -> 100 MG');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('suspension 120 mililitros'), 'SUSPENSION 120 ML', 'Normalizar Palabra: 120 mililitros -> 120 ML');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('crema 30 gramos'), 'CREMA 30 G', 'Normalizar Palabra: 30 gramos -> 30 G');
+        afirmarIgualdad(Dominio.normalizarNombreProductoMayusculas('alcohol 70 por ciento'), 'ALCOHOL 70%', 'Normalizar Palabra: 70 por ciento -> 70%');
+
+        [
+            'JARABE 10 ONZAS',
+            'IBUPROFENO 100 MILIGRAMOS',
+            'ACETAMINOFEN 120 MILILITROS',
+            'CREMA 30 GRAMOS',
+            'ALCOHOL 70 POR CIENTO'
+        ].forEach(nomPalabra => {
+            afirmarIgualdad(
+                Dominio.validarDatosMinimosProducto({ nombre: nomPalabra, tipo: 'entero', permitirSinLaboratorio: true }).esValido,
+                true,
+                'Valida medida palabra completa: ' + nomPalabra
+            );
+        });
+
+        // Extracción automática de metadatos desde nombre
+        const labsPrueba = (AppFarmacia.Almacenamiento && typeof AppFarmacia.Almacenamiento.obtenerDirectorioLaboratorios === 'function')
+            ? AppFarmacia.Almacenamiento.obtenerDirectorioLaboratorios()
+            : [
+                { nombre: 'Laboratorios Rowe' },
+                { nombre: 'Laboratorios LAM' },
+                { nombre: 'Colgate-Palmolive (Oral)' },
+                { nombre: 'Bayer' },
+                { nombre: 'Pfizer' }
+            ];
+
+        const metaIbu = Dominio.extraerMetadatosDesdeNombre('IBUPROFENO 100 MILIGRAMOS TABLETAS CAJA X 30 ROWE', { laboratorios: labsPrueba });
+        afirmarIgualdad(metaIbu.concentracion, '100 MG', 'Autocompletado: Dosis 100 MG desde 100 MILIGRAMOS');
+        afirmarIgualdad(metaIbu.laboratorio, 'Laboratorios Rowe', 'Autocompletado: Laboratorio Rowe desde catálogo');
+        afirmarIgualdad(metaIbu.formaFarmaceutica, 'Comprimidos', 'Autocompletado: Forma Comprimidos');
+        afirmarIgualdad(metaIbu.tipo, 'divisible', 'Autocompletado: Tipo divisible');
+        afirmarIgualdad(metaIbu.unidadesPorCaja, 30, 'Autocompletado: 30 unidades por caja');
+        afirmarIgualdad(metaIbu.principioActivo, 'Ibuprofeno', 'Autocompletado: Principio Activo Ibuprofeno');
+        afirmarIgualdad(metaIbu.categoria, 'Analgésicos & Antiinflamatorios', 'Autocompletado: Categoría Analgésicos & Antiinflamatorios');
+        afirmarIgualdad(metaIbu.tasaItbis, 0, 'Autocompletado: Medicamento exento 0% ITBIS');
+
+        const metaJarabe = Dominio.extraerMetadatosDesdeNombre('JARABE ACETAMINOFEN 120 MG / 5 ML 10 ONZAS LAM', { laboratorios: labsPrueba });
+        afirmarIgualdad(metaJarabe.concentracion, '120 MG / 5 ML', 'Autocompletado Jarabe: Concentración 120 MG / 5 ML');
+        afirmarIgualdad(metaJarabe.laboratorio, 'Laboratorios LAM', 'Autocompletado Jarabe: Laboratorio LAM');
+        afirmarIgualdad(metaJarabe.formaFarmaceutica, 'Jarabe', 'Autocompletado Jarabe: Forma Jarabe');
+        afirmarIgualdad(metaJarabe.tipo, 'entero', 'Autocompletado Jarabe: Tipo entero');
+        afirmarIgualdad(metaJarabe.unidadesPorCaja, 1, 'Autocompletado Jarabe: 1 unidad por caja');
+        afirmarIgualdad(metaJarabe.principioActivo, 'Paracetamol (Acetaminofén)', 'Autocompletado Jarabe: Principio Activo Acetaminofén');
+        afirmarIgualdad(Boolean(metaJarabe.presentacion && metaJarabe.presentacion.includes('10 OZ')), true, 'Autocompletado Jarabe: Presentación incluye 10 OZ');
+
+        const metaLeche = Dominio.extraerMetadatosDesdeNombre('ENFAMIL 900 GRAMOS', { laboratorios: labsPrueba });
+        afirmarIgualdad(metaLeche.concentracion, '900 G', 'Autocompletado Leche: Dosis 900 G');
+        afirmarIgualdad(metaLeche.esLeche, true, 'Autocompletado Leche: Marca esLeche true');
+        afirmarIgualdad(metaLeche.categoria, 'Pediatría & Cuidado Infantil', 'Autocompletado Leche: Categoría Pediatría');
+
+        const metaShampoo = Dominio.extraerMetadatosDesdeNombre('SHAMPOO COLGATE 400 ML', { laboratorios: labsPrueba });
+        afirmarIgualdad(metaShampoo.concentracion, '400 ML', 'Autocompletado Higiene: Medida 400 ML');
+        afirmarIgualdad(metaShampoo.laboratorio, 'Colgate-Palmolive (Oral)', 'Autocompletado Higiene: Laboratorio Colgate-Palmolive');
+        afirmarIgualdad(metaShampoo.tasaItbis, 18, 'Autocompletado Higiene: ITBIS 18%');
+        afirmarIgualdad(metaShampoo.aplicaItbis, true, 'Autocompletado Higiene: aplicaItbis true');
+
+        const metaSinLab = Dominio.extraerMetadatosDesdeNombre('AMOXICILINA 500 MG', { laboratorios: labsPrueba });
+        afirmarIgualdad(metaSinLab.laboratorio || '', '', 'Autocompletado: No inventa laboratorio si no está en el nombre');
+        afirmarIgualdad(metaSinLab.concentracion, '500 MG', 'Autocompletado: Extrae 500 MG');
+        afirmarIgualdad(metaSinLab.principioActivo, 'Amoxicilina', 'Autocompletado: Extrae Amoxicilina');
+
+        // 47. Rendimiento de Búsqueda, Etiqueta Limpia de Sugerencias y Levenshtein Acotado
+        afirmarIgualdad(Dominio.distanciaLevenshtein('amoxicilina', 'amoxisilina'), 1, 'Levenshtein: Distancia exacta sin tope = 1');
+        afirmarIgualdad(Dominio.distanciaLevenshtein('amoxicilina', 'amoxisilina', 2), 1, 'Levenshtein: Distancia con tope 2 = 1');
+        afirmarIgualdad(Dominio.distanciaLevenshtein('amoxicilina', 'ibuprofeno', 2) > 2, true, 'Levenshtein: Aborta anticipadamente cuando supera tope');
+
+        const etqCompleta = Dominio.construirEtiquetaSugerenciaProducto({
+            codigoBarras: '7460012345678',
+            nombre: 'AMOXICILINA 500 MG',
+            laboratorio: 'Laboratorios Rowe',
+            proveedorHabitual: 'Droguería Betances'
+        });
+        afirmarIgualdad(etqCompleta, '7460012345678 • Laboratorios Rowe • Droguería Betances', 'Etiqueta Sugerencia: Muestra código, laboratorio y proveedor');
+        afirmarIgualdad(etqCompleta.includes('EN FARMACIA') || etqCompleta.includes('AMOXICILINA'), false, 'Etiqueta Sugerencia: Omite [EN FARMACIA] y no repite el nombre');
+
+        const etqParcial = Dominio.construirEtiquetaSugerenciaProducto({
+            codigoBarras: '7460012345678',
+            nombre: 'IBUPROFENO 400 MG',
+            laboratorio: '',
+            proveedorHabitual: ''
+        });
+        afirmarIgualdad(etqParcial, '7460012345678', 'Etiqueta Sugerencia: Omite separadores vacíos');
+
+        // Catálogo grande sintético (600 ítems): exactitud + latencia acotada
+        const dicGrande = {};
+        for (let i = 0; i < 600; i++) {
+            const c = '746900' + String(i).padStart(7, '0');
+            dicGrande[c] = {
+                codigoBarras: c,
+                nombre: i === 450 ? 'AZITROMICINA 500 MG TABLETAS' : `MEDICAMENTO GENERICO ${i} 500 MG`,
+                principioActivo: i === 450 ? 'Azitromicina' : `Principio ${i}`,
+                laboratorio: i === 450 ? 'Pfizer' : 'Lab Demo'
+            };
+        }
+        const resGrande = Dominio.buscarEnCatalogoFuzzy('azitromicina', dicGrande, 6);
+        afirmarIgualdad(resGrande.length > 0 && resGrande[0].codigoBarras === '7469000000450', true, 'Fuzzy Catálogo Grande: Encuentra coincidencia exacta en 600 ítems');
+
+        if (AppFarmacia.Almacenamiento && typeof AppFarmacia.Almacenamiento.buscarProductosEnDiccionarioRapido === 'function') {
+            const codFast = '7460000000012';
+            try {
+                AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                    codigoBarras: codFast,
+                    nombre: 'CEFIXIMA 400 MG',
+                    laboratorio: 'Laboratorios Rowe',
+                    proveedorHabitual: 'Droguería Farach',
+                    tipo: 'entero'
+                });
+                const resFast = AppFarmacia.Almacenamiento.buscarProductosEnDiccionarioRapido('cefixima', 6);
+                afirmarIgualdad(resFast.length > 0 && resFast[0].codigoBarras === codFast, true, 'Almacenamiento Rápido: Encuentra producto vía índice fonético cacheado');
+            } finally {
+                AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codFast);
+            }
+        }
+
+        // 48. Códigos Internos GS1 (200...), Consolidación de Macrocategorías, Orden A-Z y Aprendizaje sin Código Físico
+        afirmarIgualdad(Dominio.calcularDigitoControlGs1('200000000001'), '5', 'GS1 Interno: Calcula dígito verificador Módulo 10 correcto');
+        const codGen1 = Dominio.generarCodigoInternoGs1({});
+        afirmarIgualdad(codGen1, '2000000000015', 'GS1 Interno: Primer código interno generado es 2000000000015');
+        afirmarIgualdad(Dominio.validarCodigoBarrasEstandar(codGen1).esValido, true, 'GS1 Interno: Código generado cumple estándar EAN-13');
+        afirmarIgualdad(Dominio.esCodigoBarrasInterno(codGen1), true, 'GS1 Interno: Identifica código prefijo 200 válido como interno');
+        afirmarIgualdad(Dominio.esCodigoBarrasInterno('7460000000012'), false, 'GS1 Interno: Código comercial 746 no se marca como interno');
+        afirmarIgualdad(Dominio.esCodigoBarrasInterno('2000000000010'), false, 'GS1 Interno: Rechaza dígito verificador alterado');
+        const codGen2 = Dominio.generarCodigoInternoGs1({ [codGen1]: { nombre: 'PROD 1' } });
+        afirmarIgualdad(codGen2 !== codGen1 && Dominio.esCodigoBarrasInterno(codGen2), true, 'GS1 Interno: Genera secuencia consecutiva sin colisión');
+
+        afirmarIgualdad(Dominio.obtenerMacroCategoria('Galletas y dulces'), 'Conveniencia & Bebidas', 'MacroCat: Galletas y dulces -> Conveniencia & Bebidas');
+        afirmarIgualdad(Dominio.obtenerMacroCategoria('Helados y congelados'), 'Conveniencia & Bebidas', 'MacroCat: Helados y congelados -> Conveniencia & Bebidas');
+        afirmarIgualdad(Dominio.obtenerMacroCategoria('Cuidado de bebé no lácteo'), 'Pediatría & Cuidado Infantil', 'MacroCat: Cuidado de bebé no lácteo -> Pediatría & Cuidado Infantil');
+        afirmarIgualdad(Dominio.obtenerMacroCategoria('Cuidado e higiene personal'), 'Cuidado Personal & Cosmética', 'MacroCat: Cuidado e higiene personal -> Cuidado Personal & Cosmética');
+        afirmarIgualdad(Dominio.obtenerMacroCategoria('Endocrinología / Tiroides'), 'Endocrinología', 'MacroCat: Endocrinología / Tiroides -> Endocrinología');
+        afirmarIgualdad(Dominio.obtenerMacroCategoria(''), 'General / Otros', 'MacroCat: Vacía -> General / Otros');
+
+        const muestraOrden = [
+            { codigoBarras: '7460000000001', nombre: 'ZINC CREMA 20 G', categoria: '' },
+            { codigoBarras: '7460000000002', nombre: 'AZITROMICINA 500 MG', categoria: 'Antibiótico Macrólido' },
+            { codigoBarras: '7460000000003', nombre: 'AMOXICILINA 500 MG', categoria: 'Antibiótico Sistémico' },
+            { codigoBarras: '7460000000004', nombre: 'AMOXICILINA 250 MG', categoria: 'Antibiótico Sistémico' },
+            { codigoBarras: '7460000000005', nombre: 'ALCOHOL 70% 120 ML', categoria: 'Primeros Auxilios / Antisépticos' },
+            { codigoBarras: '7460000000006', nombre: 'Producto sin nombre', categoria: 'Antibióticos' }
+        ];
+        const ordCatAz = Dominio.ordenarProductosCatalogo(muestraOrden, { modoOrden: 'categoria_az' });
+        afirmarIgualdad(ordCatAz[0].nombre, 'AMOXICILINA 250 MG', 'Orden Cat-AZ: Unifica subcategorías antibióticas y ordena 250 MG antes de 500 MG');
+        afirmarIgualdad(ordCatAz[1].nombre, 'AMOXICILINA 500 MG', 'Orden Cat-AZ: AMOXICILINA 500 MG en segundo lugar');
+        afirmarIgualdad(ordCatAz[2].nombre, 'AZITROMICINA 500 MG', 'Orden Cat-AZ: AZITROMICINA alfabética tras AMOXICILINA dentro de Antibióticos');
+        afirmarIgualdad(ordCatAz[3].nombre, 'Producto sin nombre', 'Orden Cat-AZ: Placeholder va al final dentro de su categoría');
+        afirmarIgualdad(ordCatAz[ordCatAz.length - 1].nombre, 'ZINC CREMA 20 G', 'Orden Cat-AZ: General / Otros queda siempre al final');
+
+        const ordGlobalAz = Dominio.ordenarProductosCatalogo(muestraOrden, { modoOrden: 'nombre_az' });
+        afirmarIgualdad(ordGlobalAz[0].nombre, 'ALCOHOL 70% 120 ML', 'Orden Global-AZ: ALCOHOL primero ignorando categoría');
+        afirmarIgualdad(ordGlobalAz[ordGlobalAz.length - 1].nombre, 'Producto sin nombre', 'Orden Global-AZ: Producto sin nombre queda al final');
+
+        if (AppFarmacia.Almacenamiento && typeof AppFarmacia.Almacenamiento.resolverCodigoInternoSiFalta === 'function') {
+            let codIntAprendido = '';
+            try {
+                const aprend1 = AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario({
+                    codigoBarras: '',
+                    nombre: 'Crema Artesanal Prueba 30g',
+                    tipo: 'entero',
+                    unidadesPorCaja: 1,
+                    precioCajaBase: 180
+                });
+                afirmarIgualdad(aprend1, true, 'Aprendizaje sin Código: Memoriza producto con nombre real asignando código interno');
+                const encontrados = AppFarmacia.Almacenamiento.buscarProductosEnDiccionarioRapido('CREMA ARTESANAL PRUEBA', 5);
+                afirmarIgualdad(encontrados.length === 1 && Dominio.esCodigoBarrasInterno(encontrados[0].codigoBarras), true, 'Aprendizaje sin Código: Queda indexado con código GS1 interno 200...');
+                codIntAprendido = encontrados[0].codigoBarras;
+
+                // Segunda compra del mismo producto sin código reutiliza el código existente (sin duplicar)
+                const aprend2 = AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario({
+                    codigoBarras: '',
+                    nombre: 'Crema Artesanal Prueba 30 gramos',
+                    tipo: 'entero',
+                    unidadesPorCaja: 1,
+                    precioCajaBase: 200
+                });
+                afirmarIgualdad(aprend2, true, 'Aprendizaje sin Código: Segunda compra actualiza sin error');
+                const encontradosTras2 = AppFarmacia.Almacenamiento.buscarProductosEnDiccionarioRapido('CREMA ARTESANAL PRUEBA', 5);
+                afirmarIgualdad(encontradosTras2.length, 1, 'Aprendizaje sin Código: Reutiliza código interno y evita duplicados por nombre');
+
+                // Línea sin código NI nombre no contamina el catálogo
+                const omitido = AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario({
+                    codigoBarras: '',
+                    nombre: 'Producto #1',
+                    tipo: 'entero',
+                    unidadesPorCaja: 1,
+                    precioCajaBase: 50
+                });
+                afirmarIgualdad(omitido, false, 'Aprendizaje sin Código: No crea ficha basura si falta tanto código como nombre');
+            } finally {
+                if (codIntAprendido) AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codIntAprendido);
+            }
+        }
+
         console.info('%c[Todas las pruebas de cálculo, validación y estrategias superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
         console.groupEnd();
         return true;
@@ -1362,6 +1729,145 @@
             let rechazoPassDebil = false;
             try { await Seg.cambiarContrasena('ClaveRecuperada#2028', 'corta123'); } catch (_) { rechazoPassDebil = true; }
             afirmarIgualdad(rechazoPassDebil, true, 'Seguridad S11: Rechaza contraseña menor a 10 caracteres');
+
+            // S12. Edición de código de barras en Admin con re-cifrado AAD de _segCaja y _segAdmin
+            if (AppFarmacia.Almacenamiento &&
+                typeof AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo === 'function' &&
+                typeof AppFarmacia.Almacenamiento.obtenerDetalleProductoAdmin === 'function') {
+                const codViejoSec = '7460000000012';
+                const codNuevoSec = '7460000000029';
+                try {
+                    const resAlta = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                        codigoBarras: codViejoSec,
+                        nombre: 'IBUPROFENO 400 MG',
+                        tipo: 'divisible',
+                        unidadesPorCaja: 20,
+                        ultimoPrecioCaja: 425,
+                        ubicacion: 'Tramo C-1',
+                        proveedorHabitual: 'Droguería Prueba'
+                    });
+                    if (resAlta.promesaPersistencia) await resAlta.promesaPersistencia;
+
+                    // Con bóveda bloqueada debe rechazar cambio de código
+                    Seg.bloquear();
+                    const resBloq = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                        codigoBarras: codNuevoSec,
+                        codigoBarrasAnterior: codViejoSec,
+                        nombre: 'IBUPROFENO 400 MG',
+                        tipo: 'divisible',
+                        unidadesPorCaja: 20
+                    });
+                    afirmarIgualdad(resBloq.exito, false, 'Seguridad S12: Bloquea cambio de código de barras sin sesión Admin');
+
+                    // Con Admin desbloqueado debe re-cifrar sobres con AAD del nuevo código
+                    await Seg.desbloquear('ClaveRecuperada#2028');
+                    const resRen = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                        codigoBarras: codNuevoSec,
+                        codigoBarrasAnterior: codViejoSec,
+                        nombre: 'IBUPROFENO 400 MG',
+                        tipo: 'divisible',
+                        unidadesPorCaja: 20
+                    });
+                    afirmarIgualdad(resRen.exito, true, 'Seguridad S12: Admin permite cambiar código de barras');
+                    if (resRen.promesaPersistencia) await resRen.promesaPersistencia;
+
+                    afirmarIgualdad(AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codViejoSec), null, 'Seguridad S12: Código anterior eliminado de diccionario');
+                    const detNuevo = await AppFarmacia.Almacenamiento.obtenerDetalleProductoAdmin(codNuevoSec);
+                    afirmarIgualdad(
+                        Boolean(detNuevo && detNuevo.ultimoPrecioCaja === 425 && detNuevo.ubicacion === 'Tramo C-1' && detNuevo.proveedorHabitual === 'Droguería Prueba'),
+                        true,
+                        'Seguridad S12: Re-cifra _segCaja y _segAdmin bajo nuevo AAD sin pérdida de secretos'
+                    );
+                } finally {
+                    AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codViejoSec);
+                    AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codNuevoSec);
+                }
+            }
+
+            // S13. Proveedores en sugerencias protegidos por rol (solo Admin desbloqueado) + caché pública limpia
+            if (AppFarmacia.Almacenamiento &&
+                typeof AppFarmacia.Almacenamiento.obtenerProveedoresSugerenciasSiAdmin === 'function' &&
+                typeof AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo === 'function') {
+                const codSug = '7460000000012';
+                try {
+                    const rAlta = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                        codigoBarras: codSug,
+                        nombre: 'LOSARTAN 50 MG',
+                        laboratorio: 'Laboratorios LAM',
+                        proveedorHabitual: 'Droguería Confidencial',
+                        tipo: 'entero'
+                    });
+                    if (rAlta.promesaPersistencia) await rAlta.promesaPersistencia;
+
+                    // Caché pública jamás debe exponer proveedorHabitual
+                    const dicPub = AppFarmacia.Almacenamiento.obtenerDiccionarioCodigos();
+                    afirmarIgualdad('proveedorHabitual' in (dicPub[codSug] || {}), false, 'Seguridad S13: Caché pública omite proveedorHabitual');
+
+                    // Bloqueado total -> Map vacío
+                    Seg.bloquear();
+                    const mapBloq = await AppFarmacia.Almacenamiento.obtenerProveedoresSugerenciasSiAdmin([codSug]);
+                    afirmarIgualdad(mapBloq.size, 0, 'Seguridad S13: No expone proveedores en BLOQUEADO_TOTAL');
+
+                    // SOLO_CAJA -> Map vacío
+                    await Seg.desbloquearCaja('4589');
+                    const mapCaja = await AppFarmacia.Almacenamiento.obtenerProveedoresSugerenciasSiAdmin([codSug]);
+                    afirmarIgualdad(mapCaja.size, 0, 'Seguridad S13: No expone proveedores en SOLO_CAJA');
+
+                    // ADMIN -> Descifra proveedor puntual
+                    await Seg.desbloquear('ClaveRecuperada#2028');
+                    const mapAdmin = await AppFarmacia.Almacenamiento.obtenerProveedoresSugerenciasSiAdmin([codSug]);
+                    afirmarIgualdad(mapAdmin.get(codSug), 'Droguería Confidencial', 'Seguridad S13: Admin desbloqueado recupera proveedor en sugerencia');
+                } finally {
+                    AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codSug);
+                }
+            }
+
+            // S14. Código interno GS1 (200...) bajo Bóveda Admin: cifrado AAD y reemplazo a código oficial 746...
+            if (AppFarmacia.Almacenamiento &&
+                typeof AppFarmacia.Almacenamiento.resolverCodigoInternoSiFalta === 'function' &&
+                typeof AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario === 'function' &&
+                typeof AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo === 'function') {
+                await Seg.desbloquear('ClaveRecuperada#2028');
+                const infoInt = AppFarmacia.Almacenamiento.resolverCodigoInternoSiFalta({
+                    codigoBarras: '',
+                    nombre: 'Jarabe Preparado Interno 100ml'
+                });
+                const codIntSec = infoInt.codigoBarras;
+                const codOficialSec = '7460000000012';
+                try {
+                    afirmarIgualdad(Dominio.esCodigoBarrasInterno(codIntSec), true, 'Seguridad S14: Asigna código interno 200... válido');
+                    const okAprend = AppFarmacia.Almacenamiento.aprenderProductoEnDiccionario({
+                        codigoBarras: codIntSec,
+                        nombre: 'Jarabe Preparado Interno 100ml',
+                        tipo: 'entero',
+                        unidadesPorCaja: 1,
+                        precioCajaBase: 320
+                    }, { proveedor: 'Droguería Interna' });
+                    afirmarIgualdad(okAprend, true, 'Seguridad S14: Memoriza producto con código interno bajo Bóveda');
+                    const pubInt = AppFarmacia.Almacenamiento.buscarProductoPorCodigo(codIntSec);
+                    afirmarIgualdad(Boolean(pubInt) && !('ultimoPrecioCaja' in pubInt) && !('proveedorHabitual' in pubInt), true, 'Seguridad S14: RAM pública limpia para código interno');
+
+                    const resMigr = AppFarmacia.Almacenamiento.guardarFichaProductoCatalogo({
+                        codigoBarras: codOficialSec,
+                        codigoBarrasAnterior: codIntSec,
+                        nombre: 'JARABE PREPARADO INTERNO 100 ML',
+                        tipo: 'entero',
+                        unidadesPorCaja: 1
+                    });
+                    afirmarIgualdad(resMigr.exito, true, 'Seguridad S14: Admin reemplaza código interno por EAN oficial');
+                    if (resMigr.promesaPersistencia) await resMigr.promesaPersistencia;
+
+                    const detOficial = await AppFarmacia.Almacenamiento.obtenerDetalleProductoAdmin(codOficialSec);
+                    afirmarIgualdad(
+                        Boolean(detOficial && detOficial.ultimoPrecioCaja === 320 && detOficial.proveedorHabitual === 'Droguería Interna'),
+                        true,
+                        'Seguridad S14: Conserva costo y proveedor re-cifrados al cambiar de 200... a código oficial'
+                    );
+                } finally {
+                    if (codIntSec) AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codIntSec);
+                    AppFarmacia.Almacenamiento.eliminarCodigoDeDiccionario(codOficialSec);
+                }
+            }
 
             console.info('%c[Todas las pruebas de cifrado AES-256-GCM superadas exitosamente]', 'color:#146c2e;font-weight:bold;');
             console.groupEnd();

@@ -1,5 +1,5 @@
 // Service Worker para Calculadora de Farmacia PWA (CAL-03)
-const CACHE_NAME = 'farmacia-pwa-v56';
+const CACHE_NAME = 'farmacia-pwa-v61';
 
 const ARCHIVOS_ESTATICOS = [
     './',
@@ -59,13 +59,34 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Intercepción de peticiones (Cache First para recursos locales, Network Only para catálogo abierto externo)
+// Intercepción de peticiones (NetworkFirst para navegación HTML, Stale-While-Revalidate para recursos locales, Network Only para catálogo externo)
 self.addEventListener('fetch', event => {
+    if (event.request.method !== 'GET') {
+        return;
+    }
+
     const url = new URL(event.request.url);
 
     // Consultas externas de catálogo abierto no se almacenan en caché
     if (url.hostname !== self.location.hostname) {
         return event.respondWith(fetch(event.request));
+    }
+
+    const esNavegacionHtml =
+        event.request.mode === 'navigate' ||
+        url.pathname === '/' ||
+        url.pathname.endsWith('/index.html');
+
+    if (esNavegacionHtml) {
+        return event.respondWith(
+            fetch(event.request).then(respuestaRed => {
+                if (respuestaRed && respuestaRed.status === 200 && respuestaRed.type === 'basic') {
+                    const clon = respuestaRed.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clon));
+                }
+                return respuestaRed;
+            }).catch(() => caches.match(event.request).then(r => r || caches.match('./index.html')))
+        );
     }
 
     event.respondWith(
@@ -89,12 +110,7 @@ self.addEventListener('fetch', event => {
                     cache.put(event.request, clonRespuesta);
                 });
                 return respuestaRed;
-            }).catch(() => {
-                // Si la red falla y es navegación HTML, entrega index.html de la caché
-                if (event.request.mode === 'navigate') {
-                    return caches.match('./index.html');
-                }
-            });
+            }).catch(() => undefined);
         })
     );
 });

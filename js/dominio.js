@@ -320,6 +320,68 @@
         };
     }
 
+    /**
+     * Calcula el dígito de control oficial GS1 Módulo 10 a partir de los dígitos base
+     * (por ejemplo, 12 dígitos para EAN-13 u 11 para UPC-A).
+     * @param {string} baseDigitos
+     * @returns {string}
+     */
+    function calcularDigitoControlGs1(baseDigitos) {
+        const base = normalizarCodigoBarras(baseDigitos);
+        if (!base || !/^\d+$/.test(base)) return '';
+        let suma = 0;
+        let peso = 3;
+        for (let i = base.length - 1; i >= 0; i--) {
+            suma += Number(base[i]) * peso;
+            peso = (peso === 3) ? 1 : 3;
+        }
+        return String((10 - (suma % 10)) % 10);
+    }
+
+    /**
+     * Determina si un código corresponde a un EAN-13 interno de farmacia (prefijo GS1 In-Store 200)
+     * con dígito verificador Módulo 10 válido.
+     * @param {string} entradaCruda
+     * @returns {boolean}
+     */
+    function esCodigoBarrasInterno(entradaCruda) {
+        const codigo = normalizarCodigoBarras(entradaCruda);
+        if (!/^200\d{10}$/.test(codigo)) return false;
+        return validarCodigoBarrasEstandar(codigo).esValido === true;
+    }
+
+    /**
+     * Genera el siguiente código EAN-13 interno libre (prefijo GS1 200...) sin colisionar
+     * con códigos existentes en el diccionario.
+     * @param {Object} [diccionarioExistente]
+     * @returns {string}
+     */
+    function generarCodigoInternoGs1(diccionarioExistente = {}) {
+        const dic = (diccionarioExistente && typeof diccionarioExistente === 'object') ? diccionarioExistente : {};
+        let maxSecuencia = 0;
+        for (const cod of Object.keys(dic)) {
+            const m = /^200(\d{9})\d$/.exec(normalizarCodigoBarras(cod));
+            if (m) {
+                const num = Number(m[1]);
+                if (Number.isFinite(num) && num > maxSecuencia) {
+                    maxSecuencia = num;
+                }
+            }
+        }
+        for (let intento = 1; intento <= 10000; intento++) {
+            const secuencia = maxSecuencia + intento;
+            if (secuencia > 999999999) break;
+            const base12 = '200' + String(secuencia).padStart(9, '0');
+            const digitoControl = calcularDigitoControlGs1(base12);
+            if (!digitoControl) break;
+            const candidato = base12 + digitoControl;
+            if (!Object.prototype.hasOwnProperty.call(dic, candidato) && validarCodigoBarrasEstandar(candidato).esValido) {
+                return candidato;
+            }
+        }
+        return '';
+    }
+
     function sanitizarReglasNegocio(reglasCandidatas) {
         const { PERFILES_POR_DEFECTO } = AppFarmacia.Configuracion;
         if (!reglasCandidatas || typeof reglasCandidatas !== 'object') {
@@ -463,6 +525,8 @@
 
         // 5. ITBIS aplicado al producto en sí (no al costo de compra)
         const factorItbis = (aplicaItbis && tasaEfectiva > 0) ? (1 + (tasaEfectiva / 100)) : 1;
+        const costoUnitarioConItbisReal = costoUnitarioReal * factorItbis;
+        const itbisCostoUnitarioReal = aplicaItbis ? Math.max(0, costoUnitarioConItbisReal - costoUnitarioReal) : 0;
         const p1ConItbis = p1Neto * factorItbis;
         const p2ConItbis = p2Neto * factorItbis;
         const p3ConItbis = p3Neto * factorItbis;
@@ -506,6 +570,10 @@
             porcentajeItbis: reglasSeguras.porcentajeItbis,
             costoUnitarioReal,
             costoUnitario: formatearCostoFiscalOchoDecimales(costoUnitarioReal),
+            costoUnitarioConItbisReal,
+            costoUnitarioConItbis: formatearCostoFiscalOchoDecimales(costoUnitarioConItbisReal),
+            itbisCostoUnitarioReal,
+            itbisCostoUnitario: formatearCostoFiscalOchoDecimales(itbisCostoUnitarioReal),
             costoUnitarioVentaReal: costoUnitarioBaseVenta,
             costoUnitarioVenta: formatearCostoFiscalOchoDecimales(costoUnitarioBaseVenta),
             mostrarPreciosConItbis: mostrarConItbis,
@@ -600,6 +668,15 @@
             idLinea: datosEntrada.idLinea || generarIdUnico(),
             codigoBarras: normalizarCodigoBarras(datosEntrada.codigoBarras),
             nombre: String(datosEntrada.nombre || 'Producto').trim(),
+            nombreComercial: String(datosEntrada.nombreComercial || '').trim(),
+            principioActivo: String(datosEntrada.principioActivo || '').trim(),
+            laboratorio: String(datosEntrada.laboratorio || '').trim(),
+            concentracion: String(datosEntrada.concentracion || '').trim(),
+            categoria: String(datosEntrada.categoria || '').trim(),
+            presentacion: String(datosEntrada.presentacion || '').trim(),
+            formaFarmaceutica: String(datosEntrada.formaFarmaceutica || '').trim(),
+            registroSanitario: String(datosEntrada.registroSanitario || '').trim(),
+            condicionVenta: String(datosEntrada.condicionVenta || '').trim(),
             tipo,
             precioCajaBase,
             descuentoValor,
@@ -1600,25 +1677,80 @@
         return t;
     }
 
-    function distanciaLevenshtein(a, b) {
-        if (a === b) return 0;
-        if (!a || a.length === 0) return b ? b.length : 0;
-        if (!b || b.length === 0) return a ? a.length : 0;
+    let levBuf0 = new Int32Array(128);
+    let levBuf1 = new Int32Array(128);
+    const cacheFoneticoProductos = typeof WeakMap === 'function' ? new WeakMap() : null;
 
-        let v0 = new Int32Array(b.length + 1);
-        let v1 = new Int32Array(b.length + 1);
+    function distanciaLevenshtein(a, b, maxDistancia = Infinity) {
+        const strA = a || '';
+        const strB = b || '';
+        if (strA === strB) return 0;
+        const lenA = strA.length;
+        const lenB = strB.length;
+        if (lenA === 0) return lenB;
+        if (lenB === 0) return lenA;
 
-        for (let i = 0; i <= b.length; i++) v0[i] = i;
-
-        for (let i = 0; i < a.length; i++) {
-            v1[0] = i + 1;
-            for (let j = 0; j < b.length; j++) {
-                const cost = a[i] === b[j] ? 0 : 1;
-                v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
-            }
-            for (let j = 0; j <= b.length; j++) v0[j] = v1[j];
+        const tieneTope = Number.isFinite(maxDistancia);
+        if (tieneTope && Math.abs(lenA - lenB) > maxDistancia) {
+            return maxDistancia + 1;
         }
-        return v1[b.length];
+
+        if (levBuf0.length <= lenB) {
+            const nuevaCap = Math.max(lenB + 1, levBuf0.length * 2);
+            levBuf0 = new Int32Array(nuevaCap);
+            levBuf1 = new Int32Array(nuevaCap);
+        }
+
+        let v0 = levBuf0;
+        let v1 = levBuf1;
+
+        for (let i = 0; i <= lenB; i++) v0[i] = i;
+
+        for (let i = 0; i < lenA; i++) {
+            v1[0] = i + 1;
+            let minFila = v1[0];
+            const charA = strA.charCodeAt(i);
+            for (let j = 0; j < lenB; j++) {
+                const cost = charA === strB.charCodeAt(j) ? 0 : 1;
+                const val = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+                v1[j + 1] = val;
+                if (val < minFila) minFila = val;
+            }
+            if (tieneTope && minFila > maxDistancia) {
+                return maxDistancia + 1;
+            }
+            const tmp = v0;
+            v0 = v1;
+            v1 = tmp;
+        }
+        return v0[lenB];
+    }
+
+    function prepararEntradaIndiceFonetico(prod) {
+        const cod = prod.codigoBarras ? String(prod.codigoBarras) : '';
+        const nom = prod.nombre || '';
+        const com = prod.nombreComercial || '';
+        const pri = prod.principioActivo || '';
+        const lab = prod.laboratorio || '';
+        const firma = `${cod}\x00${nom}\x00${com}\x00${pri}\x00${lab}`;
+
+        if (cacheFoneticoProductos) {
+            const cached = cacheFoneticoProductos.get(prod);
+            if (cached && cached.firma === firma) return cached;
+        }
+
+        const fNombre = normalizarTextoFoneticoFarmacia(nom);
+        const fComercial = com && com !== nom ? normalizarTextoFoneticoFarmacia(com) : fNombre;
+        const fPrincipio = pri ? normalizarTextoFoneticoFarmacia(pri) : '';
+        const fLab = lab ? normalizarTextoFoneticoFarmacia(lab) : '';
+        const combinado = fPrincipio ? `${fNombre} ${fPrincipio}`.trim() : fNombre;
+        const palabras = combinado ? combinado.split(' ').filter(w => w.length >= 4) : [];
+
+        const entrada = { prod, firma, cod, fNombre, fComercial, fPrincipio, fLab, palabras };
+        if (cacheFoneticoProductos) {
+            cacheFoneticoProductos.set(prod, entrada);
+        }
+        return entrada;
     }
 
     function buscarEnCatalogoFuzzy(termino, catalogo, limiteResultados = 8) {
@@ -1627,69 +1759,119 @@
         if (qRaw.length < 2) return [];
 
         const qFonetico = normalizarTextoFoneticoFarmacia(qRaw);
-        const lista = Object.values(catalogo || {});
-        const resultados = [];
+        if (!qFonetico) return [];
 
-        for (const prod of lista) {
+        const esIndice = Array.isArray(catalogo) && catalogo._esIndiceFonetico === true;
+        const lista = esIndice ? catalogo : Object.values(catalogo || {});
+        const palabrasQuery = qFonetico.split(' ').filter(w => w.length >= 4);
+        const maxDist = qFonetico.length >= 6 ? 2 : 1;
+
+        const resultados = [];
+        const candidatosFuzzy = [];
+        let coincidenciasDirectas = 0;
+
+        for (let idx = 0; idx < lista.length; idx++) {
+            const item = lista[idx];
+            if (!item) continue;
+            const prod = esIndice ? item.prod : item;
             if (!prod) continue;
+            const cod = esIndice ? item.cod : (prod.codigoBarras ? String(prod.codigoBarras) : '');
+
             let score = 0;
-            let coincidenciaEn = '';
 
             // 1. Coincidencia exacta o parcial de código de barras
-            if (prod.codigoBarras && prod.codigoBarras.includes(qRaw)) {
-                score = prod.codigoBarras === qRaw ? 100 : 90;
-                coincidenciaEn = 'codigoBarras';
+            if (cod && cod.includes(qRaw)) {
+                score = cod === qRaw ? 100 : 90;
             } else {
-                // 2. Coincidencia fonética en nombres, principio activo o laboratorio
-                const fNombre = normalizarTextoFoneticoFarmacia(prod.nombre || '');
-                const fComercial = normalizarTextoFoneticoFarmacia(prod.nombreComercial || '');
-                const fPrincipio = normalizarTextoFoneticoFarmacia(prod.principioActivo || '');
-                const fLab = normalizarTextoFoneticoFarmacia(prod.laboratorio || '');
+                // 2. Coincidencia fonética en nombres, principio activo o laboratorio (memorizada en WeakMap/índice)
+                const info = esIndice ? item : prepararEntradaIndiceFonetico(prod);
+                const fNombre = info.fNombre;
+                const fComercial = info.fComercial;
+                const fPrincipio = info.fPrincipio;
+                const fLab = info.fLab;
 
                 if (fNombre === qFonetico || fComercial === qFonetico) {
                     score = 95;
-                    coincidenciaEn = 'nombreExacto';
-                } else if (fNombre.includes(qFonetico) || fComercial.includes(qFonetico)) {
+                } else if ((fNombre && fNombre.includes(qFonetico)) || (fComercial && fComercial.includes(qFonetico))) {
                     score = 80;
-                    coincidenciaEn = 'nombreSubcadena';
-                } else if (fPrincipio.includes(qFonetico)) {
+                } else if (fPrincipio && fPrincipio.includes(qFonetico)) {
                     score = 75;
-                    coincidenciaEn = 'principioActivo';
-                } else if (fLab.includes(qFonetico)) {
+                } else if (fLab && fLab.includes(qFonetico)) {
                     score = 70;
-                    coincidenciaEn = 'laboratorio';
-                } else {
-                    // 3. Levenshtein difuso por palabras clave
-                    const palabrasQuery = qFonetico.split(' ');
-                    const palabrasProd = (fNombre + ' ' + fPrincipio).split(' ');
-                    let menorDistancia = 999;
-
-                    for (const qw of palabrasQuery) {
-                        if (qw.length < 4) continue;
-                        for (const pw of palabrasProd) {
-                            if (pw.length < 4) continue;
-                            const dist = distanciaLevenshtein(qw, pw);
-                            if (dist < menorDistancia) menorDistancia = dist;
-                        }
-                    }
-
-                    if (menorDistancia <= 1) {
-                        score = 65;
-                        coincidenciaEn = 'fuzzyCercano';
-                    } else if (menorDistancia === 2 && qFonetico.length >= 6) {
-                        score = 50;
-                        coincidenciaEn = 'fuzzyMedio';
-                    }
+                } else if (palabrasQuery.length > 0 && coincidenciasDirectas < limiteResultados) {
+                    candidatosFuzzy.push({ prod, palabras: info.palabras });
+                    continue;
                 }
             }
 
             if (score > 0) {
-                resultados.push({ producto: prod, score, coincidenciaEn });
+                coincidenciasDirectas++;
+                resultados.push({ producto: prod, score });
+            }
+        }
+
+        // 3. Levenshtein difuso acotado solo si faltan coincidencias directas para completar el límite
+        if (coincidenciasDirectas < limiteResultados && candidatosFuzzy.length > 0) {
+            for (let i = 0; i < candidatosFuzzy.length; i++) {
+                const cand = candidatosFuzzy[i];
+                const palabrasProd = cand.palabras;
+                if (!palabrasProd || palabrasProd.length === 0) continue;
+
+                let menorDistancia = maxDist + 1;
+                for (let qi = 0; qi < palabrasQuery.length; qi++) {
+                    const qw = palabrasQuery[qi];
+                    const lenQ = qw.length;
+                    for (let pi = 0; pi < palabrasProd.length; pi++) {
+                        const pw = palabrasProd[pi];
+                        if (Math.abs(lenQ - pw.length) > maxDist) continue;
+                        const dist = distanciaLevenshtein(qw, pw, maxDist);
+                        if (dist < menorDistancia) {
+                            menorDistancia = dist;
+                            if (menorDistancia <= 1) break;
+                        }
+                    }
+                    if (menorDistancia <= 1) break;
+                }
+
+                let score = 0;
+                if (menorDistancia <= 1) {
+                    score = 65;
+                } else if (menorDistancia === 2 && qFonetico.length >= 6) {
+                    score = 50;
+                }
+
+                if (score > 0) {
+                    resultados.push({ producto: cand.prod, score });
+                }
             }
         }
 
         resultados.sort((a, b) => b.score - a.score);
         return resultados.slice(0, limiteResultados).map(r => r.producto);
+    }
+
+    /**
+     * Construye el texto secundario de sugerencia para un producto en mostrador:
+     * omite prefijos como "[EN FARMACIA]" y evita repetir el nombre del producto.
+     * @param {Object} producto
+     * @param {{ proveedor?: string }} [opciones]
+     * @returns {string}
+     */
+    function construirEtiquetaSugerenciaProducto(producto, opciones = {}) {
+        if (!producto || typeof producto !== 'object') return '';
+        const limpiarDato = v => {
+            const t = String(v ?? '').trim();
+            if (!t || t === '—' || /^sin\s+(datos|nombre|proveedor|laboratorio)$/i.test(t)) return '';
+            return t;
+        };
+        const cod = limpiarDato(producto.codigoBarras);
+        const lab = limpiarDato(producto.laboratorio);
+        const provCrudo = (opciones && opciones.proveedor !== undefined)
+            ? opciones.proveedor
+            : producto.proveedorHabitual;
+        const prov = limpiarDato(provCrudo);
+
+        return [cod, lab, prov].filter(Boolean).join(' • ');
     }
 
     // --- RADAR DE VARIACIÓN DE COSTOS Y ANÁLISIS DE PRECIOS ---
@@ -2429,19 +2611,23 @@
         if (!cat || typeof cat !== 'string') return 'General / Otros';
         const c = cat.trim();
         const cLower = c.toLowerCase();
+        if (!c || cLower === 'general' || cLower === 'otros' || cLower === 'general / otros' || cLower === 'sin categoría' || cLower === 'sin categoria') {
+            return 'General / Otros';
+        }
 
-        if (cLower.startsWith('antibiótic') || cLower.startsWith('antibiotic')) return 'Antibióticos';
+        if (cLower.startsWith('antibiótic') || cLower.startsWith('antibiotic') || cLower.includes('antimicrobian') || cLower.includes('antifúngic') || cLower.includes('antifungic') || cLower.includes('antiviral') || cLower.includes('antiparasitari')) return 'Antibióticos';
         if (cLower.startsWith('antidiabétic') || cLower.startsWith('antidiabetic')) return 'Antidiabéticos';
+        if (cLower.startsWith('endocrinolog') || cLower.includes('tiroides') || cLower.includes('hormon')) return 'Endocrinología';
         if (cLower.startsWith('antihipertensiv') || cLower.startsWith('cardiovascular') || cLower.includes('colesterol') || cLower.includes('plaquetario')) return 'Cardiovascular & Hipertensión';
-        if (cLower.startsWith('analgésic') || cLower.startsWith('analgesic') || cLower.includes('antiinflamatorio')) return 'Analgésicos & Antiinflamatorios';
-        if (cLower.startsWith('antihistamínic') || cLower.includes('antialérgico') || cLower.includes('antitusivo') || cLower.includes('descongestionante')) return 'Antialérgicos & Respiratorio';
-        if (cLower.startsWith('gastro') || cLower.startsWith('digestiv') || cLower.startsWith('probiótico') || cLower.includes('suero') || cLower.includes('rehidratación')) return 'Gastrointestinal & Digestivo';
-        if (cLower.startsWith('fórmula') || cLower.startsWith('formula') || cLower.startsWith('leche') || cLower.includes('cuidado infantil') || cLower.includes('accesorios infantiles')) return 'Pediatría & Cuidado Infantil';
-        if (cLower.startsWith('dermocosmética') || cLower.startsWith('dermocosmetica') || cLower.includes('cuidado personal') || cLower.includes('cuidado capilar') || cLower.includes('higiene personal') || cLower.includes('afeitado') || cLower.includes('higiene femenina')) return 'Cuidado Personal & Cosmética';
+        if (cLower.startsWith('analgésic') || cLower.startsWith('analgesic') || cLower.includes('antiinflamatorio') || cLower.includes('antipirétic') || cLower.includes('antipiretic')) return 'Analgésicos & Antiinflamatorios';
+        if (cLower.startsWith('antihistamínic') || cLower.startsWith('antihistaminic') || cLower.includes('antialérgic') || cLower.includes('antialergic') || cLower.includes('antitusivo') || cLower.includes('descongestionante') || cLower.includes('expectorante') || cLower.includes('respiratori')) return 'Antialérgicos & Respiratorio';
+        if (cLower.startsWith('gastro') || cLower.startsWith('digestiv') || cLower.startsWith('probiótico') || cLower.startsWith('probiotico') || cLower.includes('suero') || cLower.includes('rehidratación') || cLower.includes('rehidratacion')) return 'Gastrointestinal & Digestivo';
+        if (cLower.startsWith('fórmula') || cLower.startsWith('formula') || cLower.startsWith('leche') || cLower.includes('cuidado infantil') || cLower.includes('accesorios infantiles') || cLower.includes('bebé') || cLower.includes('bebe') || cLower.includes('pañal') || cLower.includes('panal') || cLower.includes('pediatr')) return 'Pediatría & Cuidado Infantil';
+        if (cLower.startsWith('conveniencia') || cLower.includes('higiene / conveniencia') || cLower.includes('golosina') || cLower.includes('snack') || cLower.includes('bebida') || cLower.includes('agua') || cLower.includes('galleta') || cLower.includes('dulce') || cLower.includes('chocolate') || cLower.includes('helado') || cLower.includes('congelado') || cLower.includes('refresco') || cLower.includes('botana') || cLower.includes('misceláneo') || cLower.includes('miscelaneo')) return 'Conveniencia & Bebidas';
+        if (cLower.startsWith('dermocosmética') || cLower.startsWith('dermocosmetica') || cLower.includes('cuidado personal') || cLower.includes('cuidado capilar') || cLower.includes('higiene') || cLower.includes('afeitado')) return 'Cuidado Personal & Cosmética';
         if (cLower.startsWith('salud bucodental') || cLower.includes('dental') || cLower.includes('bucal')) return 'Salud Bucodental';
-        if (cLower.startsWith('primeros auxilios') || cLower.includes('quirúrgic') || cLower.includes('diagnóstico médico')) return 'Primeros Auxilios & Material Médico';
+        if (cLower.startsWith('primeros auxilios') || cLower.includes('quirúrgic') || cLower.includes('quirurgic') || cLower.includes('diagnóstico médico') || cLower.includes('diagnostico medico')) return 'Primeros Auxilios & Material Médico';
         if (cLower.startsWith('suplemento') || cLower.includes('vitamina') || cLower.includes('neuroprotector')) return 'Vitaminas & Suplementos';
-        if (cLower.startsWith('conveniencia') || cLower.includes('golosina') || cLower.includes('snack') || cLower.includes('bebida') || cLower.includes('agua') || cLower.includes('higiene / conveniencia')) return 'Conveniencia & Bebidas';
 
         if (c.includes('/')) {
             const macroSegmento = c.split('/')[0].trim();
@@ -2449,6 +2635,48 @@
         }
 
         return c;
+    }
+
+    /**
+     * Ordena determinísticamente un arreglo de productos del catálogo sin mutar la lista original.
+     * En modo 'categoria_az' agrupa por macrocategoría (A-Z, con 'General / Otros' al final) y dentro
+     * ordena los productos alfabéticamente de la A a la Z. En modo 'nombre_az' ordena A-Z globalmente.
+     * @param {Array<Object>} listaProductos
+     * @param {{modoOrden?: 'categoria_az'|'nombre_az'}} [opciones]
+     * @returns {Array<Object>}
+     */
+    function ordenarProductosCatalogo(listaProductos, opciones = {}) {
+        if (!Array.isArray(listaProductos)) return [];
+        const modoOrden = (opciones && opciones.modoOrden === 'nombre_az') ? 'nombre_az' : 'categoria_az';
+        const esPlaceholder = n => {
+            const s = String(n || '').trim();
+            return !s || /^Producto(\s*#\d+)?$/i.test(s) || s.toLowerCase() === 'producto sin nombre';
+        };
+        const compararPorNombre = (a, b) => {
+            const nomA = String((a && (a.nombre || a.nombreComercial)) || '').trim();
+            const nomB = String((b && (b.nombre || b.nombreComercial)) || '').trim();
+            const phA = esPlaceholder(nomA);
+            const phB = esPlaceholder(nomB);
+            if (phA !== phB) return phA ? 1 : -1;
+            const cmpNom = nomA.localeCompare(nomB, 'es', { sensitivity: 'base', numeric: true });
+            if (cmpNom !== 0) return cmpNom;
+            return String((a && a.codigoBarras) || '').localeCompare(String((b && b.codigoBarras) || ''), 'es', { numeric: true });
+        };
+
+        const copia = listaProductos.slice();
+        copia.sort((a, b) => {
+            if (modoOrden === 'categoria_az') {
+                const macroA = obtenerMacroCategoria(a && a.categoria);
+                const macroB = obtenerMacroCategoria(b && b.categoria);
+                const esOtrosA = macroA === 'General / Otros';
+                const esOtrosB = macroB === 'General / Otros';
+                if (esOtrosA !== esOtrosB) return esOtrosA ? 1 : -1;
+                const cmpCat = macroA.localeCompare(macroB, 'es', { sensitivity: 'base' });
+                if (cmpCat !== 0) return cmpCat;
+            }
+            return compararPorNombre(a, b);
+        });
+        return copia;
     }
 
     // --- NORMALIZACIÓN EN MAYÚSCULAS Y ESTANDARIZACIÓN DE MEDICAMENTOS ---
@@ -2460,17 +2688,28 @@
         // 1. Colapsar espacios múltiples y saltos
         s = s.replace(/\s+/g, ' ');
 
-        // 2. Normalizar operadores (+, /) con espaciado uniforme
+        // 2. Convertir unidades escritas en palabras completas a su abreviatura estándar
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*miligramos?\b/gi, '$1 MG');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*microgramos?\b/gi, '$1 MCG');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*(?:kilogramos?|kilos?)\b/gi, '$1 KG');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*gramos?\b/gi, '$1 G');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*mililitros?\b/gi, '$1 ML');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*litros?\b/gi, '$1 L');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*onzas?\b/gi, '$1 OZ');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*cent[ií]metros?\s*c[uú]bicos?\b/gi, '$1 CC');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*por\s*ciento\b/gi, '$1%');
+
+        // 3. Normalizar operadores (+, /) con espaciado uniforme
         s = s.replace(/\s*\/\s*/g, ' / ');
         s = s.replace(/\s*\+\s*/g, ' + ');
-        s = s.replace(/(\d+(?:\.\d+)?)\s*%/g, '$1%');
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*%/g, '$1%');
 
-        // 3. Normalizar unidades de dosificación en MAYÚSCULAS separadas por espacio: 500mg -> 500 MG, 1g -> 1 G
-        s = s.replace(/(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|l|ui|iu|meq|cm3|mm|kg|µg|ug)\b/gi, (match, num, unit) => {
+        // 4. Normalizar unidades de dosificación en MAYÚSCULAS separadas por espacio: 500mg -> 500 MG, 1g -> 1 G
+        s = s.replace(/(\d+(?:[.,]\d+)?)\s*(mg|mcg|ug|µg|gr|g|kg|ml|l|cm3|cc|mm|oz|ui|iu|meq|unidades|unidad|unids|unid|unds|und|uds|ud|u)\b/gi, (match, num, unit) => {
             return num + ' ' + unit.toUpperCase();
         });
 
-        // 4. Formas farmacéuticas abreviadas normalizadas en mayúsculas
+        // 5. Formas farmacéuticas abreviadas normalizadas en mayúsculas
         s = s.replace(/\bTABS?\b/gi, 'TABLETAS');
         s = s.replace(/\bCAPS?\b/gi, 'CÁPSULAS');
         s = s.replace(/\bJBE\b/gi, 'JARABE');
@@ -2491,40 +2730,45 @@
         }
 
         const nombre = String(producto.nombre || producto.nombreComercial || '').trim();
-        if (!nombre || nombre.length < 3) {
-            return {
-                esValido: false,
-                campo: 'nombre',
-                error: 'El nombre del producto es obligatorio (mínimo 3 caracteres).'
-            };
-        }
+        const esNombreVacioOGenerico = !nombre || /^Producto(\s*#\d+)?$/i.test(nombre) || nombre.toLowerCase() === 'producto sin nombre';
+        const omitirValidacionNombre = Boolean(producto.permitirSinNombre === true && esNombreVacioOGenerico);
 
-        if (/^Producto(\s*#\d+)?$/i.test(nombre) || nombre.toLowerCase() === 'producto sin nombre') {
-            return {
-                esValido: false,
-                campo: 'nombre',
-                error: 'Debes ingresar un nombre descriptivo real para el producto.'
-            };
-        }
-
-        const esConveniencia = Boolean(
-            producto.aplicaItbis === true ||
-            (producto.categoria && /conveniencia|snack|bebida|helado|higiene|golosina/i.test(producto.categoria))
-        );
-
-        // Si es medicamento (no conveniencia), verificar que tenga dosificación o potencia
-        if (!esConveniencia) {
-            const concentracion = String(producto.concentracion || '').trim();
-            const regexUnidades = /\b(\d+(?:\.\d+)?)\s*(MG|MCG|G|ML|L|UI|IU|MEQ|%)\b/i;
-            const tieneUnidadEnNombre = regexUnidades.test(nombre);
-            const tieneUnidadEnConc = regexUnidades.test(concentracion);
-
-            if (!tieneUnidadEnNombre && !tieneUnidadEnConc) {
+        if (!omitirValidacionNombre) {
+            if (!nombre || nombre.length < 3) {
                 return {
                     esValido: false,
-                    campo: 'concentracion',
-                    error: 'En medicamentos es obligatorio especificar la concentración o unidad (ej. 500 MG, 1 G, 250 MG / 5 ML, 10 UI).'
+                    campo: 'nombre',
+                    error: 'El nombre del producto es obligatorio (mínimo 3 caracteres).'
                 };
+            }
+
+            if (/^Producto(\s*#\d+)?$/i.test(nombre) || nombre.toLowerCase() === 'producto sin nombre') {
+                return {
+                    esValido: false,
+                    campo: 'nombre',
+                    error: 'Debes ingresar un nombre descriptivo real para el producto.'
+                };
+            }
+
+            const esConveniencia = Boolean(
+                producto.aplicaItbis === true ||
+                (producto.categoria && /conveniencia|snack|bebida|helado|higiene|golosina/i.test(producto.categoria))
+            );
+
+            // Si es medicamento (no conveniencia), verificar que tenga dosificación, volumen o unidad
+            if (!esConveniencia) {
+                const concentracion = String(producto.concentracion || '').trim();
+                const regexUnidades = /\b\d+(?:[.,]\d+)?\s*(?:(?:MG|MCG|UG|µG|GR|G|KG|ML|L|CC|CM3|OZ|UI|IU|MEQ|UNIDADES|UNIDAD|UNIDS|UNID|UNDS|UND|UDS|UD|U|MILIGRAMOS?|MICROGRAMOS?|KILOGRAMOS?|KILOS?|GRAMOS?|MILILITROS?|LITROS?|ONZAS?)\b|%|POR\s*CIENTO\b)/i;
+                const tieneUnidadEnNombre = regexUnidades.test(nombre);
+                const tieneUnidadEnConc = regexUnidades.test(concentracion);
+
+                if (!tieneUnidadEnNombre && !tieneUnidadEnConc) {
+                    return {
+                        esValido: false,
+                        campo: 'concentracion',
+                        error: 'En medicamentos es obligatorio especificar la concentración o medida (ej. 500 MG, 1 G, 120 ML, 10 UNIDADES, 10 UI, 0.9%).'
+                    };
+                }
             }
         }
 
@@ -2661,14 +2905,413 @@
         return procesadas.join(' ');
     }
 
+    const INDICE_CLINICO_AUTOCOMPLETADO = Object.freeze([
+        // Antibióticos
+        { patron: /\b(amoxicilina\s*\+?\s*(?:acido\s*)?clavulan|augmentin|amoxiduo)\b/i, principioActivo: 'Amoxicilina + Ácido Clavulánico', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bamoxicilina\b/i, principioActivo: 'Amoxicilina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bazitromicina\b/i, principioActivo: 'Azitromicina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bciprofloxacina?\b/i, principioActivo: 'Ciprofloxacina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\blevofloxacina?\b/i, principioActivo: 'Levofloxacina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bceftriaxona\b/i, principioActivo: 'Ceftriaxona', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bcefixima\b/i, principioActivo: 'Cefixima', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bcefalexina\b/i, principioActivo: 'Cefalexina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bcefadroxilo\b/i, principioActivo: 'Cefadroxilo', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bclaritromicina\b/i, principioActivo: 'Claritromicina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bclindamicina\b/i, principioActivo: 'Clindamicina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bmetronidazol\b/i, principioActivo: 'Metronidazol', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bdoxiciclina\b/i, principioActivo: 'Doxiciclina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bampicilina\b/i, principioActivo: 'Ampicilina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bsulfametoxazol|trimetoprim|bactrim\b/i, principioActivo: 'Trimetoprim + Sulfametoxazol', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bpenicilina|benzatinica\b/i, principioActivo: 'Penicilina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bgentamicina\b/i, principioActivo: 'Gentamicina', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bfluconazol\b/i, principioActivo: 'Fluconazol', categoria: 'Antibióticos', condicionVenta: 'Receta' },
+        { patron: /\bclotrimazol\b/i, principioActivo: 'Clotrimazol', categoria: 'Antibióticos', condicionVenta: 'OTC' },
+        { patron: /\balbendazol\b/i, principioActivo: 'Albendazol', categoria: 'Antibióticos', condicionVenta: 'OTC' },
+        // Analgésicos & Antiinflamatorios
+        { patron: /\b(acetaminofen|paracetamol|tylenol|panadol|aceta-?felt)\b/i, principioActivo: 'Paracetamol (Acetaminofén)', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'OTC' },
+        { patron: /\b(ibuprofeno|advil|motrin)\b/i, principioActivo: 'Ibuprofeno', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'OTC' },
+        { patron: /\b(diclofenac[oa]?|voltaren|cataflam)\b/i, principioActivo: 'Diclofenaco', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'OTC' },
+        { patron: /\b(naproxeno|aleve|apronax)\b/i, principioActivo: 'Naproxeno', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'OTC' },
+        { patron: /\bketorolaco\b/i, principioActivo: 'Ketorolaco', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Receta' },
+        { patron: /\bketoprofeno\b/i, principioActivo: 'Ketoprofeno', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Receta' },
+        { patron: /\bmeloxicam\b/i, principioActivo: 'Meloxicam', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Receta' },
+        { patron: /\bcelecoxib\b/i, principioActivo: 'Celecoxib', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Receta' },
+        { patron: /\bdexketoprofeno|enantyum\b/i, principioActivo: 'Dexketoprofeno', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Receta' },
+        { patron: /\b(metamizol|dipirona)\b/i, principioActivo: 'Metamizol (Dipirona)', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Receta' },
+        { patron: /\b(aspirina|acido\s+acetilsalicilico)\b/i, principioActivo: 'Ácido Acetilsalicílico', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'OTC' },
+        { patron: /\btramadol\b/i, principioActivo: 'Tramadol', categoria: 'Analgésicos & Antiinflamatorios', condicionVenta: 'Controlado' },
+        // Gastrointestinal & Digestivo
+        { patron: /\bomeprazol\b/i, principioActivo: 'Omeprazol', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        { patron: /\besomeprazol|nexium\b/i, principioActivo: 'Esomeprazol', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'Receta' },
+        { patron: /\bpantoprazol\b/i, principioActivo: 'Pantoprazol', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'Receta' },
+        { patron: /\blansoprazol\b/i, principioActivo: 'Lansoprazol', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'Receta' },
+        { patron: /\bfamotidin[ae]?\b/i, principioActivo: 'Famotidina', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        { patron: /\bloperamida|imodium\b/i, principioActivo: 'Loperamida', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        { patron: /\bmetoclopramida\b/i, principioActivo: 'Metoclopramida', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'Receta' },
+        { patron: /\bhioscina|buscapina\b/i, principioActivo: 'Butilhioscina', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        { patron: /\bsimeticona|espaven\b/i, principioActivo: 'Simeticona', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        { patron: /\blactulosa\b/i, principioActivo: 'Lactulosa', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        { patron: /\b(suero\s+oral|sales\s+de\s+rehidratacion|pedialyte|electrolit)\b/i, principioActivo: 'Sales de Rehidratación Oral', categoria: 'Gastrointestinal & Digestivo', condicionVenta: 'OTC' },
+        // Cardiovascular & Hipertensión
+        { patron: /\blosartan\b/i, principioActivo: 'Losartán', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bvalsartan\b/i, principioActivo: 'Valsartán', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bamlodipin[ao]\b/i, principioActivo: 'Amlodipino', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\benalapril\b/i, principioActivo: 'Enalapril', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\batenolol\b/i, principioActivo: 'Atenolol', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bcarvedilol\b/i, principioActivo: 'Carvedilol', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bbisoprolol\b/i, principioActivo: 'Bisoprolol', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\batorvastatina\b/i, principioActivo: 'Atorvastatina', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\brosuvastatina\b/i, principioActivo: 'Rosuvastatina', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bfurosemida\b/i, principioActivo: 'Furosemida', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bhidroclorotiazida\b/i, principioActivo: 'Hidroclorotiazida', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        { patron: /\bclopidogrel\b/i, principioActivo: 'Clopidogrel', categoria: 'Cardiovascular & Hipertensión', condicionVenta: 'Receta' },
+        // Antidiabéticos
+        { patron: /\bmetformina\b/i, principioActivo: 'Metformina', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        { patron: /\bglibenclamida\b/i, principioActivo: 'Glibenclamida', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        { patron: /\bglimepirida\b/i, principioActivo: 'Glimepirida', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        { patron: /\binsulina\b/i, principioActivo: 'Insulina', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        { patron: /\bsitagliptina\b/i, principioActivo: 'Sitagliptina', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        { patron: /\bdapagliflozina\b/i, principioActivo: 'Dapagliflozina', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        { patron: /\bempagliflozina\b/i, principioActivo: 'Empagliflozina', categoria: 'Antidiabéticos', condicionVenta: 'Receta' },
+        // Antialérgicos & Respiratorio
+        { patron: /\bloratadina\b/i, principioActivo: 'Loratadina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bdesloratadina\b/i, principioActivo: 'Desloratadina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bcetirizina\b/i, principioActivo: 'Cetirizina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\blevocetirizina\b/i, principioActivo: 'Levocetirizina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bfexofenadina|allegra\b/i, principioActivo: 'Fexofenadina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bclorfeniramina|clorotrimeton\b/i, principioActivo: 'Clorfeniramina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bmontelukast\b/i, principioActivo: 'Montelukast', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'Receta' },
+        { patron: /\bsalbutamol|ventolin\b/i, principioActivo: 'Salbutamol', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'Receta' },
+        { patron: /\bambroxol\b/i, principioActivo: 'Ambroxol', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bbromhexina\b/i, principioActivo: 'Bromhexina', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bacetilcisteina|fluimucil\b/i, principioActivo: 'Acetilcisteína', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'OTC' },
+        { patron: /\bprednisona\b/i, principioActivo: 'Prednisona', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'Receta' },
+        { patron: /\bdexametasona\b/i, principioActivo: 'Dexametasona', categoria: 'Antialérgicos & Respiratorio', condicionVenta: 'Receta' },
+        // Vitaminas & Suplementos
+        { patron: /\b(vitamina\s*[a-z0-9]+|complejo\s*b|multivitamin|acido\s+folico|neurobion|centrum|ensure|glucerna)\b/i, principioActivo: '', categoria: 'Vitaminas & Suplementos', condicionVenta: 'OTC' },
+        // Pediatría & Cuidado Infantil
+        { patron: /\b(enfamil|enfagrow|similac|nan\s*\d|nestogeno|nido|pediasure|alimentum|isomil|nutramigen|milex|s-?26|promil|formula\s+infantil|leche\s+infantil)\b/i, principioActivo: '', categoria: 'Pediatría & Cuidado Infantil', condicionVenta: 'OTC' },
+        // Primeros Auxilios & Material Médico
+        { patron: /\b(solucion\s+salina|cloruro\s+de\s+sodio|alcohol\s+(?:isopropilico|etilico)?|agua\s+oxigenada|yodo|povidona|jeringa|gasa|algodon|curita|vendaje|guantes)\b/i, principioActivo: '', categoria: 'Primeros Auxilios & Material Médico', condicionVenta: 'OTC' },
+        // Salud Bucodental
+        { patron: /\b(pasta\s+dental|crema\s+dental|enjuague\s+bucal|cepillo\s+dental|hilo\s+dental|sensodyne|listerine)\b/i, principioActivo: '', categoria: 'Salud Bucodental', condicionVenta: 'OTC', esConveniencia: true },
+        // Cuidado Personal & Cosmética
+        { patron: /\b(shampoo|champu|acondicionador|jabon|desodorante|crema\s+corporal|protector\s+solar|bloqueador|talco|panal|panales|toallitas\s+humedas)\b/i, principioActivo: '', categoria: 'Cuidado Personal & Cosmética', condicionVenta: 'OTC', esConveniencia: true },
+        // Conveniencia & Bebidas
+        { patron: /\b(refresco|agua\s+purificada|jugo|helado|galleta|snack|doritos|coca\s*cola|pepsi|chocolate|caramelo|mentas)\b/i, principioActivo: '', categoria: 'Conveniencia & Bebidas', condicionVenta: 'OTC', esConveniencia: true }
+    ]);
+
+    const STOPWORDS_ALIAS_LAB = new Set([
+        'salud', 'oral', 'rd', 'nacional', 'importado', 'farma', 'farmacia', 'lab', 'labs',
+        'laboratorio', 'laboratorios', 'medica', 'medicas', 'caribe', 'especialidades',
+        'productos', 'general', 'otros', 'sa', 'srl', 'sas', 'corp', 'inc', 'ag',
+        'consumer', 'health', 'care', 'international', 'free', 'zone', 'panama',
+        'centroamerica', 'dominicana', 'del', 'de', 'la', 'los', 'las', 'el', 'y',
+        'por', 'con', 'sin', 'para', 'aplicaciones', 'industria', 'farmaceutica',
+        'farmaceuticos', 'laboratories', 'pharmaceutical', 'pharmaceuticals', 'grupo',
+        'central', 'norte', 'sur', 'este', 'oeste', 'nueva', 'nuevo',
+        'mg', 'ml', 'mcg', 'gr', 'kg', 'oz', 'cc', 'ui', 'iu', 'xr', 'sr', 'lp',
+        'cr', 'er', 'iv', 'im', 'vo', 'sl', 'nf', 'otc'
+    ]);
+
+    function quitarTildesMinusculas(texto) {
+        return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function escaparPatronRegex(texto) {
+        return String(texto || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function mapearFormaFarmaceuticaDesdeTexto(textoSinTildes) {
+        if (!textoSinTildes) return '';
+        if (/\b(pasta\s+dental|crema\s+dental|cepillo\s+dental|enjuague\s+bucal|shampoo|champu|jabon|desodorante|jeringas?|guantes?|gasas?|algodon|curitas?|vendajes?|termometro|biberon|panales?|refresco|agua\s+purificada|jugo|helado|galleta|snack)\b/.test(textoSinTildes)) {
+            return 'Accesorio / Consumo';
+        }
+        if (/\b(tabletas?|tabs?\.?|comprimidos?|comp\.?|grageas?|capletas?|pastillas?|masticables?)\b/.test(textoSinTildes)) return 'Comprimidos';
+        if (/\b(capsulas?|caps?\.?|softgels?|perlas?)\b/.test(textoSinTildes)) return 'Cápsulas';
+        if (/\b(jarabes?|jbe\.?|elixir)\b/.test(textoSinTildes)) return 'Jarabe';
+        if (/\b(suspension(?:es)?|susp\.?)\b/.test(textoSinTildes)) return 'Suspensión';
+        if (/\b(gotas?|gts?\.?|colirios?|oftalmic[oa]s?|otic[oa]s?)\b/.test(textoSinTildes)) return 'Gotas';
+        if (/\b(ampollas?|amp\.?|vial(?:es)?|inyectable(?:s)?)\b/.test(textoSinTildes)) return 'Ampollas';
+        if (/\b(cremas?|crm\.?|unguentos?|ung\.?|pomadas?|gel(?:es)?|locion(?:es)?)\b/.test(textoSinTildes)) return 'Crema / Gel';
+        if (/\b(ovulos?|ovul\.?|supositorios?)\b/.test(textoSinTildes)) return 'Óvulos';
+        if (/\b(polvos?|sobres?|sob\.?|granulados?|sachets?)\b/.test(textoSinTildes)) return 'Polvo / Sobres';
+        if (/\b(inhaladores?|aerosol(?:es)?|spray|atomizador|nebulizador)\b/.test(textoSinTildes)) return 'Inhalador';
+        if (/\b(solucion(?:es)?|sol\.?|suero|antiseptico)\b/.test(textoSinTildes)) return 'Solución';
+        return '';
+    }
+
+    function construirAliasLaboratorios(listaLabs) {
+        if (!Array.isArray(listaLabs) || listaLabs.length === 0) return [];
+        const entradas = [];
+        const vistos = new Set();
+
+        const agregarAlias = (aliasCrudo, nombreOficial) => {
+            const alias = String(aliasCrudo || '').replace(/\s+/g, ' ').trim();
+            if (!alias || alias.length < 2) return;
+            if (STOPWORDS_ALIAS_LAB.has(alias)) return;
+            if (/^\d+$/.test(alias)) return;
+            const key = alias + '::' + nombreOficial;
+            if (vistos.has(key)) return;
+            vistos.add(key);
+            entradas.push({ alias, nombreOficial });
+        };
+
+        listaLabs.forEach(lab => {
+            if (!lab || !lab.nombre) return;
+            const nombreOficial = String(lab.nombre).trim();
+            const full = quitarTildesMinusculas(nombreOficial);
+            agregarAlias(full, nombreOficial);
+
+            const matchesParen = full.matchAll(/\(([^)]+)\)/g);
+            for (const m of matchesParen) {
+                const interno = (m[1] || '').trim();
+                if (interno.length >= 2 && !STOPWORDS_ALIAS_LAB.has(interno)) {
+                    agregarAlias(interno, nombreOficial);
+                }
+            }
+
+            const sinParen = full.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+            agregarAlias(sinParen, nombreOficial);
+
+            const limpio = sinParen
+                .replace(/\b(laboratorios?|lab\.?|grupo|dominicana|international|pharmaceuticals?|farmaceutic[ao]s?|laboratories|industria|del|caribe|corp\.?|s\.?\s*r\.?\s*l\.?|s\.?\s*a\.?\s*s?\.?|c\.?\s*por\s*a\.?|especialidades)\b/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            agregarAlias(limpio, nombreOficial);
+
+            sinParen.split(/[&/-]+/).forEach(seg => {
+                const t = seg.trim();
+                if (t.length >= 4 && !STOPWORDS_ALIAS_LAB.has(t)) {
+                    agregarAlias(t, nombreOficial);
+                }
+            });
+
+            limpio.split(/[\s&/-]+/).forEach(tok => {
+                const t = tok.trim();
+                if (t.length >= 5 && !STOPWORDS_ALIAS_LAB.has(t)) {
+                    agregarAlias(t, nombreOficial);
+                }
+            });
+        });
+
+        entradas.sort((a, b) => b.alias.length - a.alias.length);
+        return entradas;
+    }
+
+    /**
+     * Extrae de forma determinista y sin efectos secundarios metadatos farmacéuticos desde el nombre del producto.
+     * @param {string} nombreRaw
+     * @param {{ laboratorios?: Array, vademecum?: Array }} [opciones]
+     * @returns {Object}
+     */
+    function extraerMetadatosDesdeNombre(nombreRaw, opciones = {}) {
+        const crudo = String(nombreRaw || '').trim();
+        if (!crudo || /^Producto(\s*#\d+)?$/i.test(crudo) || crudo.toLowerCase() === 'producto sin nombre') {
+            return {};
+        }
+
+        const normalizadoMayus = normalizarNombreProductoMayusculas(crudo);
+        const sinTildes = quitarTildesMinusculas(normalizadoMayus);
+
+        // 1. Dosis / Concentración y medida secundaria de envase
+        let concentracion = '';
+        let medidaEnvase = '';
+        const regexCompuesta = /\b(\d+(?:[.,]\d+)?)\s*(?:(MG|MCG|UG|µG|GR|G|KG|ML|L|CC|CM3|OZ|UI|IU|MEQ)\b|(%))\s*([/+])\s*(\d+(?:[.,]\d+)?)\s*(?:(MG|MCG|UG|µG|GR|G|KG|ML|L|CC|CM3|OZ|UI|IU|MEQ)\b|(%))/i;
+        const matchComp = normalizadoMayus.match(regexCompuesta);
+        let textoRestanteMedidas = normalizadoMayus;
+        if (matchComp) {
+            const u1 = (matchComp[3] || matchComp[2]).toUpperCase();
+            const u2 = (matchComp[7] || matchComp[6]).toUpperCase();
+            const op = matchComp[4] === '+' ? ' + ' : ' / ';
+            const p1 = matchComp[1] + (u1 === '%' ? '%' : ' ' + u1);
+            const p2 = matchComp[5] + (u2 === '%' ? '%' : ' ' + u2);
+            concentracion = p1 + op + p2;
+            textoRestanteMedidas = normalizadoMayus.replace(matchComp[0], ' ');
+        }
+
+        const regexSimple = /\b(\d+(?:[.,]\d+)?)\s*(?:(MG|MCG|UG|µG|GR|G|KG|ML|L|CC|CM3|OZ|UI|IU|MEQ|UNIDADES|UNIDAD|UNIDS|UNID|UNDS|UND|UDS|UD|U)\b|(%))/gi;
+        const medidasSimples = [];
+        let mMed;
+        while ((mMed = regexSimple.exec(textoRestanteMedidas)) !== null) {
+            const num = mMed[1];
+            const unit = (mMed[3] || mMed[2] || '').toUpperCase();
+            if (!unit) continue;
+            medidasSimples.push({
+                texto: unit === '%' ? `${num}%` : `${num} ${unit}`,
+                unit,
+                esConteo: /^(UNIDADES|UNIDAD|UNIDS|UNID|UNDS|UND|UDS|UD|U)$/.test(unit),
+                esEnvase: /^(ML|L|CC|CM3|OZ|GR|G|KG)$/.test(unit)
+            });
+        }
+
+        if (!concentracion && medidasSimples.length > 0) {
+            const medidaPotencia = medidasSimples.find(m => !m.esConteo) || medidasSimples[0];
+            concentracion = medidaPotencia.texto;
+            const medidaExtra = medidasSimples.find(m => m !== medidaPotencia && m.esEnvase);
+            if (medidaExtra) medidaEnvase = medidaExtra.texto;
+        } else if (concentracion && medidasSimples.length > 0) {
+            const envase = medidasSimples.find(m => m.esEnvase);
+            if (envase) medidaEnvase = envase.texto;
+        }
+
+        // 2. Laboratorio fabricante (desde catálogo de laboratorios)
+        let laboratorio = '';
+        const aliasLabs = construirAliasLaboratorios(opciones && opciones.laboratorios);
+        for (const item of aliasLabs) {
+            const rx = new RegExp(`(?<![a-z0-9])${escaparPatronRegex(item.alias)}(?![a-z0-9])`, 'i');
+            if (rx.test(sinTildes)) {
+                laboratorio = item.nombreOficial;
+                break;
+            }
+        }
+
+        // 3. Forma farmacéutica
+        let formaFarmaceutica = mapearFormaFarmaceuticaDesdeTexto(sinTildes);
+
+        // 4. Principio activo, categoría terapéutica y condición de venta (Tabla clínica + Vademécum)
+        let principioActivo = '';
+        let categoria = '';
+        let condicionVenta = '';
+        let registroSanitario = '';
+        let esConveniencia = false;
+        let esMedicamentoDetectado = false;
+
+        for (const entrada of INDICE_CLINICO_AUTOCOMPLETADO) {
+            if (entrada.patron.test(sinTildes)) {
+                if (!principioActivo && entrada.principioActivo) principioActivo = entrada.principioActivo;
+                if (!categoria && entrada.categoria) categoria = entrada.categoria;
+                if (!condicionVenta && entrada.condicionVenta) condicionVenta = entrada.condicionVenta;
+                if (entrada.esConveniencia) {
+                    esConveniencia = true;
+                } else if (entrada.principioActivo || /^(Antibióticos|Analgésicos & Antiinflamatorios|Gastrointestinal & Digestivo|Cardiovascular & Hipertensión|Antidiabéticos|Antialérgicos & Respiratorio)$/.test(entrada.categoria)) {
+                    esMedicamentoDetectado = true;
+                }
+                break;
+            }
+        }
+
+        // Enriquecimiento opcional contra Vademécum Maestro cargado
+        const listaVad = Array.isArray(opciones && opciones.vademecum) ? opciones.vademecum : [];
+        if (listaVad.length > 0 && sinTildes.length >= 4) {
+            const nombreSinMedidas = sinTildes
+                .replace(/\b\d+(?:[.,]\d+)?\s*(?:mg|mcg|ug|gr|g|kg|ml|l|cc|cm3|oz|ui|iu|meq|unidades?|unids?|unds?|uds?|ud|u|%)\b/gi, ' ')
+                .replace(/\b(tabletas?|comprimidos?|capsulas?|jarabe|suspension|ampollas?|gotas?|crema|gel|solucion|caja|x)\b/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (nombreSinMedidas.length >= 4) {
+                const matchVad = listaVad.find(v => {
+                    if (!v) return false;
+                    const nomVad = quitarTildesMinusculas(v.nombreComercial || v.nombre || '');
+                    const baseVad = nomVad.replace(/\b\d+.*$/i, '').trim();
+                    return nomVad === sinTildes || (baseVad.length >= 5 && nombreSinMedidas.includes(baseVad));
+                });
+                if (matchVad) {
+                    esMedicamentoDetectado = true;
+                    if (!principioActivo && matchVad.principioActivo) principioActivo = String(matchVad.principioActivo).trim();
+                    if (!laboratorio && matchVad.laboratorio) laboratorio = String(matchVad.laboratorio).trim();
+                    if (!concentracion && matchVad.concentracion) concentracion = normalizarNombreProductoMayusculas(String(matchVad.concentracion));
+                    if (!formaFarmaceutica && matchVad.formaFarmaceutica) {
+                        formaFarmaceutica = mapearFormaFarmaceuticaDesdeTexto(quitarTildesMinusculas(matchVad.formaFarmaceutica));
+                    }
+                    if (!categoria && matchVad.categoria) categoria = String(matchVad.categoria).trim();
+                    if (!condicionVenta && matchVad.condicionVenta) condicionVenta = String(matchVad.condicionVenta).trim();
+                    if (!registroSanitario && matchVad.registroSanitario) registroSanitario = String(matchVad.registroSanitario).trim();
+                }
+            }
+        }
+
+        // 5. Detección de Leche / Fórmula Infantil (10%)
+        const esLeche = /\b(leche\s*(?:infantil|en\s+polvo|maternizada|crecimiento)?|formula\s+infantil|enfamil|enfagrow|similac|nan\s*\d|nestogeno|nido|pediasure|ensure|glucerna|alimentum|isomil|nutramigen|milex|s-?26|promil)\b/.test(sinTildes);
+        if (esLeche && !categoria) {
+            categoria = 'Pediatría & Cuidado Infantil';
+        }
+
+        // 6. Tipo de venta (Divisible vs Entero), Unidades x Caja y Presentación
+        let tipo;
+        let unidadesPorCaja;
+        let conteoEmpaque = null;
+
+        const mCaja = sinTildes.match(/(?:caja\s*(?:x|con|de)?\s*|c\/|\bx\s*)(\d{1,4})\b/i);
+        const mUnidsForma = sinTildes.match(/\b(\d{1,4})\s*(?:tabletas?|tabs?|comprimidos?|capsulas?|caps?|ampollas?|ovulos?|supositorios?|sobres?|unidades|unids?|unds?|uds)\b/i);
+        const candidatoConteo = mCaja ? parseInt(mCaja[1], 10) : (mUnidsForma ? parseInt(mUnidsForma[1], 10) : null);
+        if (Number.isInteger(candidatoConteo) && candidatoConteo >= 2 && candidatoConteo <= 1000) {
+            conteoEmpaque = candidatoConteo;
+        }
+
+        const formasDivisibles = new Set(['Comprimidos', 'Cápsulas', 'Ampollas', 'Óvulos', 'Polvo / Sobres']);
+        const formasEnteras = new Set(['Jarabe', 'Suspensión', 'Gotas', 'Crema / Gel', 'Solución', 'Inhalador']);
+        const tieneEnvaseEntero = /\b(frasco|fco|tubo|pote|botella|lata|galon)\b/.test(sinTildes);
+
+        if (esLeche || esConveniencia || (formasEnteras.has(formaFarmaceutica) && !mCaja) || (tieneEnvaseEntero && !conteoEmpaque)) {
+            tipo = CONSTANTES.CATEGORIAS.ENTERO;
+            unidadesPorCaja = 1;
+        } else if (formasDivisibles.has(formaFarmaceutica) || conteoEmpaque) {
+            tipo = CONSTANTES.CATEGORIAS.DIVISIBLE;
+            if (conteoEmpaque) unidadesPorCaja = conteoEmpaque;
+        }
+
+        let presentacion = '';
+        if (conteoEmpaque) {
+            const etiquetaForma = formaFarmaceutica || 'unidades';
+            presentacion = mCaja ? `Caja x ${conteoEmpaque} ${etiquetaForma}` : `${conteoEmpaque} ${etiquetaForma}`;
+        } else if (formaFarmaceutica && formasEnteras.has(formaFarmaceutica) && (medidaEnvase || concentracion)) {
+            const med = medidaEnvase || concentracion;
+            if (/\b(ML|L|CC|CM3|OZ|GR|G|KG)\b/i.test(med)) {
+                const env = formaFarmaceutica === 'Crema / Gel' ? 'Tubo' : 'Frasco';
+                presentacion = `${env} ${med}`;
+            }
+        } else if (medidaEnvase) {
+            presentacion = `Frasco ${medidaEnvase}`;
+        }
+
+        // 7. Régimen ITBIS (DGII Art. 343)
+        let tasaItbis;
+        let aplicaItbis;
+        const formasMedicinales = new Set(['Comprimidos', 'Cápsulas', 'Jarabe', 'Suspensión', 'Ampollas', 'Óvulos', 'Polvo / Sobres', 'Inhalador']);
+        if (esConveniencia || categoria === 'Cuidado Personal & Cosmética' || categoria === 'Salud Bucodental' || categoria === 'Conveniencia & Bebidas') {
+            tasaItbis = 18;
+            aplicaItbis = true;
+            if (!tipo) {
+                tipo = CONSTANTES.CATEGORIAS.ENTERO;
+                unidadesPorCaja = 1;
+            }
+        } else if (esMedicamentoDetectado || formasMedicinales.has(formaFarmaceutica)) {
+            tasaItbis = 0;
+            aplicaItbis = false;
+        }
+
+        const resultado = {};
+        if (concentracion) resultado.concentracion = concentracion;
+        if (laboratorio) resultado.laboratorio = laboratorio;
+        if (principioActivo) resultado.principioActivo = principioActivo;
+        if (categoria) resultado.categoria = categoria;
+        if (formaFarmaceutica) resultado.formaFarmaceutica = formaFarmaceutica;
+        if (presentacion) resultado.presentacion = presentacion;
+        if (tipo) resultado.tipo = tipo;
+        if (unidadesPorCaja !== undefined) resultado.unidadesPorCaja = unidadesPorCaja;
+        if (tasaItbis !== undefined) {
+            resultado.tasaItbis = tasaItbis;
+            resultado.aplicaItbis = aplicaItbis;
+        }
+        if (condicionVenta) resultado.condicionVenta = condicionVenta;
+        if (esLeche) resultado.esLeche = true;
+        if (registroSanitario) resultado.registroSanitario = registroSanitario;
+        return resultado;
+    }
+
     AppFarmacia.Dominio = Object.freeze({
         normalizarNombreProductoMayusculas,
+        extraerMetadatosDesdeNombre,
         validarDatosMinimosProducto,
         estandarizarNombreFarmaceutico,
         obtenerMacroCategoria,
+        ordenarProductosCatalogo,
         normalizarTextoFoneticoFarmacia,
+        prepararEntradaIndiceFonetico,
         distanciaLevenshtein,
         buscarEnCatalogoFuzzy,
+        construirEtiquetaSugerenciaProducto,
         calcularVariacionCostoPorcentaje,
         analizarVariacionCosto,
         ESTADOS_FEFO,
@@ -2706,6 +3349,9 @@
         parsearExpresionCajas,
         normalizarCodigoBarras,
         validarCodigoBarrasEstandar,
+        calcularDigitoControlGs1,
+        esCodigoBarrasInterno,
+        generarCodigoInternoGs1,
         sanitizarReglasNegocio,
         calcularDesglosePrecios,
         crearLineaProductoInmutable,

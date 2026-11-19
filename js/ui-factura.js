@@ -616,6 +616,9 @@
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
                 e.preventDefault();
+                if (e.isComposing || e.keyCode === 229) {
+                    return;
+                }
                 cerrarEdicion(true);
             } else if (e.key === 'Escape') {
                 e.preventDefault();

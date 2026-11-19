@@ -9,34 +9,82 @@
     const escaparHtml = texto => String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     let temporizadoresNotificacion = [];
+    let temporizadorAlertaDialogo = null;
+
+    function mostrarMensajeEnDialogoActivo(texto, tipo) {
+        if (typeof document === 'undefined' || !document.querySelectorAll) return;
+        const dialogosAbiertos = Array.from(document.querySelectorAll('dialog[open]'))
+            .filter(d => d.id !== 'modalConfirmacion');
+        if (dialogosAbiertos.length === 0) return;
+
+        const dialogoActivo = dialogosAbiertos[dialogosAbiertos.length - 1];
+        let alerta = dialogoActivo.querySelector('.modal-alerta-dinamica');
+        if (!alerta) {
+            alerta = document.createElement('div');
+            alerta.className = 'modal-alerta-dinamica alert-banner';
+            alerta.setAttribute('role', 'alert');
+            alerta.setAttribute('aria-live', 'assertive');
+            alerta.style.marginBottom = '10px';
+            const spanTexto = document.createElement('span');
+            const btnCerrar = document.createElement('button');
+            btnCerrar.type = 'button';
+            btnCerrar.className = 'btn-icono';
+            btnCerrar.style.cssText = 'border:none;background:transparent;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;';
+            btnCerrar.setAttribute('aria-label', 'Cerrar notificación');
+            btnCerrar.textContent = '\u00D7';
+            btnCerrar.addEventListener('click', () => {
+                alerta.classList.remove('mostrar');
+                alerta.style.display = 'none';
+            });
+            alerta.appendChild(spanTexto);
+            alerta.appendChild(btnCerrar);
+            dialogoActivo.insertBefore(alerta, dialogoActivo.firstChild);
+        }
+
+        const span = alerta.querySelector('span');
+        if (span) span.textContent = String(texto ?? '');
+        alerta.className = `modal-alerta-dinamica alert-banner mostrar alert-${tipo}`;
+        alerta.style.display = 'flex';
+
+        if (temporizadorAlertaDialogo) clearTimeout(temporizadorAlertaDialogo);
+        const duracion = tipo === 'error' ? 8500 : CONSTANTES.DURACION_NOTIFICACION_MS;
+        temporizadorAlertaDialogo = setTimeout(() => {
+            alerta.classList.remove('mostrar');
+            alerta.style.display = 'none';
+        }, duracion);
+    }
 
     // --- UX-07: Notificaciones con animación, auto-cierre y accesibilidad ---
-    function mostrarMensaje(texto, tipo = 'info') {
+    function mostrarMensaje(texto, tipo = 'info', opciones = {}) {
         const banner = el('notificacionGlobal');
-        if (!banner) return;
+        if (banner) {
+            temporizadoresNotificacion.forEach(clearTimeout);
+            temporizadoresNotificacion = [];
 
-        temporizadoresNotificacion.forEach(clearTimeout);
-        temporizadoresNotificacion = [];
+            banner.className = `alert-banner mostrar alert-${tipo}`;
+            banner.innerHTML = `<span>${escaparHtml(texto)}</span><button type="button" class="btn-icono" style="border:none;background:transparent;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;" aria-label="Cerrar notificación">&times;</button>`;
 
-        banner.className = `alert-banner mostrar alert-${tipo}`;
-        banner.innerHTML = `<span>${escaparHtml(texto)}</span><button type="button" class="btn-icono" style="border:none;background:transparent;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;" aria-label="Cerrar notificación">&times;</button>`;
+            const btnCerrar = banner.querySelector('button');
+            if (btnCerrar) {
+                btnCerrar.onclick = () => {
+                    banner.classList.remove('mostrar');
+                    banner.style.display = 'none';
+                };
+            }
+            banner.style.display = 'flex';
 
-        const btnCerrar = banner.querySelector('button');
-        if (btnCerrar) {
-            btnCerrar.onclick = () => {
-                banner.classList.remove('mostrar');
-                banner.style.display = 'none';
-            };
+            const duracion = tipo === 'error' ? 8500 : CONSTANTES.DURACION_NOTIFICACION_MS;
+            temporizadoresNotificacion.push(
+                setTimeout(() => {
+                    banner.classList.remove('mostrar');
+                    banner.style.display = 'none';
+                }, duracion)
+            );
         }
-        banner.style.display = 'flex';
 
-        const duracion = tipo === 'error' ? 8500 : CONSTANTES.DURACION_NOTIFICACION_MS;
-        temporizadoresNotificacion.push(
-            setTimeout(() => {
-                banner.classList.remove('mostrar');
-                banner.style.display = 'none';
-            }, duracion)
-        );
+        if (!opciones || !opciones.omitirDialogo) {
+            mostrarMensajeEnDialogoActivo(texto, tipo);
+        }
     }
 
     // --- UX-01: Diálogos Modales Accesibles HTML5 (<dialog>) ---

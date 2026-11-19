@@ -31,6 +31,20 @@
     const encDiccionarioBlobs = new Map();
     let vademecumCache = [];
     let colaEscriturasIdb = Promise.resolve();
+    let versionDiccionario = 0;
+    let diccionarioPublicoCache = null;
+    let versionPublicoCache = -1;
+    let indiceBusquedaDiccionario = null;
+    let versionIndiceDiccionario = -1;
+    let indiceBusquedaVademecum = null;
+
+    function invalidarIndicesDiccionario() {
+        versionDiccionario++;
+        diccionarioPublicoCache = null;
+        versionPublicoCache = -1;
+        indiceBusquedaDiccionario = null;
+        versionIndiceDiccionario = -1;
+    }
 
     function obtenerSeguridad() {
         return AppFarmacia.Seguridad || null;
@@ -340,6 +354,9 @@
             }
             const parseado = Dominio.sanitizarJsonSeguro(JSON.parse(texto));
             cacheStorage.set(claveStorage, parseado);
+            if (claveStorage === CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS) {
+                invalidarIndicesDiccionario();
+            }
             return Dominio.clonarObjetoSeguro(parseado);
         } catch (error) {
             console.warn(`Error leyendo ${claveStorage} en almacenamiento:`, error);
@@ -349,6 +366,9 @@
 
     function escribirJsonSeguro(claveStorage, datos) {
         cacheStorage.set(claveStorage, Dominio.clonarObjetoSeguro(datos));
+        if (claveStorage === CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS) {
+            invalidarIndicesDiccionario();
+        }
         const Seg = obtenerSeguridad();
         // Prohibición AppSec: datos sensibles jamás se duplican en texto plano en localStorage cuando hay IndexedDB o cifrado activo
         if (esClaveDatosSensibles(claveStorage) && (indexedDBRef !== null || (Seg && Seg.estaConfigurado()))) {
@@ -368,8 +388,12 @@
     function invalidarCacheStorage(claveStorage) {
         if (claveStorage) {
             cacheStorage.delete(claveStorage);
+            if (claveStorage === CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS) {
+                invalidarIndicesDiccionario();
+            }
         } else {
             cacheStorage.clear();
+            invalidarIndicesDiccionario();
         }
     }
 
@@ -481,6 +505,7 @@
         // Poblar Vademécum y Laboratorios (datos sanitarios públicos)
         if (Array.isArray(snapshot.vademecum) && snapshot.vademecum.length > 0) {
             vademecumCache = snapshot.vademecum;
+            construirIndiceVademecum();
         }
         const listaLab = fusionarSemillasConGuardados(snapshot.lab, LABORATORIOS_SEMILLA);
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.LABORATORIOS, listaLab);
@@ -528,6 +553,7 @@
             }
         }
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
+        invalidarIndicesDiccionario();
 
         if (Seg && Seg.estaConfigurado() && Seg.estaBloqueado()) {
             // Modo Cifrado Bloqueado: secretos comerciales inaccesibles hasta contraseña maestra
@@ -604,14 +630,51 @@
     }
 
     // --- DICCIONARIO PERMANENTE DE CÓDIGOS DE BARRA (FICHAS PÚBLICAS EN RAM + DESCIFRADO JIT) ---
-    function obtenerDiccionarioCodigos() {
-        const dic = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
-        if (!dic || typeof dic !== 'object' || Array.isArray(dic)) return {};
+    function obtenerMapaDiccionarioInterno() {
+        const clave = CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS;
+        let raw = cacheStorage.get(clave);
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+            raw = leerJsonSeguro(clave, {});
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) raw = {};
+        }
         const Seg = obtenerSeguridad();
         if (Seg && Seg.estaConfigurado()) {
-            return Dominio.sanitizarDiccionarioPublico(dic);
+            if (diccionarioPublicoCache && versionPublicoCache === versionDiccionario) {
+                return diccionarioPublicoCache;
+            }
+            diccionarioPublicoCache = Dominio.sanitizarDiccionarioPublico(raw);
+            versionPublicoCache = versionDiccionario;
+            return diccionarioPublicoCache;
         }
-        return dic;
+        return raw;
+    }
+
+    function obtenerDiccionarioCodigos() {
+        return { ...obtenerMapaDiccionarioInterno() };
+    }
+
+    function buscarProductosEnDiccionarioRapido(termino, limite = 6) {
+        if (!termino || typeof termino !== 'string' || termino.trim().length < 2) return [];
+        if (!indiceBusquedaDiccionario || versionIndiceDiccionario !== versionDiccionario) {
+            const mapa = obtenerMapaDiccionarioInterno();
+            const items = Object.values(mapa || {});
+            const indice = new Array(items.length);
+            let len = 0;
+            for (let i = 0; i < items.length; i++) {
+                const p = items[i];
+                if (!p) continue;
+                indice[len++] = (Dominio && typeof Dominio.prepararEntradaIndiceFonetico === 'function')
+                    ? Dominio.prepararEntradaIndiceFonetico(p)
+                    : { prod: p, cod: p.codigoBarras || '' };
+            }
+            indice.length = len;
+            indice._esIndiceFonetico = true;
+            indiceBusquedaDiccionario = indice;
+            versionIndiceDiccionario = versionDiccionario;
+        }
+        return (Dominio && typeof Dominio.buscarEnCatalogoFuzzy === 'function')
+            ? Dominio.buscarEnCatalogoFuzzy(termino, indiceBusquedaDiccionario, limite)
+            : [];
     }
 
     function guardarDiccionarioCodigos(diccionario) {
@@ -647,8 +710,8 @@
     function buscarProductoPorCodigo(codigoCrudo) {
         const codigo = Dominio.normalizarCodigoBarras(codigoCrudo);
         if (!codigo) return null;
-        const diccionario = obtenerDiccionarioCodigos();
-        return diccionario[codigo] || null;
+        const item = obtenerMapaDiccionarioInterno()[codigo];
+        return item ? Dominio.clonarObjetoSeguro(item) : null;
     }
 
     async function leerRegistroCrudoDiccionarioIdb(codigo) {
@@ -791,13 +854,127 @@
         return mapa;
     }
 
-    function aprenderProductoEnDiccionario(lineaProducto, contextoFactura = {}) {
-        const codigo = Dominio.normalizarCodigoBarras(lineaProducto.codigoBarras);
-        const nombreCandidato = String(lineaProducto.nombre || '').trim();
-        const esNombreGenerico = !nombreCandidato || /^Producto #\d+$/i.test(nombreCandidato) || nombreCandidato === 'Producto IA' || nombreCandidato === 'Producto';
-        if (!codigo) return false;
+    async function obtenerProveedoresSugerenciasSiAdmin(codigos = []) {
+        const mapa = new Map();
+        if (!Array.isArray(codigos) || codigos.length === 0) return mapa;
+        const listaCodigos = codigos.slice(0, 12).map(c => Dominio.normalizarCodigoBarras(c)).filter(Boolean);
+        if (listaCodigos.length === 0) return mapa;
 
+        const Seg = obtenerSeguridad();
+        if (!Seg || !Seg.estaConfigurado()) {
+            const dic = obtenerMapaDiccionarioInterno();
+            for (const cod of listaCodigos) {
+                const item = dic[cod];
+                if (item && item.proveedorHabitual) {
+                    mapa.set(cod, String(item.proveedorHabitual).trim());
+                }
+            }
+            return mapa;
+        }
+
+        if (Seg.estaBloqueado()) {
+            return mapa;
+        }
+
+        for (const cod of listaCodigos) {
+            try {
+                const blob = await obtenerSobresCodigoJit(cod);
+                if (!blob) continue;
+                let prov = '';
+                if (blob._segAdmin) {
+                    const adm = await Seg.descifrarJson(blob._segAdmin, { scope: 'admin', codigoBarras: cod });
+                    if (adm && adm.proveedorHabitual) prov = String(adm.proveedorHabitual).trim();
+                } else if (blob._segCifrado) {
+                    const leg = await Seg.descifrarJson(blob._segCifrado);
+                    if (leg && leg.proveedorHabitual) prov = String(leg.proveedorHabitual).trim();
+                }
+                if (prov) mapa.set(cod, prov);
+            } catch (_) {}
+        }
+        return mapa;
+    }
+
+    function esNombrePlaceholderDiccionario(nombre) {
+        const s = String(nombre || '').trim();
+        return !s || /^Producto(\s*#\d+)?$/i.test(s) || s.toLowerCase() === 'producto sin nombre' || s === 'Producto IA';
+    }
+
+    function buscarCodigoExistentePorNombre(diccionario, nombreCrudo, laboratorioCrudo = '') {
+        if (esNombrePlaceholderDiccionario(nombreCrudo) || String(nombreCrudo || '').trim().length < 2) return '';
+        const normalizarNom = n => (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function')
+            ? Dominio.normalizarNombreProductoMayusculas(n)
+            : String(n || '').trim().toUpperCase();
+
+        const nombreNorm = normalizarNom(nombreCrudo);
+        if (!nombreNorm) return '';
+        const labNorm = String(laboratorioCrudo || '').trim().toLowerCase();
+
+        let matchGeneral = '';
+        for (const [cod, item] of Object.entries(diccionario || {})) {
+            if (!item || typeof item !== 'object') continue;
+            const itemNom = normalizarNom(item.nombre || item.nombreComercial || '');
+            if (!itemNom || itemNom !== nombreNorm) continue;
+
+            const itemLab = String(item.laboratorio || '').trim().toLowerCase();
+            if (labNorm && itemLab && labNorm !== itemLab) continue;
+
+            if (Dominio && typeof Dominio.esCodigoBarrasInterno === 'function' && Dominio.esCodigoBarrasInterno(cod)) {
+                return cod;
+            }
+            if (!matchGeneral) matchGeneral = cod;
+        }
+        return matchGeneral;
+    }
+
+    function resolverCodigoInternoSiFalta({ codigoBarras = '', nombre = '', laboratorio = '' } = {}) {
+        const cod = Dominio.normalizarCodigoBarras(codigoBarras);
+        if (cod) {
+            return {
+                codigoBarras: cod,
+                esCodigoInterno: Boolean(Dominio && typeof Dominio.esCodigoBarrasInterno === 'function' && Dominio.esCodigoBarrasInterno(cod)),
+                esNuevoInterno: false,
+                reutilizadoExistente: false
+            };
+        }
+        if (esNombrePlaceholderDiccionario(nombre) || String(nombre || '').trim().length < 2) {
+            return { codigoBarras: '', esCodigoInterno: false, esNuevoInterno: false, reutilizadoExistente: false };
+        }
+        const dicActual = obtenerMapaDiccionarioInterno();
+        const existenteCod = buscarCodigoExistentePorNombre(dicActual, nombre, laboratorio);
+        if (existenteCod) {
+            return {
+                codigoBarras: existenteCod,
+                esCodigoInterno: Boolean(Dominio && typeof Dominio.esCodigoBarrasInterno === 'function' && Dominio.esCodigoBarrasInterno(existenteCod)),
+                esNuevoInterno: false,
+                reutilizadoExistente: true
+            };
+        }
+        const nuevoCod = (Dominio && typeof Dominio.generarCodigoInternoGs1 === 'function')
+            ? Dominio.generarCodigoInternoGs1(dicActual)
+            : '';
+        return {
+            codigoBarras: nuevoCod,
+            esCodigoInterno: Boolean(nuevoCod),
+            esNuevoInterno: Boolean(nuevoCod),
+            reutilizadoExistente: false
+        };
+    }
+
+    function aprenderProductoEnDiccionario(lineaProducto, contextoFactura = {}) {
+        let codigo = Dominio.normalizarCodigoBarras(lineaProducto.codigoBarras);
+        const nombreCandidato = String(lineaProducto.nombre || '').trim();
+        const esNombrePlaceholder = esNombrePlaceholderDiccionario;
+        const esNombreGenerico = esNombrePlaceholder(nombreCandidato);
         const dicActual = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
+
+        if (!codigo) {
+            if (esNombreGenerico || nombreCandidato.length < 2) return false;
+            codigo = buscarCodigoExistentePorNombre(dicActual, nombreCandidato, lineaProducto.laboratorio || '');
+            if (!codigo && Dominio && typeof Dominio.generarCodigoInternoGs1 === 'function') {
+                codigo = Dominio.generarCodigoInternoGs1(dicActual);
+            }
+            if (!codigo) return false;
+        }
         const existente = dicActual[codigo];
         const Seg = obtenerSeguridad();
         const configurado = Boolean(Seg && Seg.estaConfigurado());
@@ -812,7 +989,8 @@
         let unidadesPorCaja = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Number(lineaProducto.unidadesPorCaja) || 1;
         let esLeche = Boolean(lineaProducto.esLeche);
 
-        if (existente && existente.nombre && !lineaProducto._esEdicionCatalogo) {
+        const existenteTieneNombreReal = Boolean(existente && !esNombrePlaceholder(existente.nombre));
+        if (existenteTieneNombreReal && !lineaProducto._esEdicionCatalogo) {
             nombreFinal = existente.nombre;
             if (existente.tipo) tipo = existente.tipo;
             if (existente.unidadesPorCaja && existente.tipo === CONSTANTES.CATEGORIAS.DIVISIBLE) {
@@ -820,13 +998,13 @@
             }
             if (existente.tasaItbis !== undefined) tasaItbis = Number(existente.tasaItbis);
             if (existente.esLeche !== undefined) esLeche = Boolean(existente.esLeche);
-        } else if (esNombreGenerico && existente && existente.nombre && !/^Producto #\d+$/i.test(existente.nombre)) {
+        } else if (esNombreGenerico && existenteTieneNombreReal) {
             nombreFinal = existente.nombre;
-        } else if (!nombreFinal) {
+        } else if (esNombreGenerico) {
             nombreFinal = 'Producto sin nombre';
         }
 
-        if (nombreFinal && nombreFinal !== 'Producto sin nombre' && !/^Producto #\d+$/i.test(nombreFinal)) {
+        if (nombreFinal && !esNombrePlaceholder(nombreFinal)) {
             if (Dominio && typeof Dominio.normalizarNombreProductoMayusculas === 'function') {
                 nombreFinal = Dominio.normalizarNombreProductoMayusculas(nombreFinal);
             } else if (Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function') {
@@ -834,11 +1012,17 @@
             }
         }
 
+        const nombreComercialPublico = nombreFinal === 'Producto sin nombre'
+            ? ''
+            : (!esNombrePlaceholder(lineaProducto.nombreComercial)
+                ? lineaProducto.nombreComercial
+                : (!esNombrePlaceholder(existente && existente.nombreComercial) ? existente.nombreComercial : nombreFinal));
+
         const fichaPublica = Dominio.sanitizarFichaPublicaCatalogo({
             ...(existente || {}),
             codigoBarras: codigo,
             nombre: nombreFinal,
-            nombreComercial: lineaProducto.nombreComercial || (existente && existente.nombreComercial) || nombreFinal,
+            nombreComercial: nombreComercialPublico,
             principioActivo: lineaProducto.principioActivo || (existente && existente.principioActivo) || '',
             laboratorio: lineaProducto.laboratorio || (existente && existente.laboratorio) || '',
             concentracion: lineaProducto.concentracion || (existente && existente.concentracion) || '',
@@ -932,8 +1116,6 @@
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicActual);
 
         encolarOperacionIdb(async () => {
-            const db = await abrirBaseDatos();
-            if (!db) return;
             const blobPrevio = (await obtenerSobresCodigoJit(codigo)) || {};
             let cajaPrevia = null;
             let adminPrevio = null;
@@ -957,6 +1139,7 @@
                 }
             }
 
+            let reg = null;
             if (adminAbierto) {
                 const costoAnt = (cajaPrevia && cajaPrevia.ultimoPrecioCaja > 0) ? Number(cajaPrevia.ultimoPrecioCaja) : 0;
                 let varPct = (cajaPrevia && cajaPrevia.variacionCosto !== undefined) ? cajaPrevia.variacionCosto : 0;
@@ -994,14 +1177,8 @@
                     descuentoValor: Number(lineaProducto.descuentoValor) || 0,
                     tipoDescuento: lineaProducto.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto'
                 };
-                const reg = await empaquetarProductoParaIdb(fichaCompleta);
-                if (!reg) return;
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                tx.objectStore(STORES.DICCIONARIO).put(reg);
-                return;
-            }
-
-            if (cajaAbierta) {
+                reg = await empaquetarProductoParaIdb(fichaCompleta);
+            } else if (cajaAbierta) {
                 const costoAnt = (cajaPrevia && cajaPrevia.ultimoPrecioCaja > 0) ? Number(cajaPrevia.ultimoPrecioCaja) : 0;
                 let varPct = (cajaPrevia && cajaPrevia.variacionCosto !== undefined) ? cajaPrevia.variacionCosto : 0;
                 if (costoAnt > 0 && precioCajaActual > 0) {
@@ -1032,16 +1209,15 @@
                     const listaPend = Array.isArray(blobPrevio._segPendienteAdmin) ? [...blobPrevio._segPendienteAdmin, sobreDelta] : [sobreDelta];
                     fichaCaja._segPendienteAdmin = listaPend.slice(-20);
                 }
-                const reg = await empaquetarProductoParaIdb(fichaCaja);
-                if (!reg) return;
-                const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-                tx.objectStore(STORES.DICCIONARIO).put(reg);
-                return;
+                reg = await empaquetarProductoParaIdb(fichaCaja);
+            } else {
+                // Bloqueado total: actualiza únicamente ficha sanitaria pública conservando secretos cifrados intactos
+                reg = await empaquetarProductoParaIdb(fichaPublica);
             }
 
-            // Bloqueado total: actualiza únicamente ficha sanitaria pública conservando secretos cifrados intactos
-            const reg = await empaquetarProductoParaIdb(fichaPublica);
             if (!reg) return;
+            const db = await abrirBaseDatos();
+            if (!db) return;
             const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
             tx.objectStore(STORES.DICCIONARIO).put(reg);
         });
@@ -1682,63 +1858,104 @@
 
     // --- EDICIÓN DELIBERADA DE FICHA MAESTRA EN CATÁLOGO / AJUSTES ---
     function guardarFichaProductoCatalogo(ficha) {
-        if (!ficha || !ficha.codigoBarras) return { exito: false, error: 'Código de barras no proporcionado.' };
+        if (!ficha || !ficha.codigoBarras) return { exito: false, campo: 'codigoBarras', error: 'Código de barras no proporcionado.' };
         const codigo = Dominio.normalizarCodigoBarras(ficha.codigoBarras);
-        if (!codigo) return { exito: false, error: 'Código de barras no válido.' };
+        if (!codigo) return { exito: false, campo: 'codigoBarras', error: 'Código de barras no válido.' };
+
+        const codigoAnterior = ficha.codigoBarrasAnterior ? Dominio.normalizarCodigoBarras(ficha.codigoBarrasAnterior) : '';
+        const esCambioCodigo = Boolean(codigoAnterior && codigoAnterior !== codigo);
+        const codigoOrigen = esCambioCodigo ? codigoAnterior : codigo;
 
         const diccionario = leerJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, {});
-        const existente = diccionario[codigo] || {};
         const Seg = obtenerSeguridad();
         const configurado = Boolean(Seg && Seg.estaConfigurado());
         const estaBloqueado = Boolean(configurado && Seg.estaBloqueado());
+
+        if (esCambioCodigo) {
+            if (estaBloqueado) {
+                return { exito: false, campo: 'codigoBarras', error: 'Se requiere sesión de Administrador activa para cambiar el código de barras.' };
+            }
+            const valGs1 = Dominio.validarCodigoBarrasEstandar(codigo);
+            if (!valGs1.esValido) {
+                return { exito: false, campo: 'codigoBarras', error: valGs1.error };
+            }
+            if (diccionario[codigo]) {
+                return {
+                    exito: false,
+                    campo: 'codigoBarras',
+                    error: `Ya existe otro producto registrado con el código ${codigo} ("${diccionario[codigo].nombre || 'Sin nombre'}").`
+                };
+            }
+        }
+
+        const existente = diccionario[codigoOrigen] || {};
 
         const tipo = ficha.tipo === CONSTANTES.CATEGORIAS.ENTERO ? CONSTANTES.CATEGORIAS.ENTERO : CONSTANTES.CATEGORIAS.DIVISIBLE;
         const unidadesPorCaja = tipo === CONSTANTES.CATEGORIAS.ENTERO ? 1 : Math.max(1, parseInt(ficha.unidadesPorCaja, 10) || 1);
         const tasaItbis = Number(ficha.tasaItbis) || (ficha.aplicaItbis ? 18 : 0);
 
-        const nombreCrudo = String(ficha.nombre || ficha.nombreComercial || existente.nombre || existente.nombreComercial || 'Producto sin nombre').trim();
+        const tieneNombreExplicito = ficha.nombre !== undefined || ficha.nombreComercial !== undefined;
+        const nombreEntrada = String(ficha.nombre ?? ficha.nombreComercial ?? '').trim();
+        const nombreCrudo = (tieneNombreExplicito && ficha.permitirNombreVacio && !nombreEntrada)
+            ? 'Producto sin nombre'
+            : String(nombreEntrada || existente.nombre || existente.nombreComercial || 'Producto sin nombre').trim();
         const nombreFinal = (Dominio && typeof Dominio.estandarizarNombreFarmaceutico === 'function' && nombreCrudo !== 'Producto sin nombre')
             ? Dominio.estandarizarNombreFarmaceutico(nombreCrudo)
             : nombreCrudo;
+        const nombreComercialFinal = nombreFinal === 'Producto sin nombre'
+            ? ''
+            : String(ficha.nombreComercial || ficha.nombre || (existente.nombreComercial !== 'Producto sin nombre' ? existente.nombreComercial : '') || nombreFinal).trim();
 
         const basePublica = Dominio.sanitizarFichaPublicaCatalogo({
             ...existente,
             codigoBarras: codigo,
             nombre: nombreFinal,
-            nombreComercial: String(ficha.nombreComercial || ficha.nombre || existente.nombreComercial || nombreFinal).trim(),
-            principioActivo: String(ficha.principioActivo || '').trim(),
-            laboratorio: String(ficha.laboratorio || '').trim(),
-            concentracion: String(ficha.concentracion || '').trim(),
-            categoria: String(ficha.categoria || 'General / Otros').trim(),
-            presentacion: String(ficha.presentacion || '').trim(),
-            formaFarmaceutica: String(ficha.formaFarmaceutica || '').trim(),
-            registroSanitario: String(ficha.registroSanitario || '').trim(),
-            condicionVenta: String(ficha.condicionVenta || 'OTC').trim(),
+            nombreComercial: nombreComercialFinal,
+            principioActivo: String(ficha.principioActivo !== undefined ? ficha.principioActivo : (existente.principioActivo || '')).trim(),
+            laboratorio: String(ficha.laboratorio !== undefined ? ficha.laboratorio : (existente.laboratorio || '')).trim(),
+            concentracion: String(ficha.concentracion !== undefined ? ficha.concentracion : (existente.concentracion || '')).trim(),
+            categoria: String(ficha.categoria !== undefined ? ficha.categoria : (existente.categoria || 'General / Otros')).trim() || 'General / Otros',
+            presentacion: String(ficha.presentacion !== undefined ? ficha.presentacion : (existente.presentacion || '')).trim(),
+            formaFarmaceutica: String(ficha.formaFarmaceutica !== undefined ? ficha.formaFarmaceutica : (existente.formaFarmaceutica || '')).trim(),
+            registroSanitario: String(ficha.registroSanitario !== undefined ? ficha.registroSanitario : (existente.registroSanitario || '')).trim(),
+            condicionVenta: String(ficha.condicionVenta !== undefined ? ficha.condicionVenta : (existente.condicionVenta || 'OTC')).trim() || 'OTC',
             tipo,
             unidadesPorCaja,
             aplicaItbis: tasaItbis > 0,
             tasaItbis,
-            esLeche: Boolean(ficha.esLeche),
+            esLeche: Boolean(ficha.esLeche !== undefined ? ficha.esLeche : existente.esLeche),
             actualizadoEn: new Date().toISOString()
         });
 
         let fichaParaIdb = { ...basePublica };
         let costoEditado = undefined;
+        let costoExplicitamenteLimpiado = false;
         if (!estaBloqueado) {
             if (ficha.ultimoPrecioCaja !== undefined && ficha.ultimoPrecioCaja !== null && ficha.ultimoPrecioCaja !== '') {
                 const n = Number(ficha.ultimoPrecioCaja);
-                if (Number.isFinite(n) && n > 0) costoEditado = n;
+                if (Number.isFinite(n) && n > 0) {
+                    costoEditado = n;
+                } else if (Number.isFinite(n) && n === 0) {
+                    costoExplicitamenteLimpiado = true;
+                }
+            } else if (ficha.ultimoPrecioCaja === '' || ficha.ultimoPrecioCaja === null) {
+                costoExplicitamenteLimpiado = true;
             }
             fichaParaIdb = {
                 ...basePublica,
                 ubicacion: String(ficha.ubicacion !== undefined ? ficha.ubicacion : (existente.ubicacion || '')).trim(),
-                proveedorHabitual: String(ficha.proveedorHabitual || '').trim(),
-                rncProveedor: String(ficha.rncProveedor || '').trim()
+                proveedorHabitual: String(ficha.proveedorHabitual !== undefined ? ficha.proveedorHabitual : (existente.proveedorHabitual || '')).trim(),
+                rncProveedor: String(ficha.rncProveedor !== undefined ? ficha.rncProveedor : (existente.rncProveedor || '')).trim()
             };
+            if (!configurado && Array.isArray(existente.historialCostos) && !fichaParaIdb.historialCostos) {
+                fichaParaIdb.historialCostos = existente.historialCostos;
+            }
             if (costoEditado !== undefined) {
                 fichaParaIdb.ultimoPrecioCaja = costoEditado;
-            } else if (ficha.ultimoPrecioCaja === '' || ficha.ultimoPrecioCaja === null) {
+            } else if (costoExplicitamenteLimpiado) {
                 fichaParaIdb._forzarLimpiarCaja = true;
+            } else if (!configurado && existente.ultimoPrecioCaja !== undefined && Number(existente.ultimoPrecioCaja) > 0) {
+                fichaParaIdb.ultimoPrecioCaja = Number(existente.ultimoPrecioCaja);
             }
         }
 
@@ -1763,45 +1980,159 @@
             }
         }
 
+        if (esCambioCodigo) {
+            delete diccionario[codigoAnterior];
+        }
         const fichaParaRam = configurado ? basePublica : fichaParaIdb;
         diccionario[codigo] = fichaParaRam;
         escribirJsonSeguro(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, diccionario);
 
         const clonSnapshot = Dominio.clonarObjetoSeguro(fichaParaIdb);
-        encolarOperacionIdb(async () => {
-            const db = await abrirBaseDatos();
-            if (!db) return;
-            // Si Admin está desbloqueado y había historial previo en _segAdmin, preservarlo si no venía en ficha
+        const promesaPersistencia = encolarOperacionIdb(async () => {
             if (configurado && !estaBloqueado) {
-                const blobPrev = await obtenerSobresCodigoJit(codigo);
+                const blobPrev = await obtenerSobresCodigoJit(codigoOrigen);
                 if (blobPrev) {
                     let adminPrev = {};
-                    if (blobPrev._segAdmin) {
-                        try { adminPrev = await Seg.descifrarJson(blobPrev._segAdmin, { scope: 'admin', codigoBarras: codigo }); } catch (_) {}
-                    } else if (blobPrev._segCifrado) {
-                        try { adminPrev = extraerCamposAdminProducto(await Seg.descifrarJson(blobPrev._segCifrado)) || {}; } catch (_) {}
+                    let cajaPrev = {};
+                    if (blobPrev._segCifrado) {
+                        try {
+                            const leg = await Seg.descifrarJson(blobPrev._segCifrado);
+                            adminPrev = extraerCamposAdminProducto(leg) || {};
+                            cajaPrev = extraerCamposCajaProducto(leg) || {};
+                        } catch (_) {}
                     }
-                    if (!clonSnapshot.historialCostos && Array.isArray(adminPrev.historialCostos)) {
-                        clonSnapshot.historialCostos = adminPrev.historialCostos;
+                    if (blobPrev._segAdmin) {
+                        try {
+                            adminPrev = {
+                                ...adminPrev,
+                                ...(await Seg.descifrarJson(blobPrev._segAdmin, { scope: 'admin', codigoBarras: codigoOrigen }) || {})
+                            };
+                        } catch (_) {}
+                    }
+                    if (blobPrev._segCaja) {
+                        try {
+                            cajaPrev = {
+                                ...cajaPrev,
+                                ...(await Seg.descifrarDeCaja(blobPrev._segCaja, codigoOrigen) || {})
+                            };
+                        } catch (_) {}
+                    }
+
+                    const historialRescatado = Array.isArray(adminPrev.historialCostos) ? [...adminPrev.historialCostos] : [];
+                    if (esCambioCodigo && Array.isArray(blobPrev._segPendienteAdmin) && blobPrev._segPendienteAdmin.length && typeof Seg.abrirDeBuzonAdmin === 'function') {
+                        for (const sobreDelta of blobPrev._segPendienteAdmin) {
+                            try {
+                                const delta = await Seg.abrirDeBuzonAdmin(sobreDelta, { scope: 'delta_producto', codigoBarras: codigoOrigen });
+                                if (delta && typeof delta === 'object') {
+                                    historialRescatado.unshift({
+                                        fecha: delta.fecha,
+                                        precioCaja: delta.precioCaja,
+                                        costoUnitarioFiscal: delta.costoUnitarioFiscal,
+                                        proveedor: delta.proveedor || '',
+                                        rnc: delta.rnc || '',
+                                        descuentoValor: Number(delta.descuentoValor) || 0,
+                                        tipoDescuento: delta.tipoDescuento === 'porcentaje' ? 'porcentaje' : 'monto',
+                                        aplicaItbis: Boolean(delta.aplicaItbis)
+                                    });
+                                }
+                            } catch (_) {}
+                        }
+                        if (historialRescatado.length > 20) historialRescatado.length = 20;
+                        clonSnapshot._limpiarPendienteAdmin = true;
+                    }
+
+                    if (!clonSnapshot.historialCostos && historialRescatado.length > 0) {
+                        clonSnapshot.historialCostos = historialRescatado;
                     }
                     if (!clonSnapshot.rncProveedor && adminPrev.rncProveedor) {
                         clonSnapshot.rncProveedor = adminPrev.rncProveedor;
                     }
+                    if (ficha.ubicacion === undefined && !clonSnapshot.ubicacion && adminPrev.ubicacion) {
+                        clonSnapshot.ubicacion = adminPrev.ubicacion;
+                    }
+                    if (ficha.proveedorHabitual === undefined && !clonSnapshot.proveedorHabitual && adminPrev.proveedorHabitual) {
+                        clonSnapshot.proveedorHabitual = adminPrev.proveedorHabitual;
+                    }
+
+                    if (!clonSnapshot._forzarLimpiarCaja) {
+                        if (clonSnapshot.ultimoPrecioCaja === undefined && cajaPrev.ultimoPrecioCaja !== undefined) {
+                            clonSnapshot.ultimoPrecioCaja = cajaPrev.ultimoPrecioCaja;
+                        }
+                        if (clonSnapshot.costoAnteriorCaja === undefined && cajaPrev.costoAnteriorCaja !== undefined) {
+                            clonSnapshot.costoAnteriorCaja = cajaPrev.costoAnteriorCaja;
+                        }
+                        if (clonSnapshot.variacionCosto === undefined && cajaPrev.variacionCosto !== undefined) {
+                            clonSnapshot.variacionCosto = cajaPrev.variacionCosto;
+                        }
+                        if (clonSnapshot.costoUnitarioFiscal === undefined && cajaPrev.costoUnitarioFiscal !== undefined) {
+                            clonSnapshot.costoUnitarioFiscal = cajaPrev.costoUnitarioFiscal;
+                        }
+                        if (clonSnapshot.preciosVenta === undefined && cajaPrev.preciosVenta !== undefined) {
+                            clonSnapshot.preciosVenta = cajaPrev.preciosVenta;
+                        }
+                    }
+                }
+
+                const tieneAlgunCampoAdmin = Boolean(
+                    clonSnapshot.ubicacion ||
+                    clonSnapshot.proveedorHabitual ||
+                    clonSnapshot.rncProveedor ||
+                    (Array.isArray(clonSnapshot.historialCostos) && clonSnapshot.historialCostos.length > 0)
+                );
+                if (!tieneAlgunCampoAdmin) {
+                    clonSnapshot._forzarLimpiarAdmin = true;
                 }
             }
+
             const regIdb = await empaquetarProductoParaIdb(clonSnapshot);
-            if (!regIdb) return;
-            const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
-            tx.objectStore(STORES.DICCIONARIO).put(regIdb);
+            if (esCambioCodigo) {
+                encDiccionarioBlobs.delete(codigoAnterior);
+            }
+
+            const db = await abrirBaseDatos();
+            if (!db || !regIdb) return;
+            await new Promise((resolve, reject) => {
+                try {
+                    const tx = db.transaction([STORES.DICCIONARIO], 'readwrite');
+                    const store = tx.objectStore(STORES.DICCIONARIO);
+                    if (esCambioCodigo) {
+                        store.delete(codigoAnterior);
+                    }
+                    store.put(regIdb);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error || new Error('Error guardando producto en IndexedDB'));
+                    tx.onabort = () => reject(tx.error || new Error('Transacción abortada en IndexedDB'));
+                } catch (err) {
+                    reject(err);
+                }
+            });
         });
 
-        return { exito: true, producto: basePublica };
+        return {
+            exito: true,
+            producto: basePublica,
+            codigoAnterior: esCambioCodigo ? codigoAnterior : null,
+            promesaPersistencia
+        };
     }
 
     // --- VADEMÉCUM MAESTRO OFICIAL DIGEMAPS (CATÁLOGO DE REFERENCIA RD) ---
+    const normVad = str => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    function construirIndiceVademecum() {
+        indiceBusquedaVademecum = vademecumCache.map(med => ({
+            med,
+            nom: normVad(med.nombreComercial || med.nombre),
+            act: normVad(med.principioActivo),
+            lab: normVad(med.laboratorio),
+            reg: normVad(med.registroSanitario)
+        }));
+    }
+
     function guardarVademecumMaestro(listaMedicamentos) {
         if (!Array.isArray(listaMedicamentos)) return { exito: false, error: 'Formato de Vademécum inválido' };
         vademecumCache = listaMedicamentos.filter(m => m && (m.nombreComercial || m.nombre));
+        construirIndiceVademecum();
 
         abrirBaseDatos().then(db => {
             if (!db) return;
@@ -1822,19 +2153,18 @@
 
     function buscarEnVademecum(termino, limite = 10) {
         if (!termino || typeof termino !== 'string') return [];
-        const norm = str => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const q = norm(termino.trim());
+        const q = normVad(termino.trim());
         if (q.length < 2) return [];
 
-        const resultados = [];
-        for (const med of vademecumCache) {
-            const nom = norm(med.nombreComercial || med.nombre);
-            const act = norm(med.principioActivo);
-            const lab = norm(med.laboratorio);
-            const reg = norm(med.registroSanitario);
+        if (!indiceBusquedaVademecum) {
+            construirIndiceVademecum();
+        }
 
-            if (nom.includes(q) || act.includes(q) || lab.includes(q) || reg.includes(q)) {
-                resultados.push(med);
+        const resultados = [];
+        for (let i = 0; i < indiceBusquedaVademecum.length; i++) {
+            const ent = indiceBusquedaVademecum[i];
+            if (ent.nom.includes(q) || ent.act.includes(q) || ent.lab.includes(q) || ent.reg.includes(q)) {
+                resultados.push(ent.med);
                 if (resultados.length >= limite) break;
             }
         }
@@ -1933,6 +2263,7 @@
         if (dicActual && typeof dicActual === 'object') {
             cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(dicActual));
         }
+        invalidarIndicesDiccionario();
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, []);
 
@@ -2212,6 +2543,7 @@
             }
         }
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicMap);
+        invalidarIndicesDiccionario();
 
         // Persistir consolidaciones en IndexedDB
         if (buzonConsolidadoParaIdb.length > 0 || productosReempaquetar.length > 0 || provNuevosParaIdb.length > 0) {
@@ -2278,6 +2610,7 @@
         await migrarTodoACifradoIdb(snapshot);
         // En memoria pública RAM del catálogo solo permanecen fichas sanitarias públicas
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(snapshot.diccionario));
+        invalidarIndicesDiccionario();
         limpiarLocalStorageSensible();
 
         return {
@@ -2414,6 +2747,7 @@
         const dicPublico = Dominio.sanitizarDiccionarioPublico(obtenerDiccionarioCodigos());
         encDiccionarioBlobs.clear();
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, dicPublico);
+        invalidarIndicesDiccionario();
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.HISTORIAL_7DIAS, []);
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.BORRADOR_ACTIVO, crearSesionVacia());
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.PROVEEDORES, [...PROVEEDORES_SEMILLA]);
@@ -2573,6 +2907,7 @@
             });
         }
         cacheStorage.set(CONSTANTES.CLAVES_STORAGE.DICCIONARIO_CODIGOS, Dominio.sanitizarDiccionarioPublico(fusion.diccionarioFusionado));
+        invalidarIndicesDiccionario();
 
         if (Array.isArray(datos.laboratorios) && datos.laboratorios.length > 0) {
             importarLaboratoriosJson({ laboratorios: datos.laboratorios });
@@ -2625,6 +2960,9 @@
         obtenerCostoOperativoProducto,
         obtenerDetalleProductoAdmin,
         obtenerResumenCostosTablaSiAdmin,
+        obtenerProveedoresSugerenciasSiAdmin,
+        obtenerVersionDiccionario: () => versionDiccionario,
+        buscarProductosEnDiccionarioRapido,
         archivarFacturaEnBuzon,
         exportarLaboratoriosJson,
         importarLaboratoriosJson,
@@ -2658,6 +2996,7 @@
         obtenerDiccionarioCodigos,
         guardarDiccionarioCodigos,
         buscarProductoPorCodigo,
+        resolverCodigoInternoSiFalta,
         aprenderProductoEnDiccionario,
         eliminarCodigoDeDiccionario,
         obtenerHistorialFacturas,
